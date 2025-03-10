@@ -9,9 +9,10 @@ ThermoQ is a powerful tool designed for extracting and analyzing thermodynamic d
   - QΣbin (Binary System Q-value)
   - Qture (Temperature-dependent Q-value)
   - Qmult (Multiple Component Q-value)
-- File input/output functionality with support for text files
-- Simple and intuitive calculation option selection
-- Flexible input/output file path selection
+- File input functionality with support for text files
+- Results visualization and analysis
+- Simple and intuitive calculation options
+- Clean and balanced user interface design
 
 ## Installation
 1. Ensure you have Python 3.x installed on your system
@@ -32,16 +33,16 @@ python main.py
 
 2. Using the GUI:
    - Click "Browse" to select your input file
-   - Choose an output file location
    - Select the desired calculation type (QΣbin, Qture, or Qmult)
    - Click "Calculate" to process the data
+   - Use "Show Results" to view the calculation results
 
 ## Documentation
 The application provides a graphical interface with the following components:
 - Input File Selection: Choose your source data file
-- Output File Selection: Specify where to save the results
 - Calculation Options: Select between QΣbin, Qture, and Qmult calculations
 - Calculate Button: Process the data using selected options
+- Show Results Button: Display calculation results and analysis
 
 ## Contributing
 We welcome contributions to ThermoQ! Please feel free to submit issues and pull requests.
