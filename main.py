@@ -9,6 +9,7 @@ class ElementSelector:
     def __init__(self, parent):
         self.parent = parent
         self.selected_elements = {}  # Dictionary to store selected elements and their compositions
+        self.composition_unit = tk.StringVar(value="wt%")  # Default to weight percentage
         
         # Create main frame
         self.frame = ttk.LabelFrame(parent, text="Element Selection", padding="10")
@@ -32,15 +33,24 @@ class ElementSelector:
                                            values=sorted(PERIODIC_TABLE.keys()), width=10)
         self.element_dropdown.grid(row=0, column=1, padx=5, pady=5)
         
+        # Create composition unit selection
+        ttk.Label(selection_frame, text="Unit:").grid(row=0, column=2, padx=5, pady=5)
+        unit_frame = ttk.Frame(selection_frame)
+        unit_frame.grid(row=0, column=3, padx=5, pady=5)
+        ttk.Radiobutton(unit_frame, text="wt%", variable=self.composition_unit, 
+                       value="wt%", command=self.update_composition_display).pack(side=tk.LEFT)
+        ttk.Radiobutton(unit_frame, text="at%", variable=self.composition_unit, 
+                       value="at%", command=self.update_composition_display).pack(side=tk.LEFT)
+        
         # Create composition entry
-        ttk.Label(selection_frame, text="Composition (%):").grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(selection_frame, text="Composition:").grid(row=0, column=4, padx=5, pady=5)
         self.composition_var = tk.StringVar()
         self.composition_entry = ttk.Entry(selection_frame, textvariable=self.composition_var, width=10)
-        self.composition_entry.grid(row=0, column=3, padx=5, pady=5)
+        self.composition_entry.grid(row=0, column=5, padx=5, pady=5)
         
         # Add button
         ttk.Button(selection_frame, text="Add Element", 
-                  command=self.add_element).grid(row=0, column=4, padx=5, pady=5)
+                  command=self.add_element).grid(row=0, column=6, padx=5, pady=5)
     
     def create_selected_elements_display(self):
         # Create a frame for displaying selected elements
@@ -52,7 +62,7 @@ class ElementSelector:
                                 show="headings", height=5)
         self.tree.heading("Element", text="Element")
         self.tree.heading("Name", text="Name")
-        self.tree.heading("Composition", text="Composition (%)")
+        self.tree.heading("Composition", text="Composition")
         
         self.tree.column("Element", width=80)
         self.tree.column("Name", width=150)
@@ -69,17 +79,52 @@ class ElementSelector:
         ttk.Button(display_frame, text="Remove Selected", 
                   command=self.remove_element).grid(row=1, column=0, pady=5)
     
+    def convert_composition(self, element, composition, from_unit, to_unit):
+        if from_unit == to_unit:
+            return composition
+        
+        if from_unit == "wt%" and to_unit == "at%":
+            # Convert from weight % to atomic %
+            total_weight = sum(comp * PERIODIC_TABLE[elem]['mass'] 
+                             for elem, comp in self.selected_elements.items())
+            atomic_mass = PERIODIC_TABLE[element]['mass']
+            return (composition * atomic_mass) / total_weight * 100
+        else:
+            # Convert from atomic % to weight %
+            total_atoms = sum(comp / PERIODIC_TABLE[elem]['mass'] 
+                            for elem, comp in self.selected_elements.items())
+            atomic_mass = PERIODIC_TABLE[element]['mass']
+            return (composition / atomic_mass) / total_atoms * 100
+    
+    def update_composition_display(self):
+        # Update the display of compositions when unit is changed
+        current_unit = self.composition_unit.get()
+        for item in self.tree.get_children():
+            element = self.tree.item(item)['values'][0]
+            composition = self.selected_elements[element]
+            converted_composition = self.convert_composition(element, composition, 
+                                                          "wt%" if current_unit == "at%" else "at%", 
+                                                          current_unit)
+            self.tree.item(item, values=(
+                element,
+                PERIODIC_TABLE[element]['name'],
+                f"{converted_composition:.2f} {current_unit}"
+            ))
+    
     def add_element(self):
         element = self.element_var.get()
         try:
             composition = float(self.composition_var.get())
             if element in PERIODIC_TABLE and 0 <= composition <= 100:
                 if element not in self.selected_elements:
+                    # Store composition in wt% internally
+                    if self.composition_unit.get() == "at%":
+                        composition = self.convert_composition(element, composition, "at%", "wt%")
                     self.selected_elements[element] = composition
                     self.tree.insert("", "end", values=(
                         element,
                         PERIODIC_TABLE[element]['name'],
-                        f"{composition:.2f}"
+                        f"{composition:.2f} {self.composition_unit.get()}"
                     ))
                     self.element_var.set("")
                     self.composition_var.set("")
@@ -96,9 +141,14 @@ class ElementSelector:
             element = self.tree.item(selected_item[0])['values'][0]
             del self.selected_elements[element]
             self.tree.delete(selected_item[0])
+            # Update remaining compositions
+            self.update_composition_display()
     
     def get_composition(self):
-        return self.selected_elements
+        # Return composition in the currently selected unit
+        current_unit = self.composition_unit.get()
+        return {element: self.convert_composition(element, comp, "wt%", current_unit)
+                for element, comp in self.selected_elements.items()}
 
 class SplashScreen:
     def __init__(self, root):
