@@ -26,7 +26,7 @@ ThermoQ是一个用于热力学计算的图形用户界面应用程序，提供�
 
 1. 克隆或下载项目代码：
 ```bash
-git clone https://github.com/yourusername/ThermoQ.git
+git clone https://github.com/JunHuaBai96/ThermoQ.git
 cd ThermoQ
 ```
 
@@ -105,4 +105,4 @@ python main.py
 
 ## 联系方式
 
-[添加联系方式]
+[1786888479@qq.com]
