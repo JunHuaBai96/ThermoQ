@@ -101,8 +101,8 @@ python main.py
 
 ## 许可证
 
-[添加许可证信息]
+本项目采用 Mozilla Public License Version 2.0 (MPL-2.0) 许可证。详情请参阅 [LICENSE](LICENSE) 文件。
 
 ## 联系方式
 
-[1786888479@qq.com]
+- 邮箱：1786888479@qq.com
