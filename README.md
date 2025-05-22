@@ -1,9 +1,10 @@
 # ThermoQ
 
-ThermoQ是一个用于热力学计算的图形用户界面应用程序，提供了直观的元素成分输入和计算功能。
+ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。目前提供桌面版和Web版两个版本。
 
 ## 功能特点
 
+- 支持桌面版和Web版两种使用方式
 - 图形化用户界面，操作简单直观
 - 支持从元素周期表中选择元素
 - 支持两种成分输入方式：
@@ -19,10 +20,17 @@ ThermoQ是一个用于热力学计算的图形用户界面应用程序，提供�
 
 ## 系统要求
 
+### 桌面版
 - Python 3.6 或更高版本
 - 操作系统：Windows/Linux/MacOS
 
+### Web版
+- 现代浏览器（Chrome、Firefox、Safari、Edge等）
+- 支持HTML5和JavaScript
+
 ## 安装步骤
+
+### 桌面版安装
 
 1. 克隆或下载项目代码：
 ```bash
@@ -47,7 +55,18 @@ ThermoQ/
     └── Simplified logo.png
 ```
 
+### Web版使用
+
+1. 访问Web应用：
+```
+https://thermoq-web.example.com
+```
+
+2. 无需安装，直接在浏览器中使用
+
 ## 使用说明
+
+### 桌面版使用
 
 1. 运行程序：
 ```bash
@@ -70,18 +89,39 @@ python main.py
    - 点击"Calculate"按钮开始计算
    - 点击"Show Results"查看计算结果
 
+### Web版使用
+
+1. 打开浏览器访问Web应用
+2. 使用方式与桌面版相同，但无需安装任何软件
+3. 支持跨平台使用
+4. 数据自动保存到云端
+
 ## 项目结构
 
+### 桌面版
 - `main.py`: 主程序文件，包含GUI实现和主要功能
 - `periodic_table.py`: 元素周期表数据
 - `requirements.txt`: 项目依赖包列表
 - `images/`: 存放程序使用的图片资源
 
+### Web版
+- `frontend/`: Web前端代码
+- `backend/`: Web后端API
+- `database/`: 数据库相关文件
+- `public/`: 静态资源文件
+
 ## 依赖包
 
+### 桌面版
 - tkinter: GUI界面
 - PIL (Python Imaging Library): 图像处理
 - 其他依赖见 requirements.txt
+
+### Web版
+- 前端：React/Vue.js
+- 后端：Python Flask/Django
+- 数据库：SQLite/PostgreSQL
+- 其他依赖见 package.json
 
 ## 注意事项
 
@@ -89,6 +129,7 @@ python main.py
 2. 同一元素不能重复添加
 3. 成分总和应接近100%
 4. 程序内部统一使用质量分数（wt%）存储数据
+5. Web版需要保持网络连接
 
 ## 贡献指南
 
