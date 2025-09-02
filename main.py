@@ -11,7 +11,7 @@ class ElementSelector:
         self.selected_elements = {}  # Dictionary to store selected elements and their compositions
         self.composition_unit = tk.StringVar(value="wt%")  # Default to weight percentage
         
-        # Create main frame
+        # Create main frame with yellow background
         self.frame = ttk.LabelFrame(parent, text="Element Selection", padding="10")
         self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
         
@@ -173,8 +173,8 @@ class SplashScreen:
             # Set splash window size and position
             self.splash_root.geometry(f"{splash_size[0]}x{splash_size[1]}+{x}+{y}")
             
-            # Create and pack splash image label
-            splash_label = tk.Label(self.splash_root, image=self.splash_photo, bg='black')
+            # Create and pack splash image label with yellow background
+            splash_label = tk.Label(self.splash_root, image=self.splash_photo, bg='yellow')
             splash_label.pack(fill='both', expand=True)
             
             # Lift splash window to top
@@ -195,6 +195,9 @@ class ThermoQGUI:
         self.root.geometry("800x600")  # Increased height for element selection
         self.root.withdraw()  # Hide main window initially
         
+        # Set yellow background for main window
+        self.root.configure(bg='yellow')
+        
         # Set window icon
         try:
             icon_path = "images/Simplified logo.png"
@@ -209,7 +212,7 @@ class ThermoQGUI:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         
-        # Create main frame
+        # Create main frame with yellow background
         main_frame = ttk.Frame(root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         

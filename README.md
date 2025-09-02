@@ -17,6 +17,20 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - Qmult
 - 启动画面显示
 - 美观的界面设计
+- 可自定义的界面主题（当前版本采用黄色背景主题）
+
+## 界面主题
+
+### 当前主题
+- **背景颜色**：黄色主题，提供温暖舒适的视觉体验
+- **启动画面**：黄色背景的启动画面
+- **主界面**：统一的黄色背景设计
+
+### 自定义主题
+如需修改界面颜色，可以编辑 `main.py` 文件中的以下部分：
+- 主窗口背景：修改 `self.root.configure(bg='yellow')` 中的颜色值
+- 启动画面背景：修改 `splash_label` 的 `bg` 参数
+- 支持的颜色格式：颜色名称（如 'yellow', 'lightblue'）或十六进制颜色代码（如 '#FFFF00'）
 
 ## 系统要求
 
@@ -123,6 +137,27 @@ python main.py
 - 数据库：SQLite/PostgreSQL
 - 其他依赖见 package.json
 
+## 界面自定义
+
+### 修改背景颜色
+如需更改界面背景颜色，请按以下步骤操作：
+
+1. 打开 `main.py` 文件
+2. 找到 `ThermoQGUI` 类的 `__init__` 方法
+3. 修改以下行：
+   ```python
+   self.root.configure(bg='yellow')  # 将 'yellow' 改为您想要的颜色
+   ```
+4. 可选：同时修改启动画面背景颜色：
+   ```python
+   splash_label = tk.Label(self.splash_root, image=self.splash_photo, bg='yellow')
+   ```
+
+### 支持的颜色选项
+- 颜色名称：'yellow', 'lightblue', 'lightgreen', 'white', 'gray' 等
+- 十六进制：'#FFFF00', '#87CEEB', '#90EE90' 等
+- RGB值：需要转换为十六进制格式
+
 ## 注意事项
 
 1. 确保所有成分值在0-100%之间
@@ -130,6 +165,7 @@ python main.py
 3. 成分总和应接近100%
 4. 程序内部统一使用质量分数（wt%）存储数据
 5. Web版需要保持网络连接
+6. 界面主题修改后需要重新启动程序才能生效
 
 ## 贡献指南
 
