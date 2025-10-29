@@ -1,10 +1,9 @@
 # ThermoQ
 
-ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。目前提供桌面版和Web版两个版本。
+ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。
 
 ## 功能特点
 
-- 支持桌面版和Web版两种使用方式
 - 图形化用户界面，操作简单直观
 - 支持从元素周期表中选择元素
 - 支持两种成分输入方式：
@@ -15,6 +14,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - QΣbin
   - Qture
   - Qmult
+- 支持从Pandat软件导出的Excel文件导入元素成分
 - 启动画面显示
 - 美观的界面设计
 - 可自定义的界面主题（当前版本采用黄色背景主题）
@@ -34,17 +34,14 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ## 系统要求
 
-### 桌面版
 - Python 3.6 或更高版本
 - 操作系统：Windows/Linux/MacOS
-
-### Web版
-- 现代浏览器（Chrome、Firefox、Safari、Edge等）
-- 支持HTML5和JavaScript
+- 必要的Python包：
+  - tkinter
+  - Pillow
+  - pandas (用于Excel文件导入)
 
 ## 安装步骤
-
-### 桌面版安装
 
 1. 克隆或下载项目代码：
 ```bash
@@ -69,18 +66,7 @@ ThermoQ/
     └── Simplified logo.png
 ```
 
-### Web版使用
-
-1. 访问Web应用：
-```
-https://thermoq-web.example.com
-```
-
-2. 无需安装，直接在浏览器中使用
-
 ## 使用说明
-
-### 桌面版使用
 
 1. 运行程序：
 ```bash
@@ -97,6 +83,12 @@ python main.py
    - 在表格中查看已添加的元素
    - 选择元素后点击"Remove Selected"可以删除元素
    - 可以随时切换成分单位，系统会自动转换显示值
+
+4. 从Pandat导入数据：
+   - 点击菜单栏中的"Import" > "Pandat to ThermoQ"
+   - 在弹出窗口中点击"Browse"选择Pandat导出的Excel文件
+   - 预览数据无误后点击"Import"导入元素成分
+   - 支持自动识别包含元素和成分的列
 
 4. 进行计算：
    - 选择计算模式（QΣbin/Qture/Qmult）

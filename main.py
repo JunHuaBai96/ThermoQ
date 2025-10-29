@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
 import time
+import pandas as pd
 from periodic_table import PERIODIC_TABLE
 
 class ElementSelector:
@@ -199,6 +200,20 @@ class ThermoQGUI:
         # Set yellow background for main window
         self.root.configure(bg='yellow')
         
+        # Create menu bar
+        self.menu_bar = tk.Menu(root)
+        self.root.config(menu=self.menu_bar)
+        
+        # Create File menu
+        self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="File", menu=self.file_menu)
+        self.file_menu.add_command(label="Exit", command=root.quit)
+        
+        # Create Import menu
+        self.import_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="Import", menu=self.import_menu)
+        self.import_menu.add_command(label="Pandat to ThermoQ", command=self.open_pandat_import)
+        
         # Set window icon
         try:
             icon_path = "images/Simplified logo.png"
@@ -278,6 +293,150 @@ class ThermoQGUI:
     def show_results(self):
         # Add results display logic here
         print("Showing calculation results...")
+        
+    def open_pandat_import(self):
+        # Create a new window for Pandat import
+        import_window = tk.Toplevel(self.root)
+        import_window.title("Pandat to ThermoQ")
+        import_window.geometry("500x400")
+        import_window.configure(bg='yellow')
+        import_window.grab_set()  # Make window modal
+        
+        # Create frame for import controls
+        import_frame = ttk.LabelFrame(import_window, text="Import Pandat Excel File", padding="10")
+        import_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # File selection
+        file_frame = ttk.Frame(import_frame)
+        file_frame.pack(fill=tk.X, pady=5)
+        
+        file_path_var = tk.StringVar()
+        file_entry = ttk.Entry(file_frame, textvariable=file_path_var, width=50)
+        file_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        def browse_file():
+            file_path = filedialog.askopenfilename(
+                title="Select Pandat Excel File",
+                filetypes=[("Excel files", "*.xlsx *.xls")]
+            )
+            if file_path:
+                file_path_var.set(file_path)
+                preview_data(file_path)
+        
+        browse_button = ttk.Button(file_frame, text="Browse", command=browse_file)
+        browse_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Preview area
+        preview_frame = ttk.LabelFrame(import_frame, text="Preview", padding="5")
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Create treeview for displaying preview data
+        preview_tree = ttk.Treeview(preview_frame, show="headings", height=6)  # 减小高度
+        preview_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=preview_tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        preview_tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Buttons
+        button_frame = ttk.Frame(import_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        def import_data():
+            file_path = file_path_var.get()
+            if not file_path:
+                tk.messagebox.showerror("Error", "Please select a file first!")
+                return
+                
+            try:
+                # Import data from Excel file
+                import pandas as pd
+                df = pd.read_excel(file_path, engine='xlrd')
+                
+                # Check if required columns exist
+                if 'Element' not in df.columns or 'Amount' not in df.columns:
+                    # Try to find columns with similar names
+                    element_col = None
+                    amount_col = None
+                    
+                    for col in df.columns:
+                        if 'element' in col.lower() or 'comp' in col.lower():
+                            element_col = col
+                        if 'amount' in col.lower() or 'wt' in col.lower() or 'at' in col.lower() or '%' in col.lower():
+                            amount_col = col
+                    
+                    if element_col is None or amount_col is None:
+                        tk.messagebox.showerror("Error", "Could not find Element and Amount columns in the Excel file!")
+                        return
+                    
+                    # Use the identified columns
+                    elements_data = df[[element_col, amount_col]]
+                    elements_data.columns = ['Element', 'Amount']
+                else:
+                    elements_data = df[['Element', 'Amount']]
+                
+                # Clear existing elements
+                for item in self.element_selector.tree.get_children():
+                    self.element_selector.tree.delete(item)
+                self.element_selector.selected_elements.clear()
+                
+                # Add imported elements
+                for _, row in elements_data.iterrows():
+                    element = row['Element'].strip()
+                    amount = float(row['Amount'])
+                    
+                    if element in PERIODIC_TABLE and 0 <= amount <= 100:
+                        self.element_selector.selected_elements[element] = amount
+                        self.element_selector.tree.insert("", "end", values=(
+                            element,
+                            PERIODIC_TABLE[element]['name'],
+                            f"{amount:.2f} {self.element_selector.composition_unit.get()}"
+                        ))
+                
+                tk.messagebox.showinfo("Success", f"Successfully imported {len(elements_data)} elements!")
+                import_window.destroy()
+                
+            except Exception as e:
+                tk.messagebox.showerror("Error", f"Failed to import data: {str(e)}")
+        
+        def preview_data(file_path):
+            try:
+                # Read Excel file
+                import pandas as pd
+                df = pd.read_excel(file_path)
+                
+                # Clear existing columns
+                for col in preview_tree["columns"]:
+                    preview_tree.heading(col, text="")
+                preview_tree["columns"] = ()
+                
+                # Clear existing items
+                for item in preview_tree.get_children():
+                    preview_tree.delete(item)
+                
+                # Configure columns
+                columns = list(df.columns)
+                preview_tree["columns"] = columns
+                
+                # Set column headings
+                for col in columns:
+                    preview_tree.heading(col, text=col)
+                    preview_tree.column(col, width=100)
+                
+                # Add data rows (limit to first 10 rows)
+                for i, row in df.head(10).iterrows():
+                    values = [row[col] for col in columns]
+                    preview_tree.insert("", "end", values=values)
+                    
+            except Exception as e:
+                tk.messagebox.showerror("Error", f"Failed to preview data: {str(e)}")
+        
+        import_button = ttk.Button(button_frame, text="Import", command=import_data)
+        import_button.pack(side=tk.RIGHT, padx=5)
+        
+        cancel_button = ttk.Button(button_frame, text="Cancel", command=import_window.destroy)
+        cancel_button.pack(side=tk.RIGHT, padx=5)
 
 def main():
     # Create the root window first
@@ -297,4 +456,4 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
-    main() 
+    main()
