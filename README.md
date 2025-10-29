@@ -95,39 +95,20 @@ python main.py
    - 点击"Calculate"按钮开始计算
    - 点击"Show Results"查看计算结果
 
-### Web版使用
-
-1. 打开浏览器访问Web应用
-2. 使用方式与桌面版相同，但无需安装任何软件
-3. 支持跨平台使用
-4. 数据自动保存到云端
 
 ## 项目结构
-
-### 桌面版
 - `main.py`: 主程序文件，包含GUI实现和主要功能
 - `periodic_table.py`: 元素周期表数据
 - `requirements.txt`: 项目依赖包列表
 - `images/`: 存放程序使用的图片资源
 
-### Web版
-- `frontend/`: Web前端代码
-- `backend/`: Web后端API
-- `database/`: 数据库相关文件
-- `public/`: 静态资源文件
 
 ## 依赖包
 
-### 桌面版
 - tkinter: GUI界面
 - PIL (Python Imaging Library): 图像处理
 - 其他依赖见 requirements.txt
 
-### Web版
-- 前端：React/Vue.js
-- 后端：Python Flask/Django
-- 数据库：SQLite/PostgreSQL
-- 其他依赖见 package.json
 
 ## 界面自定义
 
@@ -156,8 +137,7 @@ python main.py
 2. 同一元素不能重复添加
 3. 成分总和应接近100%
 4. 程序内部统一使用质量分数（wt%）存储数据
-5. Web版需要保持网络连接
-6. 界面主题修改后需要重新启动程序才能生效
+5. 界面主题修改后需要重新启动程序才能生效
 
 ## 贡献指南
 
