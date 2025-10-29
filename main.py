@@ -51,6 +51,7 @@ class ElementSelector:
         # Add button
         ttk.Button(selection_frame, text="Add Element", 
                   command=self.add_element).grid(row=0, column=6, padx=5, pady=5)
+        
     
     def create_selected_elements_display(self):
         # Create a frame for displaying selected elements
