@@ -194,11 +194,19 @@ class ThermoQGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("ThermoQ")
-        self.root.geometry("800x600")  # Increased height for element selection
+        # Increase default window size for better layout visibility
+        self.root.geometry("1200x800")
+        # Set a sensible minimum to prevent cramped UI
+        self.root.minsize(1000, 700)
         self.root.withdraw()  # Hide main window initially
         
         # Set yellow background for main window
         self.root.configure(bg='yellow')
+        
+        # Initialize Pandat data storage
+        self.pandat_p_data = None  # P.xls data
+        self.pandat_ts_data = None  # Ts.xlsx data
+        self.available_elements = []  # Elements available from Pandat data
         
         # Create menu bar
         self.menu_bar = tk.Menu(root)
@@ -259,15 +267,18 @@ class ThermoQGUI:
         options_frame.grid_columnconfigure(0, weight=1)
         options_frame.grid_columnconfigure(1, weight=1)
         options_frame.grid_columnconfigure(2, weight=1)
+        options_frame.grid_columnconfigure(3, weight=1)
         
         # Radio buttons for calculation options
         self.calc_option = tk.StringVar(value="qbin")
         ttk.Radiobutton(options_frame, text="QΣbin", variable=self.calc_option, 
-                       value="qbin").grid(row=0, column=0, padx=20, pady=10)
+                       value="qbin").grid(row=0, column=0, padx=15, pady=10)
         ttk.Radiobutton(options_frame, text="Qture", variable=self.calc_option, 
-                       value="qture").grid(row=0, column=1, padx=20, pady=10)
+                       value="qture").grid(row=0, column=1, padx=15, pady=10)
         ttk.Radiobutton(options_frame, text="Qmult", variable=self.calc_option, 
-                       value="qmult").grid(row=0, column=2, padx=20, pady=10)
+                       value="qmult").grid(row=0, column=2, padx=15, pady=10)
+        ttk.Radiobutton(options_frame, text="ΔT", variable=self.calc_option, 
+                       value="delta_t").grid(row=0, column=3, padx=15, pady=10)
         
         # Buttons frame
         buttons_frame = ttk.Frame(main_frame)
@@ -278,6 +289,8 @@ class ThermoQGUI:
         ttk.Button(buttons_frame, text="Show Results", command=self.show_results).grid(row=0, column=1, padx=10)
 
     def show(self):
+        # Center window on screen after splash
+        self.center_window()
         self.root.deiconify()
 
     def calculate(self):
@@ -285,10 +298,61 @@ class ThermoQGUI:
         composition = self.element_selector.get_composition()
         calculation_type = self.calc_option.get()
         
-        # Here you can add the actual calculation logic
-        print(f"Calculating with:")
-        print(f"Composition: {composition}")
-        print(f"Calculation type: {calculation_type}")
+        # Validate composition
+        if not composition:
+            messagebox.showerror("Error", "Please select at least one element!")
+            return
+        
+        # Check if Pandat data is loaded for advanced calculations
+        if calculation_type in ['delta_t', 'qture', 'qmult', 'qbin'] and (self.pandat_p_data is None or self.pandat_ts_data is None):
+            messagebox.showerror("Error", "Please import Pandat data first using 'Import > Pandat to ThermoQ'!")
+            return
+        
+        # Convert all compositions to weight percent
+        wt_composition = {}
+        for element, comp_data in composition.items():
+            if comp_data['unit'] == 'at%':
+                # Convert atomic percent to weight percent
+                wt_comp = self.element_selector.convert_composition(element, comp_data['value'], 'at%', 'wt%')
+                wt_composition[element] = wt_comp
+            else:
+                wt_composition[element] = comp_data['value']
+        
+        # Validate composition sum equals 100%
+        total_composition = sum(wt_composition.values())
+        if abs(total_composition - 100.0) > 0.01:  # Allow small floating point errors
+            messagebox.showerror("Error", f"Total composition must equal 100%! Current total: {total_composition:.2f}%")
+            return
+        
+        # Perform calculation based on type
+        try:
+            if calculation_type == 'delta_t':
+                result = self.calculate_delta_t(wt_composition)
+            elif calculation_type == 'qture':
+                result = self.calculate_qture(wt_composition)
+            elif calculation_type == 'qmult':
+                result = self.calculate_qmult(wt_composition)
+            elif calculation_type == 'qbin':
+                result = self.calculate_qbin(wt_composition)
+            else:
+                messagebox.showerror("Error", "Unknown calculation type!")
+                return
+            
+            # Store result for display
+            self.last_result = {
+                'type': calculation_type,
+                'composition': wt_composition,
+                'result': result
+            }
+            
+            # Show result
+            messagebox.showinfo("Calculation Result", 
+                f"Calculation Type: {calculation_type.upper()}\n"
+                f"Composition: {', '.join([f'{elem}: {comp:.2f}wt%' for elem, comp in wt_composition.items()])}\n"
+                f"Result: {result:.4f}")
+                
+        except Exception as e:
+            messagebox.showerror("Calculation Error", f"Failed to calculate: {str(e)}")
 
     def show_results(self):
         # Add results display logic here
@@ -298,145 +362,281 @@ class ThermoQGUI:
         # Create a new window for Pandat import
         import_window = tk.Toplevel(self.root)
         import_window.title("Pandat to ThermoQ")
-        import_window.geometry("500x400")
+        import_window.geometry("700x600")
         import_window.configure(bg='yellow')
         import_window.grab_set()  # Make window modal
         
-        # Create frame for import controls
-        import_frame = ttk.LabelFrame(import_window, text="Import Pandat Excel File", padding="10")
-        import_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Create main frame
+        main_frame = ttk.Frame(import_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # File selection
-        file_frame = ttk.Frame(import_frame)
-        file_frame.pack(fill=tk.X, pady=5)
+        # P file selection (supports both .xls and .xlsx)
+        p_frame = ttk.LabelFrame(main_frame, text="P File (Equilibrium Data)", padding="10")
+        p_frame.pack(fill=tk.X, pady=5)
         
-        file_path_var = tk.StringVar()
-        file_entry = ttk.Entry(file_frame, textvariable=file_path_var, width=50)
-        file_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        p_file_var = tk.StringVar()
+        p_entry = ttk.Entry(p_frame, textvariable=p_file_var, width=60)
+        p_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
-        def browse_file():
+        def browse_p_file():
             file_path = filedialog.askopenfilename(
-                title="Select Pandat Excel File",
-                filetypes=[("Excel files", "*.xlsx *.xls")]
+                title="Select P File",
+                filetypes=[("Excel files", "*.xls *.xlsx"), ("XLS files", "*.xls"), ("XLSX files", "*.xlsx")]
             )
             if file_path:
-                file_path_var.set(file_path)
-                preview_data(file_path)
+                p_file_var.set(file_path)
         
-        browse_button = ttk.Button(file_frame, text="Browse", command=browse_file)
-        browse_button.pack(side=tk.RIGHT, padx=5)
+        ttk.Button(p_frame, text="Browse", command=browse_p_file).pack(side=tk.RIGHT, padx=5)
         
-        # Preview area
-        preview_frame = ttk.LabelFrame(import_frame, text="Preview", padding="5")
-        preview_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Ts file selection (supports both .xls and .xlsx)
+        ts_frame = ttk.LabelFrame(main_frame, text="Ts File (Solidus Temperature)", padding="10")
+        ts_frame.pack(fill=tk.X, pady=5)
         
-        # Create treeview for displaying preview data
-        preview_tree = ttk.Treeview(preview_frame, show="headings", height=6)  # 减小高度
-        preview_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        ts_file_var = tk.StringVar()
+        ts_entry = ttk.Entry(ts_frame, textvariable=ts_file_var, width=60)
+        ts_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=preview_tree.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        preview_tree.configure(yscrollcommand=scrollbar.set)
+        def browse_ts_file():
+            file_path = filedialog.askopenfilename(
+                title="Select Ts File",
+                filetypes=[("Excel files", "*.xls *.xlsx"), ("XLS files", "*.xls"), ("XLSX files", "*.xlsx")]
+            )
+            if file_path:
+                ts_file_var.set(file_path)
         
-        # Buttons
-        button_frame = ttk.Frame(import_frame)
-        button_frame.pack(fill=tk.X, pady=10)
+        ttk.Button(ts_frame, text="Browse", command=browse_ts_file).pack(side=tk.RIGHT, padx=5)
         
-        def import_data():
-            file_path = file_path_var.get()
-            if not file_path:
-                tk.messagebox.showerror("Error", "Please select a file first!")
+        # Status label
+        status_label = ttk.Label(main_frame, text="Please select both files to proceed", foreground="red")
+        status_label.pack(pady=10)
+        
+        # Import button
+        def import_pandat_data():
+            p_file = p_file_var.get()
+            ts_file = ts_file_var.get()
+            
+            if not p_file or not ts_file:
+                messagebox.showerror("Error", "Please select both P and Ts files!")
                 return
-                
+            
             try:
-                # Import data from Excel file
-                import pandas as pd
-                df = pd.read_excel(file_path, engine='xlrd')
-                
-                # Check if required columns exist
-                if 'Element' not in df.columns or 'Amount' not in df.columns:
-                    # Try to find columns with similar names
-                    element_col = None
-                    amount_col = None
+                # Helper to read Excel with proper engine by extension
+                def _read_excel_auto(path):
+                    ext = os.path.splitext(path)[1].lower()
                     
-                    for col in df.columns:
-                        if 'element' in col.lower() or 'comp' in col.lower():
-                            element_col = col
-                        if 'amount' in col.lower() or 'wt' in col.lower() or 'at' in col.lower() or '%' in col.lower():
-                            amount_col = col
-                    
-                    if element_col is None or amount_col is None:
-                        tk.messagebox.showerror("Error", "Could not find Element and Amount columns in the Excel file!")
-                        return
-                    
-                    # Use the identified columns
-                    elements_data = df[[element_col, amount_col]]
-                    elements_data.columns = ['Element', 'Amount']
-                else:
-                    elements_data = df[['Element', 'Amount']]
+                    # Try primary engine based on extension
+                    if ext == '.xls':
+                        try:
+                            return pd.read_excel(path, engine='xlrd')
+                        except Exception:
+                            # If xlrd fails, try openpyxl (file might be xlsx with .xls extension)
+                            try:
+                                return pd.read_excel(path, engine='openpyxl')
+                            except Exception as e:
+                                raise ValueError(f"Failed to read {path} with both xlrd and openpyxl engines: {str(e)}")
+                    elif ext == '.xlsx':
+                        try:
+                            return pd.read_excel(path, engine='openpyxl')
+                        except Exception:
+                            # If openpyxl fails, try xlrd
+                            try:
+                                return pd.read_excel(path, engine='xlrd')
+                            except Exception as e:
+                                raise ValueError(f"Failed to read {path} with both openpyxl and xlrd engines: {str(e)}")
+                    else:
+                        raise ValueError(f"Unsupported Excel extension: {ext}")
+
+                # Load P.xls data (.xls -> xlrd)
+                self.pandat_p_data = _read_excel_auto(p_file)
+                # Load Ts.xlsx data (.xlsx -> openpyxl)
+                self.pandat_ts_data = _read_excel_auto(ts_file)
                 
-                # Clear existing elements
-                for item in self.element_selector.tree.get_children():
-                    self.element_selector.tree.delete(item)
-                self.element_selector.selected_elements.clear()
+                # Remove blank rows
+                self.pandat_p_data = self.pandat_p_data.dropna(how='all')
+                self.pandat_ts_data = self.pandat_ts_data.dropna(how='all')
                 
-                # Add imported elements
-                for _, row in elements_data.iterrows():
-                    element = row['Element'].strip()
-                    amount = float(row['Amount'])
-                    
-                    if element in PERIODIC_TABLE and 0 <= amount <= 100:
-                        self.element_selector.selected_elements[element] = amount
-                        self.element_selector.tree.insert("", "end", values=(
-                            element,
-                            PERIODIC_TABLE[element]['name'],
-                            f"{amount:.2f} {self.element_selector.composition_unit.get()}"
-                        ))
+                # Process 1/dwdT_L columns - divide by 100
+                for col in self.pandat_p_data.columns:
+                    if '1/dwdT_L(' in col and '@LIQUID)' in col:
+                        self.pandat_p_data[col] = self.pandat_p_data[col] / 100
                 
-                tk.messagebox.showinfo("Success", f"Successfully imported {len(elements_data)} elements!")
+                # Extract available elements from w(*) columns
+                self.available_elements = []
+                for col in self.pandat_p_data.columns:
+                    if col.startswith('w(') and col.endswith(')'):
+                        element = col[2:-1].upper()  # Extract element name
+                        if element in PERIODIC_TABLE:
+                            self.available_elements.append(element)
+                
+                # Update element selector to activate only available elements
+                self.update_element_availability()
+                
+                status_label.config(text=f"Successfully loaded Pandat data! Available elements: {', '.join(self.available_elements)}", 
+                                  foreground="green")
+                
+                messagebox.showinfo("Success", 
+                    f"Pandat data loaded successfully!\n"
+                    f"P.xls: {len(self.pandat_p_data)} rows\n"
+                    f"Ts.xlsx: {len(self.pandat_ts_data)} rows\n"
+                    f"Available elements: {', '.join(self.available_elements)}")
+                
                 import_window.destroy()
                 
             except Exception as e:
-                tk.messagebox.showerror("Error", f"Failed to import data: {str(e)}")
+                messagebox.showerror("Error", f"Failed to load Pandat data: {str(e)}")
         
-        def preview_data(file_path):
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(button_frame, text="Import Data", command=import_pandat_data).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Cancel", command=import_window.destroy).pack(side=tk.LEFT, padx=10)
+    
+    def update_element_availability(self):
+        """Update element selector to show only available elements from Pandat data"""
+        if not hasattr(self, 'element_selector'):
+            return
+            
+        # Update dropdown to show only available elements
+        if self.available_elements:
+            self.element_selector.element_dropdown['values'] = sorted(self.available_elements)
+            # Add a note about available elements
+            if hasattr(self.element_selector, 'availability_label'):
+                self.element_selector.availability_label.destroy()
+            
+            self.element_selector.availability_label = ttk.Label(
+                self.element_selector.frame, 
+                text=f"Available elements from Pandat data: {', '.join(sorted(self.available_elements))}", 
+                foreground="blue",
+                font=('Arial', 8)
+            )
+            self.element_selector.availability_label.grid(row=2, column=0, pady=5, sticky='w')
+
+    def center_window(self):
+        """Center main window on the screen."""
+        try:
+            self.root.update_idletasks()
+            # Use the configured window size (1200x800)
+            width = 1200
+            height = 800
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            x = (screen_width - width) // 2
+            y = (screen_height - height) // 2
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
+        except Exception:
+            # Fallback to default size and center
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            x = (screen_width - 1200) // 2
+            y = (screen_height - 800) // 2
+            self.root.geometry(f"1200x800+{x}+{y}")
+    
+    def find_matching_row(self, composition):
+        """Find the row in Pandat data that matches the given composition"""
+        tolerance = 0.05  # 0.05% tolerance for composition matching
+        
+        for idx, row in self.pandat_p_data.iterrows():
+            match = True
+            for element, target_comp in composition.items():
+                col_name = f'w({element.upper()})'
+                if col_name in self.pandat_p_data.columns:
+                    actual_comp = row[col_name] * 100  # Convert to percentage
+                    if abs(actual_comp - target_comp) > tolerance:
+                        match = False
+                        break
+                else:
+                    match = False
+                    break
+            
+            if match:
+                return idx
+        
+        raise ValueError(f"No matching composition found in Pandat data for {composition}")
+    
+    def calculate_delta_t(self, composition):
+        """Calculate ΔT (melting range) = T_P - T_Ts"""
+        # Find matching row in both datasets
+        p_idx = self.find_matching_row(composition)
+        ts_idx = self.find_matching_row(composition)
+        
+        # Get temperatures
+        t_p = self.pandat_p_data.iloc[p_idx]['T']
+        t_ts = self.pandat_ts_data.iloc[ts_idx]['T']
+        
+        return t_p - t_ts
+    
+    def calculate_qture(self, composition):
+        """Calculate Qture from -T//fs column"""
+        p_idx = self.find_matching_row(composition)
+        return self.pandat_p_data.iloc[p_idx]['-T//fs']
+    
+    def calculate_qmult(self, composition):
+        """Calculate Qmult for non-main elements"""
+        p_idx = self.find_matching_row(composition)
+        row = self.pandat_p_data.iloc[p_idx]
+        
+        # Get elements sorted by composition (main element first)
+        sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
+        main_element = sorted_elements[0][0]  # Element with highest composition
+        
+        qmult = 0.0
+        for element, comp in sorted_elements[1:]:  # Skip main element
+            element_upper = element.upper()
+            
+            # Get required columns
+            dwdt_col = f'1/dwdT_L({element_upper}@LIQUID)'
+            ws_wl_col = f'w_S({element_upper})/w_L({element_upper})'
+            w_col = f'w({element_upper})'
+            
+            if all(col in self.pandat_p_data.columns for col in [dwdt_col, ws_wl_col, w_col]):
+                dwdt_val = row[dwdt_col]
+                ws_wl_val = row[ws_wl_col]
+                w_val = comp / 100.0  # Convert percentage to fraction
+                
+                qmult += dwdt_val * (ws_wl_val - 1) * w_val
+        
+        return qmult
+    
+    def calculate_qbin(self, composition):
+        """Calculate QΣbin from two hypothetical binary alloys"""
+        # Get elements sorted by composition (main element first)
+        sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
+        main_element = sorted_elements[0][0]
+        
+        qbin = 0.0
+        
+        for element, comp in sorted_elements[1:]:  # Skip main element
+            # Create binary alloy composition: main element + current element
+            binary_comp = {
+                main_element: 100.0 - comp,
+                element: comp
+            }
+            
+            # Find matching row for this binary alloy
             try:
-                # Read Excel file
-                import pandas as pd
-                df = pd.read_excel(file_path)
+                p_idx = self.find_matching_row(binary_comp)
+                row = self.pandat_p_data.iloc[p_idx]
                 
-                # Clear existing columns
-                for col in preview_tree["columns"]:
-                    preview_tree.heading(col, text="")
-                preview_tree["columns"] = ()
+                element_upper = element.upper()
                 
-                # Clear existing items
-                for item in preview_tree.get_children():
-                    preview_tree.delete(item)
+                # Get required columns
+                dwdt_col = f'1/dwdT_L({element_upper}@LIQUID)'
+                ws_wl_col = f'w_S({element_upper})/w_L({element_upper})'
+                w_col = f'w({element_upper})'
                 
-                # Configure columns
-                columns = list(df.columns)
-                preview_tree["columns"] = columns
-                
-                # Set column headings
-                for col in columns:
-                    preview_tree.heading(col, text=col)
-                    preview_tree.column(col, width=100)
-                
-                # Add data rows (limit to first 10 rows)
-                for i, row in df.head(10).iterrows():
-                    values = [row[col] for col in columns]
-                    preview_tree.insert("", "end", values=values)
+                if all(col in self.pandat_p_data.columns for col in [dwdt_col, ws_wl_col, w_col]):
+                    dwdt_val = row[dwdt_col]
+                    ws_wl_val = row[ws_wl_col]
+                    w_val = row[w_col]  # Use actual composition from data
                     
-            except Exception as e:
-                tk.messagebox.showerror("Error", f"Failed to preview data: {str(e)}")
+                    qbin += dwdt_val * (ws_wl_val - 1) * w_val
+                    
+            except ValueError:
+                # If exact binary composition not found, use interpolation or skip
+                print(f"Warning: Binary composition not found for {main_element}-{element}")
+                continue
         
-        import_button = ttk.Button(button_frame, text="Import", command=import_data)
-        import_button.pack(side=tk.RIGHT, padx=5)
-        
-        cancel_button = ttk.Button(button_frame, text="Cancel", command=import_window.destroy)
-        cancel_button.pack(side=tk.RIGHT, padx=5)
+        return qbin
 
 def main():
     # Create the root window first

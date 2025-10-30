@@ -2,6 +2,14 @@
 
 ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。
 
+## 更新摘要（近5小时）
+
+- 新增计算模式：`ΔT（熔程）`，计算 `P.xls` 的 `T` 减去 `Ts.xlsx` 的 `T`
+- Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`
+- 导入时自动删除空白行，并将所有 `1/dwdT_L(*@LIQUID)` 列数值除以 100
+- 从 `w(*)` 列提取可用元素（如 Al、Mg、Mn），仅激活这些元素供选择
+- 启动画面后主窗口自动居中，默认尺寸增至 `1200x800`，并设定最小尺寸以避免界面拥挤
+
 ## 功能特点
 
 - 图形化用户界面，操作简单直观
@@ -84,14 +92,14 @@ python main.py
    - 选择元素后点击"Remove Selected"可以删除元素
    - 可以随时切换成分单位，系统会自动转换显示值
 
-4. 从Pandat导入数据：
-   - 点击菜单栏中的"Import" > "Pandat to ThermoQ"
-   - 在弹出窗口中点击"Browse"选择Pandat导出的Excel文件
-   - 预览数据无误后点击"Import"导入元素成分
-   - 支持自动识别包含元素和成分的列
+4. 从 Pandat 导入数据（两文件）：
+   - 点击菜单栏中的 `Import` > `Pandat to ThermoQ`
+   - 分别选择 `P.xls`（相平衡数据）与 `Ts.xlsx`（固相线温度）
+   - 程序会自动：删除空白行、处理 `1/dwdT_L(*@LIQUID)` 列（除以 100）、提取 `w(*)` 列的可用元素并启用选择
+   - 导入成功后，会在界面中显示“Available elements from Pandat data: ...”说明
 
 4. 进行计算：
-   - 选择计算模式（QΣbin/Qture/Qmult）
+   - 选择计算模式（QΣbin / Qture / Qmult / ΔT）
    - 点击"Calculate"按钮开始计算
    - 点击"Show Results"查看计算结果
 
@@ -105,9 +113,11 @@ python main.py
 
 ## 依赖包
 
-- tkinter: GUI界面
-- PIL (Python Imaging Library): 图像处理
-- 其他依赖见 requirements.txt
+- tkinter: GUI界面（随 Python 安装）
+- Pillow: 图像处理
+- pandas: 数据处理
+- openpyxl: 读取 `.xlsx`
+- xlrd: 读取 `.xls`
 
 
 ## 界面自定义
