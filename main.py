@@ -387,31 +387,51 @@ class ThermoQGUI:
                 return
             
             try:
-                # Helper to read Excel with proper engine by extension
+                # Helper to read Pandat export with robust fallbacks (Excel or TSV/CSV disguised as .xls/.xlsx)
                 def _read_excel_auto(path):
                     ext = os.path.splitext(path)[1].lower()
-                    
-                    # Try primary engine based on extension
-                    if ext == '.xls':
-                        try:
-                            return pd.read_excel(path, engine='xlrd')
-                        except Exception:
-                            # If xlrd fails, try openpyxl (file might be xlsx with .xls extension)
+                    excel_err = None
+                    df = None
+
+                    # Try Excel engines by extension
+                    if ext in ['.xls', '.xlsx']:
+                        if ext == '.xls':
                             try:
-                                return pd.read_excel(path, engine='openpyxl')
-                            except Exception as e:
-                                raise ValueError(f"Failed to read {path} with both xlrd and openpyxl engines: {str(e)}")
-                    elif ext == '.xlsx':
-                        try:
-                            return pd.read_excel(path, engine='openpyxl')
-                        except Exception:
-                            # If openpyxl fails, try xlrd
+                                df = pd.read_excel(path, engine='xlrd')
+                            except Exception as e1:
+                                excel_err = e1
+                                # Some "xls" are actually xlsx or text; try openpyxl
+                                try:
+                                    df = pd.read_excel(path, engine='openpyxl')
+                                except Exception as e2:
+                                    excel_err = e2
+                        else:  # .xlsx
                             try:
-                                return pd.read_excel(path, engine='xlrd')
-                            except Exception as e:
-                                raise ValueError(f"Failed to read {path} with both openpyxl and xlrd engines: {str(e)}")
+                                df = pd.read_excel(path, engine='openpyxl')
+                            except Exception as e1:
+                                excel_err = e1
+                                try:
+                                    df = pd.read_excel(path, engine='xlrd')
+                                except Exception as e2:
+                                    excel_err = e2
                     else:
-                        raise ValueError(f"Unsupported Excel extension: {ext}")
+                        # Non-Excel extension provided
+                        excel_err = ValueError(f"Unsupported Excel extension: {ext}")
+
+                    # If Excel parse failed or returned None, attempt TSV/CSV fallback
+                    if df is None:
+                        try:
+                            # Detect delimiter from first line
+                            with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+                                first_line = fh.readline()
+                            sep = '\t' if ('\t' in first_line) else ','
+                            df = pd.read_csv(path, sep=sep, engine='python')
+                        except Exception as text_err:
+                            raise ValueError(
+                                f"Failed to read {path} as Excel or delimited text: {str(text_err)}"
+                            )
+
+                    return df
 
                 # Load P.xls data (.xls -> xlrd)
                 self.pandat_p_data = _read_excel_auto(p_file)
@@ -421,6 +441,22 @@ class ThermoQGUI:
                 # Remove blank rows
                 self.pandat_p_data = self.pandat_p_data.dropna(how='all')
                 self.pandat_ts_data = self.pandat_ts_data.dropna(how='all')
+
+                # Drop unit/meta rows where 'T' is non-numeric and coerce numerics
+                def _clean_numeric(df):
+                    if 'T' in df.columns:
+                        t_num = pd.to_numeric(df['T'], errors='coerce')
+                        df = df.loc[t_num.notna()].copy()
+                        df['T'] = t_num.loc[t_num.notna()]
+                    # Coerce common numeric columns
+                    for col in df.columns:
+                        col_str = str(col)
+                        if any(s in col_str for s in ['w(', '-T//fs', 'w_S', 'w_L', '1/dwdT_L(']):
+                            df[col] = pd.to_numeric(df[col], errors='ignore')
+                    return df
+
+                self.pandat_p_data = _clean_numeric(self.pandat_p_data)
+                self.pandat_ts_data = _clean_numeric(self.pandat_ts_data)
                 
                 # Process 1/dwdT_L columns - divide by 100
                 for col in self.pandat_p_data.columns:
@@ -447,8 +483,8 @@ class ThermoQGUI:
                 
                 messagebox.showinfo("Success", 
                     f"Pandat data loaded successfully!\n"
-                    f"P.xls: {len(self.pandat_p_data)} rows\n"
-                    f"Ts.xlsx: {len(self.pandat_ts_data)} rows\n"
+                    f"P file: {len(self.pandat_p_data)} rows\n"
+                    f"Ts file: {len(self.pandat_ts_data)} rows\n"
                     f"Recognized elements (from w(*)): {', '.join(self.available_elements) if self.available_elements else 'None'}")
                 
                 import_window.destroy()
@@ -527,7 +563,15 @@ class ThermoQGUI:
             for element, target_comp in composition.items():
                 col_name = f'w({element})'
                 if col_name in self.pandat_p_data.columns:
-                    actual_comp = row[col_name] * 100  # Convert to percentage
+                    # Pandat export may store w(*) as percentage (e.g., 99.8) or fraction (e.g., 0.998)
+                    val = row[col_name]
+                    try:
+                        # If val is not numeric, fail this row
+                        v = float(val)
+                    except Exception:
+                        match = False
+                        break
+                    actual_comp = v * 100.0 if v <= 1.0 else v
                     if abs(actual_comp - target_comp) > tolerance:
                         match = False
                         break
@@ -628,9 +672,16 @@ class ThermoQGUI:
                 if all(col in self.pandat_p_data.columns for col in [dwdt_col, ws_wl_col, w_col]):
                     dwdt_val = row[dwdt_col]
                     ws_wl_val = row[ws_wl_col]
-                    w_val = row[w_col]  # Use actual composition from data
+                    w_val = row[w_col]
+                    try:
+                        wf = float(w_val)
+                    except Exception:
+                        continue
+                    # Ensure fraction form
+                    if wf > 1.0:
+                        wf = wf / 100.0
 
-                    qbin += dwdt_val * (ws_wl_val - 1) * w_val
+                    qbin += dwdt_val * (ws_wl_val - 1) * wf
 
             except ValueError:
                 # If exact binary composition not found, use interpolation or skip
