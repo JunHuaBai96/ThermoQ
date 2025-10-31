@@ -3,6 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
 import time
+import re
 import pandas as pd
 from periodic_table import PERIODIC_TABLE
 
@@ -10,7 +11,7 @@ class ElementSelector:
     def __init__(self, parent):
         self.parent = parent
         self.selected_elements = {}  # Dictionary to store selected elements and their compositions
-        self.composition_unit = tk.StringVar(value="wt%")  # Default to weight percentage
+        self.main_element = None  # The first added element will be considered main element
         
         # Create main frame with yellow background
         self.frame = ttk.LabelFrame(parent, text="Element Selection", padding="10")
@@ -34,24 +35,19 @@ class ElementSelector:
                                            values=sorted(PERIODIC_TABLE.keys()), width=10)
         self.element_dropdown.grid(row=0, column=1, padx=5, pady=5)
         
-        # Create composition unit selection
-        ttk.Label(selection_frame, text="Unit:").grid(row=0, column=2, padx=5, pady=5)
-        unit_frame = ttk.Frame(selection_frame)
-        unit_frame.grid(row=0, column=3, padx=5, pady=5)
-        ttk.Radiobutton(unit_frame, text="wt%", variable=self.composition_unit, 
-                       value="wt%", command=self.update_composition_display).pack(side=tk.LEFT)
-        ttk.Radiobutton(unit_frame, text="at%", variable=self.composition_unit, 
-                       value="at%", command=self.update_composition_display).pack(side=tk.LEFT)
-        
-        # Create composition entry
-        ttk.Label(selection_frame, text="Composition:").grid(row=0, column=4, padx=5, pady=5)
+        # Create composition entry (always in wt%)
+        ttk.Label(selection_frame, text="Composition (wt%):").grid(row=0, column=2, padx=5, pady=5)
         self.composition_var = tk.StringVar()
         self.composition_entry = ttk.Entry(selection_frame, textvariable=self.composition_var, width=10)
-        self.composition_entry.grid(row=0, column=5, padx=5, pady=5)
+        self.composition_entry.grid(row=0, column=3, padx=5, pady=5)
         
         # Add button
         ttk.Button(selection_frame, text="Add Element", 
-                  command=self.add_element).grid(row=0, column=6, padx=5, pady=5)
+                   command=self.add_element).grid(row=0, column=4, padx=5, pady=5)
+
+        # Hint: first added element is the main element
+        self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray")
+        self.main_hint_label.grid(row=2, column=0, sticky='w', padx=5, pady=(0,5))
         
     
     def create_selected_elements_display(self):
@@ -64,11 +60,11 @@ class ElementSelector:
                                 show="headings", height=5)
         self.tree.heading("Element", text="Element")
         self.tree.heading("Name", text="Name")
-        self.tree.heading("Composition", text="Composition")
+        self.tree.heading("Composition", text="Composition (wt%)")
         
         self.tree.column("Element", width=80)
         self.tree.column("Name", width=150)
-        self.tree.column("Composition", width=100)
+        self.tree.column("Composition", width=120)
         
         self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -81,53 +77,27 @@ class ElementSelector:
         ttk.Button(display_frame, text="Remove Selected", 
                   command=self.remove_element).grid(row=1, column=0, pady=5)
     
-    def convert_composition(self, element, composition, from_unit, to_unit):
-        if from_unit == to_unit:
-            return composition
-        
-        if from_unit == "wt%" and to_unit == "at%":
-            # Convert from weight % to atomic %
-            total_weight = sum(comp * PERIODIC_TABLE[elem]['mass'] 
-                             for elem, comp in self.selected_elements.items())
-            atomic_mass = PERIODIC_TABLE[element]['mass']
-            return (composition * atomic_mass) / total_weight * 100
-        else:
-            # Convert from atomic % to weight %
-            total_atoms = sum(comp / PERIODIC_TABLE[elem]['mass'] 
-                            for elem, comp in self.selected_elements.items())
-            atomic_mass = PERIODIC_TABLE[element]['mass']
-            return (composition / atomic_mass) / total_atoms * 100
-    
-    def update_composition_display(self):
-        # Update the display of compositions when unit is changed
-        current_unit = self.composition_unit.get()
-        for item in self.tree.get_children():
-            element = self.tree.item(item)['values'][0]
-            composition = self.selected_elements[element]
-            converted_composition = self.convert_composition(element, composition, 
-                                                          "wt%" if current_unit == "at%" else "at%", 
-                                                          current_unit)
-            self.tree.item(item, values=(
-                element,
-                PERIODIC_TABLE[element]['name'],
-                f"{converted_composition:.2f} {current_unit}"
-            ))
-    
     def add_element(self):
         element = self.element_var.get()
         try:
             composition = float(self.composition_var.get())
             if element in PERIODIC_TABLE and 0 <= composition <= 100:
                 if element not in self.selected_elements:
-                    # Store composition in wt% internally
-                    if self.composition_unit.get() == "at%":
-                        composition = self.convert_composition(element, composition, "at%", "wt%")
+                    # Store composition in wt% (no conversion needed)
                     self.selected_elements[element] = composition
                     self.tree.insert("", "end", values=(
                         element,
                         PERIODIC_TABLE[element]['name'],
-                        f"{composition:.2f} {self.composition_unit.get()}"
+                        f"{composition:.2f} wt%"
                     ))
+                    # Set main element if not set yet
+                    if self.main_element is None:
+                        self.main_element = element
+                        # Show current main element label
+                        if hasattr(self, 'main_element_label'):
+                            self.main_element_label.destroy()
+                        self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue")
+                        self.main_element_label.grid(row=3, column=0, sticky='w', padx=5, pady=(0,5))
                     self.element_var.set("")
                     self.composition_var.set("")
                 else:
@@ -143,14 +113,18 @@ class ElementSelector:
             element = self.tree.item(selected_item[0])['values'][0]
             del self.selected_elements[element]
             self.tree.delete(selected_item[0])
-            # Update remaining compositions
-            self.update_composition_display()
+            # If main element removed, reset to next available or None
+            if self.main_element == element:
+                self.main_element = next(iter(self.selected_elements.keys()), None)
+                if hasattr(self, 'main_element_label'):
+                    self.main_element_label.destroy()
+                if self.main_element:
+                    self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue")
+                    self.main_element_label.grid(row=3, column=0, sticky='w', padx=5, pady=(0,5))
     
     def get_composition(self):
-        # Return composition in the currently selected unit
-        current_unit = self.composition_unit.get()
-        return {element: self.convert_composition(element, comp, "wt%", current_unit)
-                for element, comp in self.selected_elements.items()}
+        # Return composition in wt% as numeric values
+        return {element: float(comp) for element, comp in self.selected_elements.items()}
 
 class SplashScreen:
     def __init__(self, root):
@@ -308,15 +282,8 @@ class ThermoQGUI:
             messagebox.showerror("Error", "Please import Pandat data first using 'Import > Pandat to ThermoQ'!")
             return
         
-        # Convert all compositions to weight percent
-        wt_composition = {}
-        for element, comp_data in composition.items():
-            if comp_data['unit'] == 'at%':
-                # Convert atomic percent to weight percent
-                wt_comp = self.element_selector.convert_composition(element, comp_data['value'], 'at%', 'wt%')
-                wt_composition[element] = wt_comp
-            else:
-                wt_composition[element] = comp_data['value']
+        # Composition is already in weight percent (wt%)
+        wt_composition = composition
         
         # Validate composition sum equals 100%
         total_composition = sum(wt_composition.values())
@@ -460,25 +427,29 @@ class ThermoQGUI:
                     if '1/dwdT_L(' in col and '@LIQUID)' in col:
                         self.pandat_p_data[col] = self.pandat_p_data[col] / 100
                 
-                # Extract available elements from w(*) columns
+                # Extract available elements from w(*) columns with robust parsing
                 self.available_elements = []
                 for col in self.pandat_p_data.columns:
-                    if col.startswith('w(') and col.endswith(')'):
-                        element = col[2:-1].upper()  # Extract element name
-                        if element in PERIODIC_TABLE:
-                            self.available_elements.append(element)
+                    m = re.match(r"^w\(\s*([A-Za-z]{1,3})\s*\)$", str(col))
+                    if m:
+                        raw = m.group(1)
+                        symbol = raw[:1].upper() + raw[1:].lower()
+                        if symbol in PERIODIC_TABLE:
+                            self.available_elements.append(symbol)
+                # Deduplicate and sort
+                self.available_elements = sorted(set(self.available_elements))
                 
                 # Update element selector to activate only available elements
                 self.update_element_availability()
                 
-                status_label.config(text=f"Successfully loaded Pandat data! Available elements: {', '.join(self.available_elements)}", 
+                status_label.config(text=f"Successfully loaded Pandat data! Recognized elements: {', '.join(self.available_elements) if self.available_elements else 'None'}", 
                                   foreground="green")
                 
                 messagebox.showinfo("Success", 
                     f"Pandat data loaded successfully!\n"
                     f"P.xls: {len(self.pandat_p_data)} rows\n"
                     f"Ts.xlsx: {len(self.pandat_ts_data)} rows\n"
-                    f"Available elements: {', '.join(self.available_elements)}")
+                    f"Recognized elements (from w(*)): {', '.join(self.available_elements) if self.available_elements else 'None'}")
                 
                 import_window.destroy()
                 
@@ -498,18 +469,34 @@ class ThermoQGUI:
             
         # Update dropdown to show only available elements
         if self.available_elements:
+            # Force reset the dropdown values to only show available elements
             self.element_selector.element_dropdown['values'] = sorted(self.available_elements)
-            # Add a note about available elements
+            
+            # Reset current selection if not in available elements
+            current = self.element_selector.element_var.get()
+            if current and current not in self.available_elements:
+                self.element_selector.element_var.set("")
+                
+            # Remove existing availability label if it exists
             if hasattr(self.element_selector, 'availability_label'):
                 self.element_selector.availability_label.destroy()
             
+            # Add a note about available elements
             self.element_selector.availability_label = ttk.Label(
                 self.element_selector.frame, 
                 text=f"Available elements from Pandat data: {', '.join(sorted(self.available_elements))}", 
                 foreground="blue",
                 font=('Arial', 8)
             )
-            self.element_selector.availability_label.grid(row=2, column=0, pady=5, sticky='w')
+            self.element_selector.availability_label.grid(row=4, column=0, pady=5, sticky='w')
+        else:
+            # If no Pandat data loaded, show all elements
+            self.element_selector.element_dropdown['values'] = sorted(PERIODIC_TABLE.keys())
+            
+            # Remove availability label if it exists
+            if hasattr(self.element_selector, 'availability_label'):
+                self.element_selector.availability_label.destroy()
+                delattr(self.element_selector, 'availability_label')
 
     def center_window(self):
         """Center main window on the screen."""
@@ -534,11 +521,11 @@ class ThermoQGUI:
     def find_matching_row(self, composition):
         """Find the row in Pandat data that matches the given composition"""
         tolerance = 0.05  # 0.05% tolerance for composition matching
-        
+
         for idx, row in self.pandat_p_data.iterrows():
             match = True
             for element, target_comp in composition.items():
-                col_name = f'w({element.upper()})'
+                col_name = f'w({element})'
                 if col_name in self.pandat_p_data.columns:
                     actual_comp = row[col_name] * 100  # Convert to percentage
                     if abs(actual_comp - target_comp) > tolerance:
@@ -547,10 +534,10 @@ class ThermoQGUI:
                 else:
                     match = False
                     break
-            
+
             if match:
                 return idx
-        
+
         raise ValueError(f"No matching composition found in Pandat data for {composition}")
     
     def calculate_delta_t(self, composition):
@@ -574,68 +561,82 @@ class ThermoQGUI:
         """Calculate Qmult for non-main elements"""
         p_idx = self.find_matching_row(composition)
         row = self.pandat_p_data.iloc[p_idx]
-        
-        # Get elements sorted by composition (main element first)
-        sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
-        main_element = sorted_elements[0][0]  # Element with highest composition
-        
+
+        # Determine main element: prefer the first added element, fallback to highest composition
+        if getattr(self.element_selector, 'main_element', None):
+            main_element = self.element_selector.main_element
+        else:
+            sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
+            main_element = sorted_elements[0][0]
+
+        # Sort elements but ensure main element is first
+        sorted_elements = [(elem, comp) for elem, comp in composition.items()]
+        sorted_elements.sort(key=lambda x: (0 if x[0] == main_element else 1, -x[1]))
+
         qmult = 0.0
         for element, comp in sorted_elements[1:]:  # Skip main element
-            element_upper = element.upper()
-            
+            element_sym = element  # Use normalized symbol case
+
             # Get required columns
-            dwdt_col = f'1/dwdT_L({element_upper}@LIQUID)'
-            ws_wl_col = f'w_S({element_upper})/w_L({element_upper})'
-            w_col = f'w({element_upper})'
-            
+            dwdt_col = f'1/dwdT_L({element_sym}@LIQUID)'
+            ws_wl_col = f'w_S({element_sym})/w_L({element_sym})'
+            w_col = f'w({element_sym})'
+
             if all(col in self.pandat_p_data.columns for col in [dwdt_col, ws_wl_col, w_col]):
                 dwdt_val = row[dwdt_col]
                 ws_wl_val = row[ws_wl_col]
                 w_val = comp / 100.0  # Convert percentage to fraction
-                
+
                 qmult += dwdt_val * (ws_wl_val - 1) * w_val
-        
+
         return qmult
     
     def calculate_qbin(self, composition):
         """Calculate QΣbin from two hypothetical binary alloys"""
-        # Get elements sorted by composition (main element first)
-        sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
-        main_element = sorted_elements[0][0]
-        
+        # Determine main element: prefer the first added element, fallback to highest composition
+        if getattr(self.element_selector, 'main_element', None):
+            main_element = self.element_selector.main_element
+        else:
+            sorted_elements = sorted(composition.items(), key=lambda x: x[1], reverse=True)
+            main_element = sorted_elements[0][0]
+
+        # Sort elements but ensure main element is first
+        sorted_elements = [(elem, comp) for elem, comp in composition.items()]
+        sorted_elements.sort(key=lambda x: (0 if x[0] == main_element else 1, -x[1]))
+
         qbin = 0.0
-        
+
         for element, comp in sorted_elements[1:]:  # Skip main element
             # Create binary alloy composition: main element + current element
             binary_comp = {
                 main_element: 100.0 - comp,
                 element: comp
             }
-            
+
             # Find matching row for this binary alloy
             try:
                 p_idx = self.find_matching_row(binary_comp)
                 row = self.pandat_p_data.iloc[p_idx]
-                
-                element_upper = element.upper()
-                
+
+                element_sym = element  # Use normalized symbol case
+
                 # Get required columns
-                dwdt_col = f'1/dwdT_L({element_upper}@LIQUID)'
-                ws_wl_col = f'w_S({element_upper})/w_L({element_upper})'
-                w_col = f'w({element_upper})'
-                
+                dwdt_col = f'1/dwdT_L({element_sym}@LIQUID)'
+                ws_wl_col = f'w_S({element_sym})/w_L({element_sym})'
+                w_col = f'w({element_sym})'
+
                 if all(col in self.pandat_p_data.columns for col in [dwdt_col, ws_wl_col, w_col]):
                     dwdt_val = row[dwdt_col]
                     ws_wl_val = row[ws_wl_col]
                     w_val = row[w_col]  # Use actual composition from data
-                    
+
                     qbin += dwdt_val * (ws_wl_val - 1) * w_val
-                    
+
             except ValueError:
                 # If exact binary composition not found, use interpolation or skip
                 print(f"Warning: Binary composition not found for {main_element}-{element}")
                 continue
-        
+
         return qbin
 
 def main():
