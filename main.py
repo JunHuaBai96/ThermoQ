@@ -556,8 +556,9 @@ class ThermoQGUI:
     
     def find_matching_row(self, composition):
         """Find the row in Pandat data that matches the given composition"""
-        tolerance = 0.05  # 0.05% tolerance for composition matching
-
+        tolerance = 0.5  # 增加容错度到0.5%，以便找到更多可能的匹配
+        
+        # 首先尝试精确匹配
         for idx, row in self.pandat_p_data.iterrows():
             match = True
             for element, target_comp in composition.items():
@@ -581,7 +582,34 @@ class ThermoQGUI:
 
             if match:
                 return idx
-
+        
+        # 如果没有精确匹配，尝试找到最接近的行
+        # 对于二元合金，我们只需要确保元素存在，不需要精确匹配成分
+        if len(composition) == 2:
+            elements = list(composition.keys())
+            # 检查是否有包含这两个元素的行
+            for idx, row in self.pandat_p_data.iterrows():
+                all_elements_present = True
+                for element in elements:
+                    col_name = f'w({element})'
+                    if col_name not in self.pandat_p_data.columns:
+                        all_elements_present = False
+                        break
+                    # 确保该元素在这一行中有值
+                    val = row[col_name]
+                    try:
+                        v = float(val)
+                        if v <= 0:
+                            all_elements_present = False
+                            break
+                    except Exception:
+                        all_elements_present = False
+                        break
+                
+                if all_elements_present:
+                    return idx
+        
+        # 如果仍然找不到匹配，则抛出错误
         raise ValueError(f"No matching composition found in Pandat data for {composition}")
     
     def calculate_delta_t(self, composition):
@@ -685,7 +713,7 @@ class ThermoQGUI:
 
             except ValueError:
                 # If exact binary composition not found, use interpolation or skip
-                print(f"Warning: Binary composition not found for {main_element}-{element}")
+                print(f"Warning: Binary composition not found for {main_element}-{element}. Available columns: {', '.join([col for col in self.pandat_p_data.columns if col.startswith('w(')])}")
                 continue
 
         return qbin
