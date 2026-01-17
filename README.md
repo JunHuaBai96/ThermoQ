@@ -9,6 +9,8 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - Composition Converter：质量分数与原子分数转换工具
   - Generate Therocalc Batch File：生成Therocalc批处理文件（.tcm）
   - Extract Therocalc Results：从.exp文件中提取液相线温度、固相线温度和熔程
+  - Plot Phase Surfaces：绘制固相面、液相面（2D热图、3D静态图、3D旋转GIF、交互式3D图）
+  - Plot Liquidus Vectors：绘制液相面矢量图（U水平、V垂直、Z合成矢量）
 - **Pandat导入增强**：
   - 支持四文件导入：`P.xls`、`Ts.xlsx`（平衡凝固）和 `P-S.xlsx`、`Ts-S.xlsx`（Scheil凝固）
   - 修复数据行数丢失问题，正确处理所有数据行
@@ -50,6 +52,15 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 提取液相线温度、固相线温度和熔程
   - 支持批量处理.exp文件
   - 自动保存为Excel格式
+- **Plot Phase Surfaces**：绘制固相面、液相面可视化
+  - 支持2D热图、3D静态图、3D旋转GIF、交互式3D图（Plotly）
+  - 支持平衡凝固和Scheil凝固数据
+  - 可选择任意两个元素作为X和Y轴
+- **Plot Liquidus Vectors**：绘制液相面矢量图
+  - 生成U水平矢量图、V垂直矢量图、Z合成矢量图
+  - 支持任意两个元素组合
+  - 自动识别列名格式
+  - 可选数据清理和填充功能
 
 ## 界面主题
 
@@ -75,6 +86,8 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - numpy（数值计算和批处理文件生成）
   - openpyxl（读取.xlsx文件）
   - xlrd（读取.xls文件）
+  - matplotlib（可选，用于2D/3D绘图和矢量图）
+  - plotly（可选，用于交互式3D图）
 
 ## 安装步骤
 
@@ -175,6 +188,30 @@ python main.py
    - 固相线温度（Solidus_Temperature）
    - 熔程（Melting_Range）
 
+#### Plot Phase Surfaces（绘制相面）
+1. 打开：`Tools` > `Plot Phase Surfaces`
+2. 选择数据集：Equilibrium/Lever 或 Scheil
+3. 选择类型：Liquidus（液相线）或 Solidus（固相线）
+4. 选择X和Y元素（从可用元素中选择）
+5. 选择可视化类型：
+   - 2D Heatmap：2D热图
+   - 3D Static：3D静态图
+   - 3D Rotation GIF：3D旋转动画GIF
+   - Plotly 3D：交互式3D图（HTML格式）
+6. 设置输出前缀
+7. 点击"Plot"生成图表
+
+#### Plot Liquidus Vectors（绘制液相面矢量图）
+1. 打开：`Tools` > `Plot Liquidus Vectors`
+2. 选择Excel文件（需包含w(X)、w(Y)、1/dwdT_L(X@LIQUID)、1/dwdT_L(Y@LIQUID)列）
+3. 选择X和Y元素（默认：Mg和Si）
+4. 可选：勾选"Clean and fill data before plotting"进行数据清理
+5. 设置输出前缀（默认：liquid_vectors）
+6. 点击"Plot Vectors"生成三个矢量图：
+   - U水平矢量图（蓝色）：显示X元素的水平矢量
+   - V垂直矢量图（橙色）：显示Y元素的垂直矢量
+   - Z合成矢量图（绿色）：显示U和V的合成矢量
+
 
 ## 项目结构
 ```
@@ -186,6 +223,10 @@ ThermoQ/
 ├── LICENSE                  # 许可证文件
 ├── tcm.py                   # Therocalc批处理文件生成脚本（参考）
 ├── ExpDataProcessor.py      # Therocalc结果提取脚本（参考）
+├── plot_vectors_from_excel.py  # 液相面矢量图绘制脚本（参考）
+├── process_excel_clean_fill.py # Excel数据清理和填充脚本（参考）
+├── process_solidus_data.py     # 固相线数据处理脚本（参考）
+├── process_Liquidus_data.py    # 液相线数据处理脚本（参考）
 ├── template.txt             # Therocalc模板文件示例
 ├── template0.txt            # Therocalc头部模板示例
 ├── template1.txt            # Therocalc尾部模板示例
@@ -241,6 +282,22 @@ ThermoQ/
 2. 数据格式应为：第一列温度，第二列液相分数
 3. 如果文件名模式不匹配，将无法提取元素分数，但仍可提取温度数据
 4. 处理大量文件时可能需要较长时间，请耐心等待
+
+### 相面绘制
+1. 需要先通过 `Import > Pandat to ThermoQ` 导入数据
+2. 选择的数据集和类型必须与已导入的文件对应
+3. 选择的元素必须在数据中存在（从w(*)列提取）
+4. 2D热图和3D图需要matplotlib库
+5. 交互式3D图（Plotly 3D）需要plotly库，或会自动生成HTML文件
+
+### 液相面矢量图绘制
+1. Excel文件必须包含以下列：
+   - `w(X)` 和 `w(Y)`：元素X和Y的质量分数
+   - `1/dwdT_L(X@LIQUID)` 和 `1/dwdT_L(Y@LIQUID)`：对应的倒数导数
+2. 列名格式支持多种变体（大小写、空格等），程序会自动识别
+3. 矢量长度会自动缩放，并裁剪到数据域内
+4. 如果数据有缺失值，可以勾选"Clean and fill data"进行插值填充
+5. 需要matplotlib库支持
 
 ### 其他
 1. 界面主题修改后需要重新启动程序才能生效

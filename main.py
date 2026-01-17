@@ -8,6 +8,23 @@ import pandas as pd
 import numpy as np
 from periodic_table import PERIODIC_TABLE
 
+# Optional imports for plotting
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.animation as animation
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
+try:
+    import plotly.graph_objects as go
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+
 class ElementSelector:
     def __init__(self, parent):
         self.parent = parent
@@ -306,6 +323,9 @@ class ThermoQGUI:
         self.tools_menu.add_separator()
         self.tools_menu.add_command(label="Generate Therocalc Batch File", command=self.open_therocalc_generator)
         self.tools_menu.add_command(label="Extract Therocalc Results", command=self.open_exp_data_processor)
+        self.tools_menu.add_separator()
+        self.tools_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
+        self.tools_menu.add_command(label="Plot Liquidus Vectors", command=self.open_liquidus_vector_plotter)
         
         # Set window icon
         try:
@@ -729,10 +749,231 @@ class ThermoQGUI:
             # If no Pandat data loaded, show all elements
             self.element_selector.element_dropdown['values'] = sorted(PERIODIC_TABLE.keys())
             
-            # Remove availability label if it exists
-            if hasattr(self.element_selector, 'availability_label'):
-                self.element_selector.availability_label.destroy()
-                delattr(self.element_selector, 'availability_label')
+    def open_phase_surface_plotter(self):
+        """Open phase surface plotter window (Liquidus/Solidus)"""
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title("Plot Phase Surfaces (Liquidus/Solidus)")
+        plot_window.geometry("800x700")
+        plot_window.grab_set()
+
+        main_frame = ttk.Frame(plot_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        title_label = ttk.Label(main_frame, text="Phase Surface Plotter", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 15))
+
+        info_label = ttk.Label(
+            main_frame,
+            text=(
+                "Plot solidus/liquidus surfaces using imported Pandat data.\n"
+                "Equilibrium/Lever: Use P (liquidus T) and Ts (solidus T); Scheil: Use P-S and Ts-S."
+            ),
+            wraplength=700,
+            justify='left'
+        )
+        info_label.pack(pady=(0, 10))
+
+        controls = ttk.LabelFrame(main_frame, text="Settings", padding="10")
+        controls.pack(fill=tk.X, pady=10)
+
+        dataset_var = tk.StringVar(value="Equilibrium")
+        dataset_frame = ttk.Frame(controls)
+        dataset_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(dataset_frame, text="Dataset:").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(dataset_frame, text="Equilibrium/Lever", variable=dataset_var, value="Equilibrium").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(dataset_frame, text="Scheil", variable=dataset_var, value="Scheil").pack(side=tk.LEFT, padx=5)
+
+        surface_var = tk.StringVar(value="Liquidus")
+        surface_frame = ttk.Frame(controls)
+        surface_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(surface_frame, text="Type:").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(surface_frame, text="Liquidus", variable=surface_var, value="Liquidus").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(surface_frame, text="Solidus", variable=surface_var, value="Solidus").pack(side=tk.LEFT, padx=5)
+
+        elements_frame = ttk.Frame(controls)
+        elements_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(elements_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
+        elem_x_var = tk.StringVar()
+        elem_y_var = tk.StringVar()
+        elem_values = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+        elem_x_combo = ttk.Combobox(elements_frame, textvariable=elem_x_var, values=elem_values, width=10)
+        elem_x_combo.pack(side=tk.LEFT, padx=5)
+        ttk.Label(elements_frame, text="Y Element:").pack(side=tk.LEFT, padx=15)
+        elem_y_combo = ttk.Combobox(elements_frame, textvariable=elem_y_var, values=elem_values, width=10)
+        elem_y_combo.pack(side=tk.LEFT, padx=5)
+
+        viz_frame = ttk.Frame(controls)
+        viz_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(viz_frame, text="Visualization:").pack(side=tk.LEFT, padx=5)
+        viz_var = tk.StringVar(value="2D Heatmap")
+        ttk.Radiobutton(viz_frame, text="2D Heatmap", variable=viz_var, value="2D Heatmap").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Static", variable=viz_var, value="3D Static").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Rotation GIF", variable=viz_var, value="3D Rotation GIF").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="Plotly 3D", variable=viz_var, value="Plotly 3D").pack(side=tk.LEFT, padx=5)
+
+        output_frame = ttk.Frame(controls)
+        output_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(output_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
+        output_var = tk.StringVar(value="phase_surface")
+        ttk.Entry(output_frame, textvariable=output_var, width=40).pack(side=tk.LEFT, padx=5)
+
+        status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
+        status_label.pack(pady=5)
+
+        def get_df():
+            ds = dataset_var.get()
+            sf = surface_var.get()
+            if ds == "Equilibrium":
+                if sf == "Liquidus":
+                    return self.pandat_p_data
+                else:
+                    return self.pandat_ts_data
+            else:
+                if sf == "Liquidus":
+                    return self.pandat_p_s_data
+                else:
+                    return self.pandat_ts_s_data
+
+        def run_plot():
+            try:
+                df = get_df()
+                if df is None or len(df) == 0:
+                    messagebox.showerror("Data Missing", "No data found. Please import P/Ts or P-S/Ts-S files via Import → Pandat to ThermoQ first.")
+                    return
+
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    messagebox.showerror("Element Selection", "Please select X and Y elements first.")
+                    return
+                col_x = f"w({ex})"
+                col_y = f"w({ey})"
+                if col_x not in df.columns or col_y not in df.columns:
+                    messagebox.showerror("Column Not Found", f"Columns {col_x} or {col_y} not found in dataset. Available elements: {', '.join(self.available_elements) if self.available_elements else 'Please import data first'}")
+                    return
+                if 'T' not in df.columns:
+                    messagebox.showerror("Column Not Found", "Temperature column T not found in dataset.")
+                    return
+
+                x_vals = pd.to_numeric(df[col_x], errors='coerce')
+                y_vals = pd.to_numeric(df[col_y], errors='coerce')
+                t_vals = pd.to_numeric(df['T'], errors='coerce')
+                mask = x_vals.notna() & y_vals.notna() & t_vals.notna()
+                x = x_vals.loc[mask].to_numpy()
+                y = y_vals.loc[mask].to_numpy()
+                z = t_vals.loc[mask].to_numpy()
+                if len(x) == 0:
+                    messagebox.showerror("No Data", "No valid data points after filtering.")
+                    return
+
+                prefix = output_var.get().strip() or "phase_surface"
+                ds = dataset_var.get()
+                sf = surface_var.get()
+                base = f"{prefix}_{sf}_{ds}_{ex}_{ey}"
+                label_z = f"{sf.lower()} line (K)" if sf in ("Liquidus", "Solidus") else "Temperature (K)"
+
+                viz = viz_var.get()
+                if viz == "2D Heatmap":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 2D heatmap.")
+                        return
+                    plt.figure(figsize=(10, 8))
+                    plt.xlabel(f"w({ex}) (%)")
+                    plt.ylabel(f"w({ey}) (%)")
+                    scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
+                    plt.colorbar(scatter, label=label_z)
+                    plt.grid(True, linestyle='--', alpha=0.7)
+                    out_path = f"{base}_Heatmap.png"
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    status_label.config(text=f"Heatmap saved: {out_path}", foreground="green")
+                elif viz == "3D Static":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 3D image.")
+                        return
+                    fig = plt.figure(figsize=(12, 10))
+                    ax = fig.add_subplot(111, projection='3d')
+                    sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                    ax.set_xlabel(f"w({ex}) (%)")
+                    ax.set_ylabel(f"w({ey}) (%)")
+                    ax.set_zlabel(label_z)
+                    fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+                    out_path = f"{base}_3d.png"
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
+                elif viz == "3D Rotation GIF":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate GIF.")
+                        return
+                    fig = plt.figure(figsize=(12, 10))
+                    ax = fig.add_subplot(111, projection='3d')
+                    sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                    ax.set_xlabel(f"w({ex}) (%)")
+                    ax.set_ylabel(f"w({ey}) (%)")
+                    ax.set_zlabel(label_z)
+                    fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+
+                    def _rotate(angle):
+                        ax.view_init(azim=angle)
+                        return [ax]
+
+                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, 5), interval=50)
+                    out_path = f"{base}_3d_rotation.gif"
+                    ani.save(out_path, writer='pillow', fps=20, dpi=100)
+                    status_label.config(text=f"GIF saved: {out_path}", foreground="green")
+                else:
+                    if PLOTLY_AVAILABLE:
+                        fig_plotly = go.Figure(data=[go.Scatter3d(
+                            x=x, y=y, z=z,
+                            mode='markers',
+                            marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
+                                        colorbar=dict(title=label_z))
+                        )])
+                        fig_plotly.update_layout(
+                            scene=dict(
+                                xaxis_title=f"w({ex}) (%)",
+                                yaxis_title=f"w({ey}) (%)",
+                                zaxis_title=label_z,
+                            ),
+                            width=900, height=700,
+                        )
+                        out_path = f"{base}_3d_interactive.html"
+                        fig_plotly.write_html(out_path)
+                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+                    else:
+                        out_path = f"{base}_3d_interactive.html"
+                        with open(out_path, 'w', encoding='utf-8') as f:
+                            f.write('<html><head><title>3D Interactive Plot</title></head><body>\n')
+                            f.write('<h2>3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
+                            f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
+                            f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
+                            f.write('<script>\n')
+                            f.write('var data = [{\n')
+                            f.write('  type: "scatter3d",\n')
+                            f.write('  mode: "markers",\n')
+                            f.write('  x: ' + str(x.tolist()) + ',\n')
+                            f.write('  y: ' + str(y.tolist()) + ',\n')
+                            f.write('  z: ' + str(z.tolist()) + ',\n')
+                            f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "Jet", opacity: 0.8, colorbar: {title: "' + label_z + '"} }\n')
+                            f.write('}];\n')
+                            f.write('var layout = {\n')
+                            f.write('  scene: {\n')
+                            f.write('    xaxis: {title: "w(' + ex + ') (%)"},\n')
+                            f.write('    yaxis: {title: "w(' + ey + ') (%)"},\n')
+                            f.write('    zaxis: {title: "' + label_z + '"}\n')
+                            f.write('  }\n')
+                            f.write('};\n')
+                            f.write('Plotly.newPlot("plot", data, layout);\n')
+                            f.write('</script>\n')
+                            f.write('</body></html>')
+                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+
+            except Exception as e:
+                messagebox.showerror("Plotting Failed", f"An error occurred: {str(e)}")
+
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(pady=15)
+        ttk.Button(buttons_frame, text="Plot", command=run_plot).pack(side=tk.LEFT, padx=10)
+        ttk.Button(buttons_frame, text="Close", command=plot_window.destroy).pack(side=tk.LEFT, padx=10)
 
     def center_window(self):
         """Center main window on the screen."""
@@ -1573,6 +1814,260 @@ Si: 2.0"""
         
         ttk.Button(buttons_frame, text="Process Files", command=process_files).pack(side=tk.LEFT, padx=10)
         ttk.Button(buttons_frame, text="Close", command=processor_window.destroy).pack(side=tk.LEFT, padx=10)
+    
+    def open_liquidus_vector_plotter(self):
+        """Open liquidus vector plotter tool"""
+        if not MATPLOTLIB_AVAILABLE:
+            messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate vector plots.")
+            return
+        
+        vector_window = tk.Toplevel(self.root)
+        vector_window.title("Plot Liquidus Vectors")
+        vector_window.geometry("700x600")
+        vector_window.grab_set()  # Make window modal
+        
+        # Create main frame
+        main_frame = ttk.Frame(vector_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Liquidus Vector Plotter", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 10))
+        
+        # Instructions
+        info_label = ttk.Label(main_frame, 
+            text="Plot quiver plots showing liquidus vectors from Excel data.\n"
+                 "Requires columns: w(X), w(Y), 1/dwdT_L(X@LIQUID), 1/dwdT_L(Y@LIQUID)",
+            wraplength=650, justify='center')
+        info_label.pack(pady=(0, 20))
+        
+        # Excel file selection
+        file_frame = ttk.LabelFrame(main_frame, text="Select Excel File", padding="15")
+        file_frame.pack(fill=tk.X, pady=10)
+        
+        file_var = tk.StringVar()
+        ttk.Entry(file_frame, textvariable=file_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Button(file_frame, text="Browse", 
+                  command=lambda: file_var.set(filedialog.askopenfilename(
+                      title="Select Excel File", filetypes=[("Excel files", "*.xls *.xlsx"), ("All files", "*.*")]))).pack(side=tk.RIGHT, padx=5)
+        
+        # Element selection
+        element_frame = ttk.LabelFrame(main_frame, text="Element Selection", padding="15")
+        element_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(element_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
+        elem_x_var = tk.StringVar(value="Mg")
+        elem_values = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+        elem_x_combo = ttk.Combobox(element_frame, textvariable=elem_x_var, values=elem_values, width=10)
+        elem_x_combo.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(element_frame, text="Y Element:").pack(side=tk.LEFT, padx=15)
+        elem_y_var = tk.StringVar(value="Si")
+        elem_y_combo = ttk.Combobox(element_frame, textvariable=elem_y_var, values=elem_values, width=10)
+        elem_y_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Options
+        options_frame = ttk.LabelFrame(main_frame, text="Options", padding="15")
+        options_frame.pack(fill=tk.X, pady=10)
+        
+        clean_fill_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(options_frame, text="Clean and fill data before plotting", 
+                       variable=clean_fill_var).pack(side=tk.LEFT, padx=5)
+        
+        # Output prefix
+        output_frame = ttk.LabelFrame(main_frame, text="Output Prefix", padding="15")
+        output_frame.pack(fill=tk.X, pady=10)
+        
+        output_var = tk.StringVar(value="liquid_vectors")
+        ttk.Entry(output_frame, textvariable=output_var, width=50).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Status label
+        status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
+        status_label.pack(pady=10)
+        
+        def _standardize_columns(df):
+            """Standardize column names"""
+            df = df.rename(columns={c: c.strip() for c in df.columns})
+            return df
+        
+        def _find_required_columns(df, ex, ey):
+            """Find required columns for elements"""
+            norm = {c: re.sub(r"\s+", "", c, flags=re.UNICODE).lower() for c in df.columns}
+            rev = {v: k for k, v in norm.items()}
+            
+            def find_by_exact(key):
+                return rev.get(key)
+            
+            def find_by_regex(patterns):
+                for c in df.columns:
+                    s = c.lower()
+                    if all(re.search(p, s, flags=re.IGNORECASE) for p in patterns):
+                        return c
+                return None
+            
+            wx = find_by_exact(f"w({ex.lower()})") or find_by_regex([rf"^w\({ex.lower()}\)"])
+            wy = find_by_exact(f"w({ey.lower()})") or find_by_regex([rf"^w\({ey.lower()}\)"])
+            
+            inv_x = find_by_exact(f"1/dwdt_l({ex.lower()}@liquid)") or find_by_regex([
+                r"1/dwdt_l\(", rf"{ex.lower()}@liquid\)"
+            ])
+            inv_y = find_by_exact(f"1/dwdt_l({ey.lower()}@liquid)") or find_by_regex([
+                r"1/dwdt_l\(", rf"{ey.lower()}@liquid\)"
+            ])
+            
+            if not (wx and wy and inv_x and inv_y):
+                raise ValueError(
+                    f"Missing required columns. Need: 'w({ex})', 'w({ey})', "
+                    f"'1/dwdT_L({ex}@LIQUID)', '1/dwdT_L({ey}@LIQUID)'. "
+                    f"Found: {list(df.columns)}"
+                )
+            
+            return wx, wy, inv_x, inv_y
+        
+        def plot_vectors():
+            """Plot liquidus vectors"""
+            try:
+                excel_path = file_var.get()
+                if not excel_path or not os.path.exists(excel_path):
+                    messagebox.showerror("Error", "Please select a valid Excel file!")
+                    return
+                
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    messagebox.showerror("Error", "Please select X and Y elements!")
+                    return
+                
+                if ex not in PERIODIC_TABLE or ey not in PERIODIC_TABLE:
+                    messagebox.showerror("Error", f"Invalid elements: {ex} or {ey}")
+                    return
+                
+                status_label.config(text="Loading data...", foreground="orange")
+                vector_window.update()
+                
+                # Load data
+                df = pd.read_excel(excel_path, header=0)
+                df = _standardize_columns(df)
+                df = df.replace(r"^\s*$", np.nan, regex=True).dropna(how="all")
+                
+                # Clean and fill if requested
+                if clean_fill_var.get():
+                    status_label.config(text="Cleaning and filling data...", foreground="orange")
+                    vector_window.update()
+                    # This is a simplified version - full implementation would use process_excel_clean_fill logic
+                    # For now, just do basic interpolation
+                    numeric_cols = df.select_dtypes(include=[np.number]).columns
+                    df[numeric_cols] = df[numeric_cols].interpolate(method='linear', limit_direction='both')
+                
+                # Find required columns
+                col_wx, col_wy, col_inv_x, col_inv_y = _find_required_columns(df, ex, ey)
+                
+                status_label.config(text="Processing data...", foreground="orange")
+                vector_window.update()
+                
+                # Convert to numeric
+                wx = pd.to_numeric(df[col_wx], errors="coerce")
+                wy = pd.to_numeric(df[col_wy], errors="coerce")
+                u = pd.to_numeric(df[col_inv_x], errors="coerce")
+                v = pd.to_numeric(df[col_inv_y], errors="coerce")
+                
+                valid = ~(wx.isna() | wy.isna() | u.isna() | v.isna())
+                wx, wy, u, v = wx[valid], wy[valid], u[valid], v[valid]
+                
+                if len(wx) == 0:
+                    messagebox.showerror("Error", "No valid data points found after filtering!")
+                    return
+                
+                # Scale U and V
+                denom_u = u.min()
+                denom_v = v.min()
+                if denom_u == 0 or np.isnan(denom_u):
+                    raise ValueError(f"Column 1/dwdT_L({ex}@LIQUID) has invalid minimum for scaling.")
+                if denom_v == 0 or np.isnan(denom_v):
+                    raise ValueError(f"Column 1/dwdT_L({ey}@LIQUID) has invalid minimum for scaling.")
+                
+                dx = u / denom_u
+                dy = v / denom_v
+                
+                # Clip to data domain
+                x_min, x_max = float(wx.min()), float(wx.max())
+                y_min, y_max = float(wy.min()), float(wy.max())
+                
+                prefix = output_var.get().strip() or "liquid_vectors"
+                base_path = os.path.dirname(excel_path) or "."
+                base_name = os.path.splitext(os.path.basename(excel_path))[0]
+                
+                status_label.config(text="Generating plots...", foreground="orange")
+                vector_window.update()
+                
+                # Figure 1: U arrows (horizontal)
+                fig1, ax1 = plt.subplots(figsize=(7, 6), dpi=140)
+                x1 = np.clip(wx.values + dx.values, x_min, x_max)
+                u_plot = x1 - wx.values
+                ax1.quiver(wx.values, wy.values, u_plot, np.zeros_like(u_plot), 
+                          angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:blue")
+                ax1.set_xlabel(col_wx)
+                ax1.set_ylabel(col_wy)
+                ax1.set_title(f"U arrows (scaled by ratio to min of 1/dwdT_L({ex}@LIQUID))")
+                ax1.grid(True, ls=":", alpha=0.4)
+                ax1.set_aspect("equal", adjustable="box")
+                fig1.tight_layout()
+                out1 = os.path.join(base_path, f"{prefix}_{ex}_horizontal.png")
+                fig1.savefig(out1)
+                plt.close(fig1)
+                
+                # Figure 2: V arrows (vertical)
+                fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
+                y1 = np.clip(wy.values + dy.values, y_min, y_max)
+                v_plot = y1 - wy.values
+                ax2.quiver(wx.values, wy.values, np.zeros_like(v_plot), v_plot, 
+                          angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:orange")
+                ax2.set_xlabel(col_wx)
+                ax2.set_ylabel(col_wy)
+                ax2.set_title(f"V arrows (scaled by ratio to min of 1/dwdT_L({ey}@LIQUID))")
+                ax2.grid(True, ls=":", alpha=0.4)
+                ax2.set_aspect("equal", adjustable="box")
+                fig2.tight_layout()
+                out2 = os.path.join(base_path, f"{prefix}_{ey}_vertical.png")
+                fig2.savefig(out2)
+                plt.close(fig2)
+                
+                # Figure 3: Resultant Z vector
+                fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
+                z_dx = u_plot
+                z_dy = v_plot
+                ax3.quiver(wx.values, wy.values, z_dx, z_dy, 
+                          angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:green")
+                ax3.set_xlabel(col_wx)
+                ax3.set_ylabel(col_wy)
+                ax3.set_title(f"Resultant Z = vector sum of U and V (scaled)")
+                ax3.grid(True, ls=":", alpha=0.4)
+                ax3.set_aspect("equal", adjustable="box")
+                fig3.tight_layout()
+                out3 = os.path.join(base_path, f"{prefix}_Z_resultant.png")
+                fig3.savefig(out3)
+                plt.close(fig3)
+                
+                status_label.config(
+                    text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}",
+                    foreground="green"
+                )
+                messagebox.showinfo("Success", 
+                    f"Vector plots generated successfully!\n\n"
+                    f"U horizontal: {out1}\n"
+                    f"V vertical: {out2}\n"
+                    f"Z resultant: {out3}")
+                
+            except Exception as e:
+                status_label.config(text=f"Error: {str(e)}", foreground="red")
+                messagebox.showerror("Error", f"Failed to generate vector plots:\n{str(e)}")
+        
+        # Buttons
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(pady=20)
+        
+        ttk.Button(buttons_frame, text="Plot Vectors", command=plot_vectors).pack(side=tk.LEFT, padx=10)
+        ttk.Button(buttons_frame, text="Close", command=vector_window.destroy).pack(side=tk.LEFT, padx=10)
 
 def main():
     # Create the root window first
