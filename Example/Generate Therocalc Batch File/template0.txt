@@ -1,0 +1,56 @@
+@@ 进入数据库 (TDB) 文件目录
+go da
+
+@@ 切换到 Al-Fe-Si_Du2008.TDB 数据库
+sw u
+
+@@ 定义系统成分：Al, Fe, Si
+d-sys al fe si
+
+@@ 列出当前成分的状态
+l-s c
+
+@@ 获取系统状态
+get
+
+@@ 进入 POLY 模块
+go p-3
+
+@@ 设置计算条件：
+@@ - t=1600: 温度为 1600 开尔文
+@@ - p=101325: 压力为 101325 帕（大气压）
+@@ - n=1: 总摩尔数为 1
+@@ - w(si)=0.00: Si 的质量分数为 0.00
+@@ - w(fe)=0.00: Fe 的质量分数为 0.00
+s-c t=1600,p=101325,n=1
+s-c w(si)=0.00
+s-c w(fe)=0.00
+
+@@ 列出设置的计算条件
+l-c
+
+@@ 计算平衡
+c-e
+
+@@ 设置一系列温度点进行计算：
+@@ - s-a-v 1: 从 1 K 开始（占位符值）
+@@ - t 300 2000 12.5: 从 300 K 到 2000 K，步长为 12.5 K
+s-a-v 1 t 300 2000 12.5
+
+@@ 保存工作区为 Al0.00Fe0.00Si_np-T.POL 并确认保存（输入 'y'）
+save_workspace Al0.00Fe0.00Si_np-T.POL y
+
+@@ 将步进模式定义为正常
+step normal
+
+@@ 进入 POST 模块
+post
+
+@@ 设置输出的显示轴：
+@@ - s-d-a x t: X 轴为温度 (t)
+@@ - s-d-a y np(liquid): Y 轴为液相的相数
+s-d-a x t
+s-d-a y np(liquid)
+
+@@ 生成文件 Al0.00Fe0.00Si_np-T.exp
+make file Al0.00Fe0.00Si_np-T.exp

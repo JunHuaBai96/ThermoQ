@@ -1,0 +1,22 @@
+back
+back
+back
+go da
+sw u
+d-sys si
+get
+go p-3
+s-c t=1600,p=101325,n=1
+l-c
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Fe1.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Fe1.00Si_np-T.exp

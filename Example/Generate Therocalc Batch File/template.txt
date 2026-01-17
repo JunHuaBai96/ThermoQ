@@ -1,0 +1,19 @@
+back
+
+s-c w(si)=%Si%
+s-c w(fe)=%Fe%
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al%Fe%Fe%Si%Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al%Fe%Fe%Si%Si_np-T.exp

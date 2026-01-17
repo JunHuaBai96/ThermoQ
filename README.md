@@ -2,8 +2,23 @@
 
 ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。
 
-## 更新摘要（近5小时）
+## 更新摘要
 
+### 最新版本
+- **Tools菜单新增功能**：
+  - Composition Converter：质量分数与原子分数转换工具
+  - Generate Therocalc Batch File：生成Therocalc批处理文件（.tcm）
+  - Extract Therocalc Results：从.exp文件中提取液相线温度、固相线温度和熔程
+- **Pandat导入增强**：
+  - 支持四文件导入：`P.xls`、`Ts.xlsx`（平衡凝固）和 `P-S.xlsx`、`Ts-S.xlsx`（Scheil凝固）
+  - 修复数据行数丢失问题，正确处理所有数据行
+  - 修复FutureWarning警告
+- **界面优化**：
+  - 简化元素选择界面，仅支持wt%输入
+  - 添加成分总和检查功能（自动显示是否达到100 wt%）
+  - 修复Total composition显示不全问题
+
+### 历史版本
 - 新增计算模式：`ΔT（熔程）`，计算 `P.xls` 的 `T` 减去 `Ts.xlsx` 的 `T`
 - Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`
 - 导入时自动删除空白行，并将所有 `1/dwdT_L(*@LIQUID)` 列数值除以 100
@@ -12,17 +27,29 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ## 功能特点
 
+### 核心功能
 - 图形化用户界面，操作简单直观
 - 支持从元素周期表中选择元素
 - 支持质量分数（wt%）成分输入
-- 支持多种计算模式：
-  - QΣbin
-  - Qture
-  - Qmult
+- 实时成分总和检查（显示是否达到100 wt%）
+- 支持ΔT（熔程）计算模式
 - 支持从Pandat软件导出的Excel文件导入元素成分
+  - 平衡凝固数据：P.xls 和 Ts.xlsx
+  - Scheil凝固数据：P-S.xlsx 和 Ts-S.xlsx（可选）
 - 启动画面显示
 - 美观的界面设计
 - 可自定义的界面主题（当前版本采用黄色背景主题）
+
+### Tools工具集
+- **Composition Converter**：质量分数（wt%）与原子分数（at%）双向转换工具
+- **Generate Therocalc Batch File**：生成Therocalc批处理文件（.tcm）
+  - 支持多元素组合生成
+  - 可配置元素范围和步长
+  - 支持约束条件设置
+- **Extract Therocalc Results**：从Therocalc计算结果中提取数据
+  - 提取液相线温度、固相线温度和熔程
+  - 支持批量处理.exp文件
+  - 自动保存为Excel格式
 
 ## 界面主题
 
@@ -42,9 +69,12 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 - Python 3.6 或更高版本
 - 操作系统：Windows/Linux/MacOS
 - 必要的Python包：
-  - tkinter
-  - Pillow
-  - pandas (用于Excel文件导入)
+  - tkinter（随Python安装）
+  - Pillow（图像处理）
+  - pandas（数据处理和Excel文件导入）
+  - numpy（数值计算和批处理文件生成）
+  - openpyxl（读取.xlsx文件）
+  - xlrd（读取.xls文件）
 
 ## 安装步骤
 
@@ -87,32 +117,82 @@ python main.py
    - 在表格中查看已添加的元素
    - 选择元素后点击"Remove Selected"可以删除元素
 
-4. 从 Pandat 导入数据（两文件）：
+4. 从 Pandat 导入数据：
    - 点击菜单栏中的 `Import` > `Pandat to ThermoQ`
-   - 分别选择 `P.xls`（相平衡数据）与 `Ts.xlsx`（固相线温度）
-   - 程序会自动：删除空白行、处理 `1/dwdT_L(*@LIQUID)` 列（除以 100）、提取 `w(*)` 列的可用元素并启用选择
-   - 导入成功后，会在界面中显示“Available elements from Pandat data: ...”说明
+   - **必需文件**：
+     - `P.xls` 或 `P.xlsx`（平衡凝固的相平衡数据）
+     - `Ts.xls` 或 `Ts.xlsx`（平衡凝固的固相线温度）
+   - **可选文件**：
+     - `P-S.xls` 或 `P-S.xlsx`（Scheil凝固的相平衡数据）
+     - `Ts-S.xls` 或 `Ts-S.xlsx`（Scheil凝固的固相线温度）
+   - 程序会自动：
+     - 删除空白行
+     - 处理 `1/dwdT_L(*@LIQUID)` 列（除以 100）
+     - 提取 `w(*)` 列的可用元素并启用选择
+   - 导入成功后，会在界面中显示"Available elements from Pandat data: ..."说明
 
-4. 进行计算：
-   - 选择计算模式（QΣbin / Qture / Qmult / ΔT）
-   - 点击"Calculate"按钮开始计算
+5. 进行计算：
+   - 确保成分总和为100 wt%（界面会显示绿色✓提示）
+   - 点击"Calculate"按钮开始计算ΔT（熔程）
    - 点击"Show Results"查看计算结果
+
+### Tools工具使用
+
+#### Composition Converter（成分转换工具）
+1. 打开：`Tools` > `Composition Converter (wt% ↔ at%)`
+2. 选择输入单位（wt% 或 at%）
+3. 输入元素成分（每行一个元素，格式：`Al 90.0` 或 `Al: 90.0`）
+4. 点击"Convert"进行转换
+5. 查看转换结果
+
+#### Generate Therocalc Batch File（生成批处理文件）
+1. 打开：`Tools` > `Generate Therocalc Batch File`
+2. 选择模板文件：
+   - Template0 File（文件头部）
+   - Template File（包含占位符如 %Element%）
+   - Template1 File（文件尾部）
+3. 配置元素：
+   - 添加要生成的元素
+   - 设置每个元素的Min、Max、Step值
+4. 设置约束条件（可选）：
+   - 总和约束：所有元素总和 <= 1
+   - 排除全零组合
+5. 选择输出文件路径
+6. 点击"Generate Batch File"生成.tcm文件
+
+#### Extract Therocalc Results（提取计算结果）
+1. 打开：`Tools` > `Extract Therocalc Results`
+2. 选择包含.exp文件的文件夹
+3. 配置文件名模式（可选）：
+   - 使用正则表达式从文件名提取元素分数
+   - 默认模式：`Al(\d+\.\d+)Fe(\d+\.\d+)Si_np-T\.exp`
+4. 选择输出Excel文件路径
+5. 点击"Process Files"开始处理
+6. 查看处理状态和结果
+7. 结果将保存为Excel文件，包含：
+   - 元素分数列（如果从文件名提取）
+   - 液相线温度（Liquidus_Temperature）
+   - 固相线温度（Solidus_Temperature）
+   - 熔程（Melting_Range）
 
 
 ## 项目结构
-- `main.py`: 主程序文件，包含GUI实现和主要功能
-- `periodic_table.py`: 元素周期表数据
-- `requirements.txt`: 项目依赖包列表
-- `images/`: 存放程序使用的图片资源
-
-
-## 依赖包
-
-- tkinter: GUI界面（随 Python 安装）
-- Pillow: 图像处理
-- pandas: 数据处理
-- openpyxl: 读取 `.xlsx`
-- xlrd: 读取 `.xls`
+```
+ThermoQ/
+├── main.py                  # 主程序文件，包含GUI实现和主要功能
+├── periodic_table.py        # 元素周期表数据
+├── requirements.txt         # 项目依赖包列表
+├── README.md                # 项目说明文档
+├── LICENSE                  # 许可证文件
+├── tcm.py                   # Therocalc批处理文件生成脚本（参考）
+├── ExpDataProcessor.py      # Therocalc结果提取脚本（参考）
+├── template.txt             # Therocalc模板文件示例
+├── template0.txt            # Therocalc头部模板示例
+├── template1.txt            # Therocalc尾部模板示例
+└── images/                  # 存放程序使用的图片资源
+    ├── logo.png
+    └── Simplified logo.png
+```
 
 
 ## 界面自定义
@@ -138,10 +218,34 @@ python main.py
 
 ## 注意事项
 
+### 元素成分输入
 1. 确保所有成分值在0-100%之间
 2. 同一元素不能重复添加
-3. 成分总和应接近100%
-4. 界面主题修改后需要重新启动程序才能生效
+3. 成分总和应等于100 wt%（界面会实时显示总和状态）
+4. 系统内部统一使用wt%存储，所有计算基于wt%
+
+### Pandat数据导入
+1. P文件和Ts文件是必需的（平衡凝固数据）
+2. P-S文件和Ts-S文件是可选的（Scheil凝固数据）
+3. 导入时会自动处理数据格式和单位转换
+4. 导入后只有从数据中提取的元素可用
+
+### Therocalc批处理文件生成
+1. 模板文件中的占位符格式：`%Element%`（如 `%Fe%`、`%Si%`）
+2. 元素配置的Min、Max值应在0-1之间
+3. 步长越小，生成的文件越大，处理时间越长
+4. 建议先测试小范围生成，确认格式正确后再生成完整文件
+
+### Therocalc结果提取
+1. .exp文件必须包含 `$ PLOTTED` 和 `BLOCKEND` 标记之间的数据
+2. 数据格式应为：第一列温度，第二列液相分数
+3. 如果文件名模式不匹配，将无法提取元素分数，但仍可提取温度数据
+4. 处理大量文件时可能需要较长时间，请耐心等待
+
+### 其他
+1. 界面主题修改后需要重新启动程序才能生效
+2. 确保有足够的磁盘空间存储生成的文件
+3. Excel文件需要安装openpyxl或xlrd库才能正确读取
 
 ## 贡献指南
 
