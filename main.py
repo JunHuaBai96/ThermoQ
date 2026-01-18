@@ -6,6 +6,9 @@ import time
 import re
 import pandas as pd
 import numpy as np
+import subprocess
+import webbrowser
+import platform
 from periodic_table import PERIODIC_TABLE
 
 # Optional imports for plotting
@@ -24,6 +27,16 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
+
+try:
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+    from scipy.interpolate import griddata
+    SKLEARN_AVAILABLE = True
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    SCIPY_AVAILABLE = False
 
 class ElementSelector:
     def __init__(self, parent):
@@ -44,34 +57,34 @@ class ElementSelector:
     def create_element_selection(self):
         # Create a frame for element selection
         selection_frame = ttk.Frame(self.frame)
-        selection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+        selection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=3, pady=3)
         
         # Create element dropdown
-        ttk.Label(selection_frame, text="Element:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(selection_frame, text="Element:").grid(row=0, column=0, padx=3, pady=3)
         self.element_var = tk.StringVar()
         self.element_dropdown = ttk.Combobox(selection_frame, textvariable=self.element_var, 
                                            values=sorted(PERIODIC_TABLE.keys()), width=10)
-        self.element_dropdown.grid(row=0, column=1, padx=5, pady=5)
+        self.element_dropdown.grid(row=0, column=1, padx=3, pady=3)
         
         # Create composition entry (always in wt%)
-        ttk.Label(selection_frame, text="Composition (wt%):").grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(selection_frame, text="Composition (wt%):").grid(row=0, column=2, padx=3, pady=3)
         self.composition_var = tk.StringVar()
         self.composition_entry = ttk.Entry(selection_frame, textvariable=self.composition_var, width=10)
-        self.composition_entry.grid(row=0, column=3, padx=5, pady=5)
+        self.composition_entry.grid(row=0, column=3, padx=3, pady=3)
         
         # Add button
         ttk.Button(selection_frame, text="Add Element", 
-                  command=self.add_element).grid(row=0, column=4, padx=5, pady=5)
+                  command=self.add_element).grid(row=0, column=4, padx=3, pady=3)
 
         # Hint: first added element is the main element
-        self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray")
-        self.main_hint_label.grid(row=2, column=0, sticky='w', padx=5, pady=(0,5))
+        self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray", wraplength=400)
+        self.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
         
     
     def create_selected_elements_display(self):
         # Create a frame for displaying selected elements
         display_frame = ttk.LabelFrame(self.frame, text="Selected Elements", padding="5")
-        display_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+        display_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=3, pady=3)
         
         # Create treeview for displaying elements
         self.tree = ttk.Treeview(display_frame, columns=("Element", "Name", "Composition"), 
@@ -92,8 +105,8 @@ class ElementSelector:
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         # Add remove button
-        ttk.Button(display_frame, text="Remove Selected", 
-                  command=self.remove_element).grid(row=1, column=0, pady=5)
+        ttk.Button(display_frame, text="Remove Selected",
+                  command=self.remove_element).grid(row=1, column=0, pady=3)
     
     def convert_at_to_wt(self, at_composition):
         """Convert atomic percent to weight percent"""
@@ -168,16 +181,18 @@ class ElementSelector:
                     
                     # Create status label with wraplength to prevent text cutoff
                     self.sum_status_label = ttk.Label(self.frame, text=status_text, foreground=status_color, wraplength=500)
-                    self.sum_status_label.grid(row=3, column=0, sticky='w', padx=5, pady=(0,5))
+                    self.sum_status_label.grid(row=3, column=0, sticky='w', padx=3, pady=(0,3))
                     
                     # Set main element if not set yet
                     if self.main_element is None:
                         self.main_element = element
-                        # Show current main element label
+                        # Hide hint label and show current main element label
+                        if hasattr(self, 'main_hint_label'):
+                            self.main_hint_label.destroy()
                         if hasattr(self, 'main_element_label'):
                             self.main_element_label.destroy()
-                        self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue")
-                        self.main_element_label.grid(row=2, column=0, sticky='w', padx=5, pady=(0,5))
+                        self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue", wraplength=400)
+                        self.main_element_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
                     self.element_var.set("")
                     self.composition_var.set("")
                 else:
@@ -223,8 +238,14 @@ class ElementSelector:
                 if hasattr(self, 'main_element_label'):
                     self.main_element_label.destroy()
                 if self.main_element:
-                    self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue")
+                    self.main_element_label = ttk.Label(self.frame, text=f"Main element: {self.main_element}", foreground="blue", wraplength=400)
                     self.main_element_label.grid(row=2, column=0, sticky='w', padx=5, pady=(0,5))
+                else:
+                    # No main element left, show hint again
+                    if hasattr(self, 'main_hint_label'):
+                        self.main_hint_label.destroy()
+                    self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray", wraplength=400)
+                    self.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
     
     def update_display(self):
         """Update the display with current elements"""
@@ -286,10 +307,10 @@ class ThermoQGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("ThermoQ")
-        # Increase default window size for better layout visibility
-        self.root.geometry("1200x800")
+        # Set compact default window size
+        self.root.geometry("900x600")
         # Set a sensible minimum to prevent cramped UI
-        self.root.minsize(1000, 700)
+        self.root.minsize(800, 500)
         self.root.withdraw()  # Hide main window initially
         
         # Set yellow background for main window
@@ -317,15 +338,20 @@ class ThermoQGUI:
         self.import_menu.add_command(label="Pandat to ThermoQ", command=self.open_pandat_import)
         
         # Create Tools menu
+        self.plot_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="Plot", menu=self.plot_menu)
+        self.plot_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
+        self.plot_menu.add_command(label="Plot Q Values", command=self.open_q_value_plotter)
+        self.plot_menu.add_command(label="Plot Liquidus Vectors", command=self.open_liquidus_vector_plotter)
+        
         self.tools_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Tools", menu=self.tools_menu)
         self.tools_menu.add_command(label="Composition Converter (wt% ↔ at%)", command=self.open_composition_converter)
         self.tools_menu.add_separator()
-        self.tools_menu.add_command(label="Generate Therocalc Batch File", command=self.open_therocalc_generator)
-        self.tools_menu.add_command(label="Extract Therocalc Results", command=self.open_exp_data_processor)
+        self.tools_menu.add_command(label="Generate Thermo-calc Batch File", command=self.open_therocalc_generator)
+        self.tools_menu.add_command(label="Extract Thermo-calc Results", command=self.open_exp_data_processor)
         self.tools_menu.add_separator()
-        self.tools_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
-        self.tools_menu.add_command(label="Plot Liquidus Vectors", command=self.open_liquidus_vector_plotter)
+        self.tools_menu.add_command(label="Extract Pandat Results", command=self.open_extract_pandat_results)
         
         # Set window icon
         try:
@@ -342,7 +368,7 @@ class ThermoQGUI:
         self.root.grid_rowconfigure(0, weight=1)
         
         # Create main frame with yellow background
-        main_frame = ttk.Frame(root, padding="20")
+        main_frame = ttk.Frame(root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Configure main frame grid weights
@@ -351,12 +377,12 @@ class ThermoQGUI:
         # Logo section
         try:
             logo_img = Image.open("images/Simplified logo.png")
-            logo_size = (100, 100)
+            logo_size = (80, 80)  # Reduced logo size
             logo_img = logo_img.resize(logo_size, Image.Resampling.LANCZOS)
             self.logo_photo = ImageTk.PhotoImage(logo_img)
             
             logo_label = ttk.Label(main_frame, image=self.logo_photo)
-            logo_label.grid(row=0, column=0, rowspan=2, padx=(0, 20), pady=10)
+            logo_label.grid(row=0, column=0, rowspan=2, padx=(0, 10), pady=5)
         except Exception as e:
             print(f"Error loading logo: {e}")
         
@@ -366,7 +392,7 @@ class ThermoQGUI:
         
         # Buttons frame
         buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.grid(row=1, column=0, columnspan=2, pady=20)
+        buttons_frame.grid(row=1, column=0, columnspan=2, pady=10)
         
         # Calculate and Results buttons
         ttk.Button(buttons_frame, text="Calculate", command=self.calculate).grid(row=0, column=0, padx=10)
@@ -400,29 +426,165 @@ class ThermoQGUI:
             messagebox.showerror("Error", f"Total composition must equal 100%! Current total: {total_composition:.2f}%")
             return
         
-        # Perform ΔT calculation
+        # Perform calculations: Q, ΔT, ΔTs
         try:
-            result = self.calculate_delta_t(wt_composition)
+            results = {}
+            errors = []
+            
+            # 1. Calculate Q (from P.xlsx or P-S.xlsx)
+            q_lever = None
+            q_scheil = None
+            
+            # Q from P.xlsx (Lever/Equilibrium)
+            try:
+                p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
+                if '-T//fw(@FCC_A1)' in self.pandat_p_data.columns:
+                    q_lever = self.pandat_p_data.iloc[p_idx]['-T//fw(@FCC_A1)']
+                    results['Q (Lever)'] = float(q_lever)
+            except Exception as e:
+                errors.append(f"Q (Lever) calculation failed: {str(e)}")
+            
+            # Q from P-S.xlsx (Scheil)
+            if self.pandat_p_s_data is not None:
+                try:
+                    p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
+                    if '-T//fw(@FCC_A1)' in self.pandat_p_s_data.columns:
+                        q_scheil = self.pandat_p_s_data.iloc[p_s_idx]['-T//fw(@FCC_A1)']
+                        results['Q (Scheil)'] = float(q_scheil)
+                except Exception as e:
+                    errors.append(f"Q (Scheil) calculation failed: {str(e)}")
+            
+            # 2. Calculate ΔT = T(P.xlsx) - T(Ts.xlsx)
+            try:
+                p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
+                ts_idx = self.find_matching_row(wt_composition, self.pandat_ts_data)
+                t_p = float(self.pandat_p_data.iloc[p_idx]['T'])
+                t_ts = float(self.pandat_ts_data.iloc[ts_idx]['T'])
+                delta_t = t_p - t_ts
+                results['ΔT'] = delta_t
+            except Exception as e:
+                errors.append(f"ΔT calculation failed: {str(e)}")
+            
+            # 3. Calculate ΔTs = T(P-S.xlsx) - T(Ts-S.xlsx)
+            if self.pandat_p_s_data is not None and self.pandat_ts_s_data is not None:
+                try:
+                    p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
+                    ts_s_idx = self.find_matching_row(wt_composition, self.pandat_ts_s_data)
+                    t_p_s = float(self.pandat_p_s_data.iloc[p_s_idx]['T'])
+                    t_ts_s = float(self.pandat_ts_s_data.iloc[ts_s_idx]['T'])
+                    delta_ts = t_p_s - t_ts_s
+                    results['ΔTs'] = delta_ts
+                except Exception as e:
+                    errors.append(f"ΔTs calculation failed: {str(e)}")
             
             # Store result for display
             self.last_result = {
-                'type': 'delta_t',
+                'type': 'q_delta_t_delta_ts',
                 'composition': wt_composition,
-                'result': result
+                'results': results
             }
             
+            # Build result message
+            result_msg = "Calculation Results:\n\n"
+            result_msg += f"Composition: {', '.join([f'{elem}: {comp:.2f}wt%' for elem, comp in wt_composition.items()])}\n\n"
+            
+            if 'Q (Lever)' in results:
+                result_msg += f"Q (Lever): {results['Q (Lever)']:.4f}\n"
+            if 'Q (Scheil)' in results:
+                result_msg += f"Q (Scheil): {results['Q (Scheil)']:.4f}\n"
+            if 'ΔT' in results:
+                result_msg += f"ΔT: {results['ΔT']:.4f}\n"
+            if 'ΔTs' in results:
+                result_msg += f"ΔTs: {results['ΔTs']:.4f}\n"
+            
+            # Show errors if any
+            if errors:
+                result_msg += "\nErrors:\n" + "\n".join(errors)
+            
             # Show result
-            messagebox.showinfo("Calculation Result", 
-                f"Calculation Type: ΔT (Melting Range)\n"
-                f"Composition: {', '.join([f'{elem}: {comp:.2f}wt%' for elem, comp in wt_composition.items()])}\n"
-                f"Result: {result:.4f}")
+            if results:
+                messagebox.showinfo("Calculation Result", result_msg)
+            else:
+                error_msg = "No results calculated.\n\nErrors:\n" + "\n".join(errors) if errors else "No results calculated. Please check your composition and data files."
+                messagebox.showerror("Calculation Error", error_msg)
                 
         except Exception as e:
-            messagebox.showerror("Calculation Error", f"Failed to calculate: {str(e)}")
+            import traceback
+            error_details = traceback.format_exc()
+            messagebox.showerror("Calculation Error", f"Failed to calculate: {str(e)}\n\nDetails:\n{error_details}")
 
     def show_results(self):
-        # Add results display logic here
-        print("Showing calculation results...")
+        """Display calculation results in a window"""
+        if not hasattr(self, 'last_result') or self.last_result is None:
+            messagebox.showwarning("No Results", "Please calculate first before showing results!")
+            return
+        
+        # Create results window
+        results_window = tk.Toplevel(self.root)
+        results_window.title("Calculation Results")
+        results_window.geometry("600x500")
+        
+        # Create main frame
+        main_frame = ttk.Frame(results_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Calculation Results", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 10))
+        
+        # Composition display
+        composition = self.last_result.get('composition', {})
+        comp_text = "Composition: " + ', '.join([f'{elem}: {comp:.2f}wt%' for elem, comp in composition.items()])
+        comp_label = ttk.Label(main_frame, text=comp_text, font=('Arial', 10))
+        comp_label.pack(pady=(0, 20))
+        
+        # Results display
+        results_frame = ttk.LabelFrame(main_frame, text="Results", padding="15")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Create scrollable text area for results
+        text_frame = ttk.Frame(results_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        results_text = tk.Text(text_frame, height=15, width=60, wrap=tk.WORD, font=('Courier', 10))
+        results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=results_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        results_text.configure(yscrollcommand=scrollbar.set)
+        
+        # Display results
+        results = self.last_result.get('results', {})
+        if results:
+            results_text.insert("1.0", "Calculation Results:\n\n")
+            
+            if 'Q (Lever)' in results:
+                results_text.insert(tk.END, f"Q (Lever): {results['Q (Lever)']:.6f}\n")
+            else:
+                results_text.insert(tk.END, "Q (Lever): Not available\n")
+            
+            if 'Q (Scheil)' in results:
+                results_text.insert(tk.END, f"Q (Scheil): {results['Q (Scheil)']:.6f}\n")
+            else:
+                results_text.insert(tk.END, "Q (Scheil): Not available\n")
+            
+            if 'ΔT' in results:
+                results_text.insert(tk.END, f"ΔT: {results['ΔT']:.6f}\n")
+            else:
+                results_text.insert(tk.END, "ΔT: Not available\n")
+            
+            if 'ΔTs' in results:
+                results_text.insert(tk.END, f"ΔTs: {results['ΔTs']:.6f}\n")
+            else:
+                results_text.insert(tk.END, "ΔTs: Not available\n")
+        else:
+            results_text.insert("1.0", "No results available. Please run calculation first.")
+        
+        results_text.config(state=tk.DISABLED)  # Make read-only
+        
+        # Close button
+        close_button = ttk.Button(main_frame, text="Close", command=results_window.destroy)
+        close_button.pack(pady=10)
         
     def open_pandat_import(self):
         # Create a new window for Pandat import
@@ -846,18 +1008,41 @@ class ThermoQGUI:
                 if not ex or not ey:
                     messagebox.showerror("Element Selection", "Please select X and Y elements first.")
                     return
-                col_x = f"w({ex})"
-                col_y = f"w({ey})"
-                if col_x not in df.columns or col_y not in df.columns:
-                    messagebox.showerror("Column Not Found", f"Columns {col_x} or {col_y} not found in dataset. Available elements: {', '.join(self.available_elements) if self.available_elements else 'Please import data first'}")
+                
+                # Try case-insensitive column matching
+                col_x_pattern = f"w({ex})"
+                col_y_pattern = f"w({ey})"
+                col_x_found = None
+                col_y_found = None
+                col_t_found = None
+                
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.upper()
+                        # Match w(ELEMENT) columns
+                        if col_upper == col_x_pattern.upper():
+                            col_x_found = col
+                        elif col_upper == col_y_pattern.upper():
+                            col_y_found = col
+                        # Match T column
+                        elif col_upper == 'T':
+                            col_t_found = col
+                
+                if col_x_found is None or col_y_found is None:
+                    available_cols = [str(c) for c in df.columns if isinstance(c, str) and c.upper().startswith('W(')][:10]
+                    messagebox.showerror("Column Not Found", 
+                        f"Required columns not found in dataset.\n"
+                        f"Looking for: {col_x_pattern}, {col_y_pattern}\n"
+                        f"Available w(*) columns (first 10): {', '.join(available_cols) if available_cols else 'None'}")
                     return
-                if 'T' not in df.columns:
+                
+                if col_t_found is None:
                     messagebox.showerror("Column Not Found", "Temperature column T not found in dataset.")
                     return
 
-                x_vals = pd.to_numeric(df[col_x], errors='coerce')
-                y_vals = pd.to_numeric(df[col_y], errors='coerce')
-                t_vals = pd.to_numeric(df['T'], errors='coerce')
+                x_vals = pd.to_numeric(df[col_x_found], errors='coerce')
+                y_vals = pd.to_numeric(df[col_y_found], errors='coerce')
+                t_vals = pd.to_numeric(df[col_t_found], errors='coerce')
                 mask = x_vals.notna() & y_vals.notna() & t_vals.notna()
                 x = x_vals.loc[mask].to_numpy()
                 y = y_vals.loc[mask].to_numpy()
@@ -873,6 +1058,15 @@ class ThermoQGUI:
                 label_z = f"{sf.lower()} line (K)" if sf in ("Liquidus", "Solidus") else "Temperature (K)"
 
                 viz = viz_var.get()
+                # Create smooth surface using Gaussian Process
+                status_label.config(text="Creating smooth surface...", foreground="orange")
+                plot_window.update()
+                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(x, y, z, grid_resolution=50)
+                
+                if xi_grid is None:
+                    messagebox.showwarning("Smoothing Failed", "Could not create smooth surface. Using scatter plot instead. Please install scikit-learn and scipy for smooth surfaces.")
+                    xi_grid, yi_grid, zi_grid = None, None, None
+                
                 if viz == "2D Heatmap":
                     if not MATPLOTLIB_AVAILABLE:
                         messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 2D heatmap.")
@@ -880,37 +1074,70 @@ class ThermoQGUI:
                     plt.figure(figsize=(10, 8))
                     plt.xlabel(f"w({ex}) (%)")
                     plt.ylabel(f"w({ey}) (%)")
-                    scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
-                    plt.colorbar(scatter, label=label_z)
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='hot', alpha=0.9)
+                        plt.contour(xi_grid, yi_grid, zi_grid, levels=20, colors='black', alpha=0.3, linewidths=0.5)
+                        plt.colorbar(contour, label=label_z)
+                        # Overlay original data points
+                        plt.scatter(x, y, c=z, cmap='hot', s=20, alpha=0.6, edgecolors='black', linewidths=0.5)
+                    else:
+                        # Fallback to scatter
+                        scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
+                        plt.colorbar(scatter, label=label_z)
                     plt.grid(True, linestyle='--', alpha=0.7)
                     out_path = f"{base}_Heatmap.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    plt.close()
                     status_label.config(text=f"Heatmap saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
                 elif viz == "3D Static":
                     if not MATPLOTLIB_AVAILABLE:
                         messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 3D image.")
                         return
                     fig = plt.figure(figsize=(12, 10))
                     ax = fig.add_subplot(111, projection='3d')
-                    sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                                              linewidth=0, antialiased=True, shade=True)
+                        # Overlay original data points
+                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
+                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                    else:
+                        # Fallback to scatter
+                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
-                    fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
                     out_path = f"{base}_3d.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    plt.close()
                     status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
                 elif viz == "3D Rotation GIF":
                     if not MATPLOTLIB_AVAILABLE:
                         messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate GIF.")
                         return
                     fig = plt.figure(figsize=(12, 10))
                     ax = fig.add_subplot(111, projection='3d')
-                    sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                                              linewidth=0, antialiased=True, shade=True)
+                        # Overlay original data points
+                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
+                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                    else:
+                        # Fallback to scatter
+                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
-                    fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
 
                     def _rotate(angle):
                         ax.view_init(azim=angle)
@@ -919,15 +1146,29 @@ class ThermoQGUI:
                     ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, 5), interval=50)
                     out_path = f"{base}_3d_rotation.gif"
                     ani.save(out_path, writer='pillow', fps=20, dpi=100)
+                    plt.close()
                     status_label.config(text=f"GIF saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
                 else:
                     if PLOTLY_AVAILABLE:
-                        fig_plotly = go.Figure(data=[go.Scatter3d(
-                            x=x, y=y, z=z,
-                            mode='markers',
-                            marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
-                                        colorbar=dict(title=label_z))
-                        )])
+                        if xi_grid is not None:
+                            # Use smooth surface
+                            fig_plotly = go.Figure(data=[
+                                go.Surface(x=xi_grid, y=yi_grid, z=zi_grid, 
+                                          colorscale='Jet', opacity=0.9,
+                                          colorbar=dict(title=label_z)),
+                                go.Scatter3d(x=x, y=y, z=z, mode='markers',
+                                           marker=dict(size=3, color='black', opacity=0.5))
+                            ])
+                        else:
+                            # Fallback to scatter
+                            fig_plotly = go.Figure(data=[go.Scatter3d(
+                                x=x, y=y, z=z,
+                                mode='markers',
+                                marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
+                                            colorbar=dict(title=label_z))
+                            )])
                         fig_plotly.update_layout(
                             scene=dict(
                                 xaxis_title=f"w({ex}) (%)",
@@ -939,6 +1180,8 @@ class ThermoQGUI:
                         out_path = f"{base}_3d_interactive.html"
                         fig_plotly.write_html(out_path)
                         status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+                        # Open the file
+                        self.open_file_and_offer_save_as(out_path, plot_window)
                     else:
                         out_path = f"{base}_3d_interactive.html"
                         with open(out_path, 'w', encoding='utf-8') as f:
@@ -966,9 +1209,445 @@ class ThermoQGUI:
                             f.write('</script>\n')
                             f.write('</body></html>')
                         status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+                        # Open the file
+                        self.open_file_and_offer_save_as(out_path, plot_window)
 
             except Exception as e:
                 messagebox.showerror("Plotting Failed", f"An error occurred: {str(e)}")
+
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(pady=15)
+        ttk.Button(buttons_frame, text="Plot", command=run_plot).pack(side=tk.LEFT, padx=10)
+        ttk.Button(buttons_frame, text="Close", command=plot_window.destroy).pack(side=tk.LEFT, padx=10)
+
+    def create_smooth_surface(self, x, y, z, grid_resolution=50):
+        """Create smooth surface using Gaussian Process Regression or interpolation"""
+        if SKLEARN_AVAILABLE and len(x) >= 3:
+            try:
+                # Prepare training data
+                X_train = np.column_stack([x, y])
+                z_train = z
+                
+                # Create Gaussian Process Regressor
+                # Increase parameter bounds to avoid convergence warnings
+                # ConstantKernel: (lower, upper) for constant_value
+                # RBF: (lower, upper) for length_scale (one per dimension)
+                kernel = C(1.0, (1e-3, 1e5)) * RBF([1.0, 1.0], (1e-2, 1e4))
+                gp = GaussianProcessRegressor(
+                    kernel=kernel, 
+                    n_restarts_optimizer=10, 
+                    alpha=1e-6,  # Reduced alpha for better fitting
+                    normalize_y=False  # Don't normalize y values
+                )
+                gp.fit(X_train, z_train)
+                
+                # Create grid for prediction
+                x_min, x_max = x.min(), x.max()
+                y_min, y_max = y.min(), y.max()
+                x_range = x_max - x_min
+                y_range = y_max - y_min
+                
+                # Add some padding
+                x_pad = x_range * 0.05
+                y_pad = y_range * 0.05
+                
+                xi = np.linspace(x_min - x_pad, x_max + x_pad, grid_resolution)
+                yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
+                xi_grid, yi_grid = np.meshgrid(xi, yi)
+                
+                # Predict on grid
+                X_grid = np.column_stack([xi_grid.ravel(), yi_grid.ravel()])
+                zi_grid = gp.predict(X_grid).reshape(xi_grid.shape)
+                
+                return xi_grid, yi_grid, zi_grid
+            except Exception as e:
+                # Fallback to interpolation if GP fails
+                pass
+        
+        # Fallback: Use scipy interpolation
+        if SCIPY_AVAILABLE:
+            try:
+                x_min, x_max = x.min(), x.max()
+                y_min, y_max = y.min(), y.max()
+                x_range = x_max - x_min
+                y_range = y_max - y_min
+                
+                # Add some padding
+                x_pad = x_range * 0.05
+                y_pad = y_range * 0.05
+                
+                xi = np.linspace(x_min - x_pad, x_max + x_pad, grid_resolution)
+                yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
+                xi_grid, yi_grid = np.meshgrid(xi, yi)
+                
+                # Interpolate
+                zi_grid = griddata((x, y), z, (xi_grid, yi_grid), method='cubic', fill_value=np.nan)
+                
+                # Fill NaN values with nearest neighbor interpolation
+                if np.isnan(zi_grid).any():
+                    zi_grid_filled = griddata((x, y), z, (xi_grid, yi_grid), method='nearest')
+                    zi_grid = np.where(np.isnan(zi_grid), zi_grid_filled, zi_grid)
+                
+                return xi_grid, yi_grid, zi_grid
+            except Exception:
+                pass
+        
+        # Final fallback: return original data
+        return None, None, None
+
+    def open_file_and_offer_save_as(self, file_path, parent_window):
+        """Open a file and offer save-as option when closing"""
+        try:
+            # Open the file based on its extension
+            if file_path.lower().endswith('.html'):
+                # Open HTML file in browser
+                webbrowser.open(f'file://{os.path.abspath(file_path)}')
+            else:
+                # Open image files with system default application
+                if platform.system() == 'Windows':
+                    os.startfile(os.path.abspath(file_path))
+                elif platform.system() == 'Darwin':  # macOS
+                    subprocess.call(['open', os.path.abspath(file_path)])
+                else:  # Linux
+                    subprocess.call(['xdg-open', os.path.abspath(file_path)])
+            
+            # Show a message box with save-as option
+            result = messagebox.askyesnocancel(
+                "File Opened",
+                f"File has been opened:\n{file_path}\n\nWould you like to save it to a different location?",
+                parent=parent_window
+            )
+            
+            if result is True:  # Yes - save as
+                self.save_file_as(file_path, parent_window)
+            # If result is False (No) or None (Cancel), do nothing
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open file: {str(e)}", parent=parent_window)
+
+    def save_file_as(self, source_path, parent_window):
+        """Save file to a different location"""
+        try:
+            # Determine file type and extension
+            ext = os.path.splitext(source_path)[1]
+            file_types = {
+                '.png': [('PNG Image', '*.png'), ('All Files', '*.*')],
+                '.gif': [('GIF Image', '*.gif'), ('All Files', '*.*')],
+                '.html': [('HTML File', '*.html'), ('All Files', '*.*')],
+            }
+            
+            file_type = file_types.get(ext.lower(), [('All Files', '*.*')])
+            default_name = os.path.basename(source_path)
+            
+            # Ask user for save location
+            save_path = filedialog.asksaveasfilename(
+                parent=parent_window,
+                title="Save As",
+                defaultextension=ext,
+                filetypes=file_type,
+                initialfile=default_name
+            )
+            
+            if save_path:
+                # Copy file to new location
+                import shutil
+                shutil.copy2(source_path, save_path)
+                messagebox.showinfo("Success", f"File saved to:\n{save_path}", parent=parent_window)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save file: {str(e)}", parent=parent_window)
+
+    def open_q_value_plotter(self):
+        """Open Q value plotter window"""
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title("Plot Q Values")
+        plot_window.geometry("800x600")
+        plot_window.grab_set()
+
+        main_frame = ttk.Frame(plot_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        title_label = ttk.Label(main_frame, text="Q Value Plotter", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 15))
+
+        info_label = ttk.Label(
+            main_frame,
+            text=(
+                "Plot Q values (-T//fw(@FCC_A1)) using imported Pandat data.\n"
+                "X-axis: w(MG), Y-axis: w(SI), Z-axis: Q value (-T//fw(@FCC_A1)).\n"
+                "Equilibrium/Lever: Use P.xlsx; Scheil: Use P-S.xlsx."
+            ),
+            wraplength=700,
+            justify='left'
+        )
+        info_label.pack(pady=(0, 10))
+
+        controls = ttk.LabelFrame(main_frame, text="Settings", padding="10")
+        controls.pack(fill=tk.X, pady=10)
+
+        dataset_var = tk.StringVar(value="Equilibrium")
+        dataset_frame = ttk.Frame(controls)
+        dataset_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(dataset_frame, text="Dataset:").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(dataset_frame, text="Equilibrium/Lever", variable=dataset_var, value="Equilibrium").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(dataset_frame, text="Scheil", variable=dataset_var, value="Scheil").pack(side=tk.LEFT, padx=5)
+
+        viz_frame = ttk.Frame(controls)
+        viz_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(viz_frame, text="Visualization:").pack(side=tk.LEFT, padx=5)
+        viz_var = tk.StringVar(value="2D Heatmap")
+        ttk.Radiobutton(viz_frame, text="2D Heatmap", variable=viz_var, value="2D Heatmap").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Static", variable=viz_var, value="3D Static").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Rotation GIF", variable=viz_var, value="3D Rotation GIF").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="Plotly 3D", variable=viz_var, value="Plotly 3D").pack(side=tk.LEFT, padx=5)
+
+        output_frame = ttk.Frame(controls)
+        output_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(output_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
+        output_var = tk.StringVar(value="q_value")
+        ttk.Entry(output_frame, textvariable=output_var, width=40).pack(side=tk.LEFT, padx=5)
+
+        status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
+        status_label.pack(pady=5)
+
+        def get_df():
+            ds = dataset_var.get()
+            if ds == "Equilibrium":
+                return self.pandat_p_data
+            else:
+                return self.pandat_p_s_data
+
+        def run_plot():
+            try:
+                df = get_df()
+                if df is None or len(df) == 0:
+                    messagebox.showerror("Data Missing", "No data found. Please import P.xlsx (Equilibrium) or P-S.xlsx (Scheil) via Import → Pandat to ThermoQ first.")
+                    return
+
+                # Fixed columns: X = w(MG), Y = w(SI), Z = -T//fw(@FCC_A1)
+                col_x = "w(MG)"
+                col_y = "w(SI)"
+                col_q = "-T//fw(@FCC_A1)"
+                
+                # Try case-insensitive column matching
+                col_x_found = None
+                col_y_found = None
+                col_q_found = None
+                
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.upper()
+                        if col_upper == "W(MG)":
+                            col_x_found = col
+                        elif col_upper == "W(SI)":
+                            col_y_found = col
+                        elif col_upper == "-T//FW(@FCC_A1)":
+                            col_q_found = col
+                
+                if col_x_found is None or col_y_found is None or col_q_found is None:
+                    available_cols = [str(c) for c in df.columns[:20]]
+                    messagebox.showerror("Column Not Found", 
+                        f"Required columns not found in dataset.\n"
+                        f"Looking for: {col_x}, {col_y}, {col_q}\n"
+                        f"Available columns (first 20): {', '.join(available_cols)}")
+                    return
+
+                x_vals = pd.to_numeric(df[col_x_found], errors='coerce')
+                y_vals = pd.to_numeric(df[col_y_found], errors='coerce')
+                q_vals = pd.to_numeric(df[col_q_found], errors='coerce')
+                mask = x_vals.notna() & y_vals.notna() & q_vals.notna()
+                x = x_vals.loc[mask].to_numpy()
+                y = y_vals.loc[mask].to_numpy()
+                z = q_vals.loc[mask].to_numpy()
+                
+                if len(x) == 0:
+                    messagebox.showerror("No Data", "No valid data points after filtering.")
+                    return
+
+                prefix = output_var.get().strip() or "q_value"
+                ds = dataset_var.get()
+                base = f"{prefix}_{ds}"
+                label_z = "Q Value (-T//fw(@FCC_A1))"
+
+                # Create smooth surface using Gaussian Process
+                status_label.config(text="Creating smooth surface...", foreground="orange")
+                plot_window.update()
+                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(x, y, z, grid_resolution=50)
+                
+                if xi_grid is None:
+                    messagebox.showwarning("Smoothing Failed", "Could not create smooth surface. Using scatter plot instead. Please install scikit-learn and scipy for smooth surfaces.")
+                    xi_grid, yi_grid, zi_grid = None, None, None
+
+                viz = viz_var.get()
+                if viz == "2D Heatmap":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 2D heatmap.")
+                        return
+                    plt.figure(figsize=(10, 8))
+                    plt.xlabel("w(MG) (%)")
+                    plt.ylabel("w(SI) (%)")
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='hot', alpha=0.9)
+                        plt.contour(xi_grid, yi_grid, zi_grid, levels=20, colors='black', alpha=0.3, linewidths=0.5)
+                        plt.colorbar(contour, label=label_z)
+                        # Overlay original data points
+                        plt.scatter(x, y, c=z, cmap='hot', s=20, alpha=0.6, edgecolors='black', linewidths=0.5)
+                    else:
+                        # Fallback to scatter
+                        scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
+                        plt.colorbar(scatter, label=label_z)
+                    plt.grid(True, linestyle='--', alpha=0.7)
+                    out_path = f"{base}_Heatmap.png"
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    plt.close()
+                    status_label.config(text=f"Heatmap saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
+                elif viz == "3D Static":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 3D image.")
+                        return
+                    fig = plt.figure(figsize=(12, 10))
+                    ax = fig.add_subplot(111, projection='3d')
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                                              linewidth=0, antialiased=True, shade=True)
+                        # Overlay original data points
+                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
+                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                    else:
+                        # Fallback to scatter
+                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+                    ax.set_xlabel("w(MG) (%)")
+                    ax.set_ylabel("w(SI) (%)")
+                    ax.set_zlabel(label_z)
+                    out_path = f"{base}_3d.png"
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    plt.close()
+                    status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
+                elif viz == "3D Rotation GIF":
+                    if not MATPLOTLIB_AVAILABLE:
+                        messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate GIF.")
+                        return
+                    fig = plt.figure(figsize=(12, 10))
+                    ax = fig.add_subplot(111, projection='3d')
+                    if xi_grid is not None:
+                        # Use smooth surface
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                                              linewidth=0, antialiased=True, shade=True)
+                        # Overlay original data points
+                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
+                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                    else:
+                        # Fallback to scatter
+                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
+                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+                    ax.set_xlabel("w(MG) (%)")
+                    ax.set_ylabel("w(SI) (%)")
+                    ax.set_zlabel(label_z)
+
+                    def _rotate(angle):
+                        ax.view_init(azim=angle)
+                        return [ax]
+
+                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, 5), interval=50)
+                    out_path = f"{base}_3d_rotation.gif"
+                    ani.save(out_path, writer='pillow', fps=20, dpi=100)
+                    plt.close()
+                    status_label.config(text=f"GIF saved: {out_path}", foreground="green")
+                    # Open the file
+                    self.open_file_and_offer_save_as(out_path, plot_window)
+                else:
+                    if PLOTLY_AVAILABLE:
+                        if xi_grid is not None:
+                            # Use smooth surface
+                            fig_plotly = go.Figure(data=[
+                                go.Surface(x=xi_grid, y=yi_grid, z=zi_grid, 
+                                          colorscale='Jet', opacity=0.9,
+                                          colorbar=dict(title=label_z)),
+                                go.Scatter3d(x=x, y=y, z=z, mode='markers',
+                                           marker=dict(size=3, color='black', opacity=0.5))
+                            ])
+                        else:
+                            # Fallback to scatter
+                            fig_plotly = go.Figure(data=[go.Scatter3d(
+                                x=x, y=y, z=z,
+                                mode='markers',
+                                marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
+                                            colorbar=dict(title=label_z))
+                            )])
+                        fig_plotly.update_layout(
+                            scene=dict(
+                                xaxis_title="w(MG) (%)",
+                                yaxis_title="w(SI) (%)",
+                                zaxis_title=label_z,
+                            ),
+                            width=900, height=700,
+                        )
+                        out_path = f"{base}_3d_interactive.html"
+                        fig_plotly.write_html(out_path)
+                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+                        # Open the file
+                        self.open_file_and_offer_save_as(out_path, plot_window)
+                    else:
+                        out_path = f"{base}_3d_interactive.html"
+                        with open(out_path, 'w', encoding='utf-8') as f:
+                            f.write('<html><head><title>Q Value 3D Interactive Plot</title></head><body>\n')
+                            f.write('<h2>Q Value 3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
+                            f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
+                            f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
+                            f.write('<script>\n')
+                            if xi_grid is not None:
+                                # Use smooth surface
+                                f.write('var data = [{\n')
+                                f.write('  type: "surface",\n')
+                                f.write('  x: ' + str(xi_grid.tolist()) + ',\n')
+                                f.write('  y: ' + str(yi_grid.tolist()) + ',\n')
+                                f.write('  z: ' + str(zi_grid.tolist()) + ',\n')
+                                f.write('  colorscale: "Jet",\n')
+                                f.write('  opacity: 0.9,\n')
+                                f.write('  colorbar: {title: "' + label_z + '"}\n')
+                                f.write('}, {\n')
+                                f.write('  type: "scatter3d",\n')
+                                f.write('  mode: "markers",\n')
+                                f.write('  x: ' + str(x.tolist()) + ',\n')
+                                f.write('  y: ' + str(y.tolist()) + ',\n')
+                                f.write('  z: ' + str(z.tolist()) + ',\n')
+                                f.write('  marker: { size: 3, color: "black", opacity: 0.5 }\n')
+                                f.write('}];\n')
+                            else:
+                                # Fallback to scatter
+                                f.write('var data = [{\n')
+                                f.write('  type: "scatter3d",\n')
+                                f.write('  mode: "markers",\n')
+                                f.write('  x: ' + str(x.tolist()) + ',\n')
+                                f.write('  y: ' + str(y.tolist()) + ',\n')
+                                f.write('  z: ' + str(z.tolist()) + ',\n')
+                                f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "Jet", opacity: 0.8, colorbar: {title: "' + label_z + '"} }\n')
+                                f.write('}];\n')
+                            f.write('var layout = {\n')
+                            f.write('  scene: {\n')
+                            f.write('    xaxis: {title: "w(MG) (%)"},\n')
+                            f.write('    yaxis: {title: "w(SI) (%)"},\n')
+                            f.write('    zaxis: {title: "' + label_z + '"}\n')
+                            f.write('  }\n')
+                            f.write('};\n')
+                            f.write('Plotly.newPlot("plot", data, layout);\n')
+                            f.write('</script>\n')
+                            f.write('</body></html>')
+                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+                        # Open the file
+                        self.open_file_and_offer_save_as(out_path, plot_window)
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                messagebox.showerror("Plotting Failed", f"An error occurred: {str(e)}\n\nDetails:\n{error_details}")
 
         buttons_frame = ttk.Frame(main_frame)
         buttons_frame.pack(pady=15)
@@ -979,9 +1658,9 @@ class ThermoQGUI:
         """Center main window on the screen."""
         try:
             self.root.update_idletasks()
-            # Use the configured window size (1200x800)
-            width = 1200
-            height = 800
+            # Use the configured window size (900x600)
+            width = 900
+            height = 600
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
             x = (screen_width - width) // 2
@@ -991,79 +1670,88 @@ class ThermoQGUI:
             # Fallback to default size and center
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
-            x = (screen_width - 1200) // 2
-            y = (screen_height - 800) // 2
-            self.root.geometry(f"1200x800+{x}+{y}")
+            x = (screen_width - 900) // 2
+            y = (screen_height - 600) // 2
+            self.root.geometry(f"900x600+{x}+{y}")
     
-    def find_matching_row(self, composition):
-        """Find the row in Pandat data that matches the given composition"""
-        tolerance = 0.5  # 增加容错度到0.5%，以便找到更多可能的匹配
+    def find_matching_row(self, composition, data_df):
+        """Find the row in the given Pandat data DataFrame that matches the given composition
+        Matching is based on integer part only (e.g., 80.5 matches 80.8)
+        Column names are case-insensitive (e.g., w(Al) matches w(AL))
+        """
+        # Build element-to-column mapping (case-insensitive)
+        element_to_col = {}
+        for element in composition.keys():
+            element_upper = element.upper()
+            # Try to find matching column
+            col_name = None
+            for existing_col in data_df.columns:
+                if isinstance(existing_col, str):
+                    # Normalize column name: remove spaces, convert to uppercase
+                    col_normalized = existing_col.strip().upper()
+                    expected_col = f'W({element_upper})'
+                    if col_normalized == expected_col:
+                        col_name = existing_col
+                        break
+            if col_name is None:
+                # Try direct match with different cases
+                for col_option in [f'w({element})', f'w({element.upper()})']:
+                    if col_option in data_df.columns:
+                        col_name = col_option
+                        break
+            if col_name is None:
+                raise ValueError(f"Column for element '{element}' not found in data. Available columns: {list(data_df.columns)[:10]}")
+            element_to_col[element] = col_name
         
-        # 首先尝试精确匹配
-        for idx, row in self.pandat_p_data.iterrows():
+        # 首先尝试基于整数部分匹配
+        for idx, row in data_df.iterrows():
             match = True
             for element, target_comp in composition.items():
-                col_name = f'w({element})'
-                if col_name in self.pandat_p_data.columns:
-                    # Pandat export may store w(*) as percentage (e.g., 99.8) or fraction (e.g., 0.998)
-                    val = row[col_name]
-                    try:
-                        # If val is not numeric, fail this row
-                        v = float(val)
-                    except Exception:
+                col_name = element_to_col[element]
+                
+                # Pandat export may store w(*) as percentage (e.g., 99.8) or fraction (e.g., 0.998)
+                val = row[col_name]
+                try:
+                    v = float(val)
+                    if pd.isna(v):
                         match = False
                         break
-                    actual_comp = v * 100.0 if v <= 1.0 else v
-                    if abs(actual_comp - target_comp) > tolerance:
-                        match = False
-                        break
-                else:
+                except (ValueError, TypeError):
+                    match = False
+                    break
+                
+                actual_comp = v * 100.0 if 0.0 <= v < 1.0 else v
+                # Compare integer parts only
+                target_int = int(round(target_comp))
+                actual_int = int(round(actual_comp))
+                if target_int != actual_int:
                     match = False
                     break
 
             if match:
                 return idx
         
-        # 如果没有精确匹配，尝试找到最接近的行
-        # 对于二元合金，我们只需要确保元素存在，不需要精确匹配成分
-        if len(composition) == 2:
-            elements = list(composition.keys())
-            # 检查是否有包含这两个元素的行
-            for idx, row in self.pandat_p_data.iterrows():
-                all_elements_present = True
-                for element in elements:
-                    col_name = f'w({element})'
-                    if col_name not in self.pandat_p_data.columns:
-                        all_elements_present = False
-                        break
-                    # 确保该元素在这一行中有值
-                    val = row[col_name]
+        # 如果仍然找不到匹配，提供更详细的错误信息
+        sample_data = []
+        for i in range(min(3, len(data_df))):
+            row_data = {}
+            for element in composition.keys():
+                if element in element_to_col:
+                    col_name = element_to_col[element]
+                    val = data_df.iloc[i][col_name]
                     try:
                         v = float(val)
-                        if v <= 0:
-                            all_elements_present = False
-                            break
-                    except Exception:
-                        all_elements_present = False
-                        break
-                
-                if all_elements_present:
-                    return idx
+                        actual_comp = v * 100.0 if 0.0 <= v < 1.0 else v
+                        row_data[element] = actual_comp
+                    except:
+                        row_data[element] = val
+            sample_data.append(row_data)
         
-        # 如果仍然找不到匹配，则抛出错误
-        raise ValueError(f"No matching composition found in Pandat data for {composition}")
-    
-    def calculate_delta_t(self, composition):
-        """Calculate ΔT (melting range) = T_P - T_Ts"""
-        # Find matching row in both datasets
-        p_idx = self.find_matching_row(composition)
-        ts_idx = self.find_matching_row(composition)
-        
-        # Get temperatures
-        t_p = self.pandat_p_data.iloc[p_idx]['T']
-        t_ts = self.pandat_ts_data.iloc[ts_idx]['T']
-        
-        return t_p - t_ts
+        raise ValueError(
+            f"No matching composition found in Pandat data for {composition}.\n"
+            f"Looking for: {composition}\n"
+            f"Sample rows in data: {sample_data}"
+        )
     
     def open_composition_converter(self):
         """Open composition converter tool window"""
@@ -1265,9 +1953,9 @@ Si: 2.0"""
         return wt_composition
     
     def open_therocalc_generator(self):
-        """Open Therocalc batch file generator tool"""
+        """Open Thermo-calc batch file generator tool"""
         generator_window = tk.Toplevel(self.root)
-        generator_window.title("Generate Therocalc Batch File")
+        generator_window.title("Generate Thermo-calc Batch File")
         generator_window.geometry("900x800")
         generator_window.grab_set()  # Make window modal
         
@@ -1290,12 +1978,12 @@ Si: 2.0"""
         main_frame = scrollable_frame
         
         # Title
-        title_label = ttk.Label(main_frame, text="Therocalc Batch File Generator", font=('Arial', 14, 'bold'))
+        title_label = ttk.Label(main_frame, text="Thermo-calc Batch File Generator", font=('Arial', 14, 'bold'))
         title_label.pack(pady=(0, 10))
         
         # Instructions
         info_label = ttk.Label(main_frame, 
-            text="Generate Therocalc batch file (.tcm) by combining template files with element combinations",
+            text="Generate Thermo-calc batch file (.tcm) by combining template files with element combinations",
             wraplength=800, justify='center')
         info_label.pack(pady=(0, 20))
         
@@ -1441,7 +2129,7 @@ Si: 2.0"""
         status_label.pack(pady=10)
         
         def generate_batch_file():
-            """Generate Therocalc batch file"""
+            """Generate Thermo-calc batch file"""
             try:
                 # Validate inputs
                 template0_file = template0_var.get()
@@ -1566,9 +2254,9 @@ Si: 2.0"""
         ttk.Button(buttons_frame, text="Close", command=generator_window.destroy).pack(side=tk.LEFT, padx=10)
     
     def open_exp_data_processor(self):
-        """Open Therocalc results extractor tool"""
+        """Open Thermo-calc results extractor tool"""
         processor_window = tk.Toplevel(self.root)
-        processor_window.title("Extract Therocalc Results")
+        processor_window.title("Extract Thermo-calc Results")
         processor_window.geometry("800x600")
         processor_window.grab_set()  # Make window modal
         
@@ -1577,7 +2265,7 @@ Si: 2.0"""
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Title
-        title_label = ttk.Label(main_frame, text="Extract Therocalc Results", font=('Arial', 14, 'bold'))
+        title_label = ttk.Label(main_frame, text="Extract Thermo-calc Results", font=('Arial', 14, 'bold'))
         title_label.pack(pady=(0, 10))
         
         # Instructions
@@ -1815,6 +2503,246 @@ Si: 2.0"""
         ttk.Button(buttons_frame, text="Process Files", command=process_files).pack(side=tk.LEFT, padx=10)
         ttk.Button(buttons_frame, text="Close", command=processor_window.destroy).pack(side=tk.LEFT, padx=10)
     
+    def open_extract_pandat_results(self):
+        """Open Pandat results extractor tool"""
+        extractor_window = tk.Toplevel(self.root)
+        extractor_window.title("Extract Pandat Results")
+        extractor_window.geometry("700x550")
+        extractor_window.grab_set()  # Make window modal
+        
+        # Create main frame
+        main_frame = ttk.Frame(extractor_window, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Extract Pandat Results", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 10))
+        
+        # Instructions
+        info_label = ttk.Label(main_frame, 
+            text="Extract data from CSV/DAT files to generate P.xlsx, Ts.xlsx, P-S.xlsx, and Ts-S.xlsx",
+            wraplength=650, justify='center')
+        info_label.pack(pady=(0, 20))
+        
+        # Lever folder selection
+        lever_frame = ttk.LabelFrame(main_frame, text="Lever/Equilibrium Folder (All table_Lever)", padding="15")
+        lever_frame.pack(fill=tk.X, pady=10)
+        
+        lever_folder_var = tk.StringVar()
+        ttk.Entry(lever_frame, textvariable=lever_folder_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Button(lever_frame, text="Browse", 
+                  command=lambda: lever_folder_var.set(filedialog.askdirectory(title="Select Lever Folder"))).pack(side=tk.RIGHT, padx=5)
+        
+        # Scheil folder selection
+        scheil_frame = ttk.LabelFrame(main_frame, text="Scheil Folder (All table_Scheil)", padding="15")
+        scheil_frame.pack(fill=tk.X, pady=10)
+        
+        scheil_folder_var = tk.StringVar()
+        ttk.Entry(scheil_frame, textvariable=scheil_folder_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Button(scheil_frame, text="Browse", 
+                  command=lambda: scheil_folder_var.set(filedialog.askdirectory(title="Select Scheil Folder"))).pack(side=tk.RIGHT, padx=5)
+        
+        # Output directory
+        output_frame = ttk.LabelFrame(main_frame, text="Output Directory", padding="15")
+        output_frame.pack(fill=tk.X, pady=10)
+        
+        output_dir_var = tk.StringVar()
+        ttk.Entry(output_frame, textvariable=output_dir_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Button(output_frame, text="Browse", 
+                  command=lambda: output_dir_var.set(filedialog.askdirectory(title="Select Output Directory"))).pack(side=tk.RIGHT, padx=5)
+        
+        # Status label
+        status_label = ttk.Label(main_frame, text="Ready to extract", foreground="blue")
+        status_label.pack(pady=10)
+        
+        def extract_results():
+            """Extract results from CSV/DAT files"""
+            try:
+                lever_folder = lever_folder_var.get()
+                scheil_folder = scheil_folder_var.get()
+                output_dir = output_dir_var.get() or os.getcwd()
+                
+                if not lever_folder or not os.path.exists(lever_folder):
+                    messagebox.showerror("Error", "Please select a valid Lever folder!")
+                    return
+                
+                if not scheil_folder or not os.path.exists(scheil_folder):
+                    messagebox.showerror("Error", "Please select a valid Scheil folder!")
+                    return
+                
+                status_label.config(text="Processing files...", foreground="orange")
+                extractor_window.update()
+                
+                # Process Lever files
+                lever_csv_files = sorted([f for f in os.listdir(lever_folder) if f.endswith('.csv')])
+                if not lever_csv_files:
+                    messagebox.showerror("Error", "No CSV files found in Lever folder!")
+                    return
+                
+                # Process each Lever CSV file for P.xlsx
+                p_data_list = []
+                for csv_file in lever_csv_files:
+                    csv_path = os.path.join(lever_folder, csv_file)
+                    df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])  # Skip unit row
+                    
+                    # Filter: fs < 0.000001, get row with max T
+                    df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
+                    df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                    filtered = df[df['fs_num'] < 0.000001].copy()
+                    
+                    if not filtered.empty:
+                        max_t_row = filtered.loc[filtered['T_num'].idxmax()]
+                        p_data_list.append(max_t_row)
+                
+                # Extract columns for P.xlsx: T, w(*), w(*@*), fs, fw(@FCC_A1), dwdT_L(*@LIQUID), -T//fw(@FCC_A1)
+                if p_data_list:
+                    p_df = pd.DataFrame(p_data_list)
+                    # Select required columns
+                    p_cols = ['T', 'fs', 'fw(@FCC_A1)', '-T//fw(@FCC_A1)']
+                    # Add w(*) columns (e.g., w(AL), w(MG), w(SI))
+                    p_cols.extend([c for c in p_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
+                    # Add w(*@*) columns (LIQUID and FCC_A1) - e.g., w(AL@LIQUID), w(AL@FCC_A1)
+                    p_cols.extend([c for c in p_df.columns if re.match(r'^w\([A-Z]+@(LIQUID|FCC_A1)\)$', c, re.IGNORECASE)])
+                    # Add dwdT_L(*@LIQUID) columns (e.g., dwdT_L(AL@LIQUID))
+                    p_cols.extend([c for c in p_df.columns if re.search(r'dwdT_L\([A-Z]+@LIQUID\)', c, re.IGNORECASE)])
+                    
+                    # Remove duplicates and keep only existing columns
+                    p_cols = list(dict.fromkeys([c for c in p_cols if c in p_df.columns]))
+                    p_output = p_df[p_cols].copy()
+                    
+                    p_output_path = os.path.join(output_dir, 'P.xlsx')
+                    p_output.to_excel(p_output_path, index=False)
+                    status_label.config(text=f"P.xlsx saved: {len(p_output)} rows", foreground="green")
+                
+                # Process each Lever CSV file for Ts.xlsx
+                ts_data_list = []
+                for csv_file in lever_csv_files:
+                    csv_path = os.path.join(lever_folder, csv_file)
+                    df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])
+                    
+                    df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
+                    df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                    
+                    # Find fs max or fs=1 with max T
+                    fs_max = df['fs_num'].max()
+                    if abs(fs_max - 1.0) < 0.000001:
+                        # fs=1 exists, get row with max T among fs=1
+                        fs_one = df[abs(df['fs_num'] - 1.0) < 0.000001].copy()
+                        max_t_row = fs_one.loc[fs_one['T_num'].idxmax()]
+                    else:
+                        # No fs=1, get row with fs max
+                        max_fs_row = df[df['fs_num'] == fs_max].iloc[0]
+                        max_t_row = max_fs_row
+                    
+                    ts_data_list.append(max_t_row)
+                
+                # Extract columns for Ts.xlsx: T, w(*), fs
+                if ts_data_list:
+                    ts_df = pd.DataFrame(ts_data_list)
+                    ts_cols = ['T', 'fs']
+                    # Add w(*) columns (e.g., w(AL), w(MG), w(SI))
+                    ts_cols.extend([c for c in ts_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
+                    # Remove duplicates and keep only existing columns
+                    ts_cols = list(dict.fromkeys([c for c in ts_cols if c in ts_df.columns]))
+                    ts_output = ts_df[ts_cols].copy()
+                    
+                    ts_output_path = os.path.join(output_dir, 'Ts.xlsx')
+                    ts_output.to_excel(ts_output_path, index=False)
+                    status_label.config(text=f"Ts.xlsx saved: {len(ts_output)} rows", foreground="green")
+                
+                # Process Scheil files (same logic as Lever)
+                scheil_dat_files = sorted([f for f in os.listdir(scheil_folder) if f.endswith('.dat')])
+                if scheil_dat_files:
+                    # Process for P-S.xlsx
+                    p_s_data_list = []
+                    for dat_file in scheil_dat_files:
+                        dat_path = os.path.join(scheil_folder, dat_file)
+                        df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
+                        
+                        df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
+                        df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                        filtered = df[df['fs_num'] < 0.000001].copy()
+                        
+                        if not filtered.empty:
+                            max_t_row = filtered.loc[filtered['T_num'].idxmax()]
+                            p_s_data_list.append(max_t_row)
+                    
+                    if p_s_data_list:
+                        p_s_df = pd.DataFrame(p_s_data_list)
+                        p_s_cols = ['T', 'fs', 'fw(@FCC_A1)', '-T//fw(@FCC_A1)']
+                        # Add w(*) columns
+                        p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
+                        # Add w(*@*) columns
+                        p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Z]+@(LIQUID|FCC_A1)\)$', c, re.IGNORECASE)])
+                        # Add dwdT_L(*@LIQUID) columns
+                        p_s_cols.extend([c for c in p_s_df.columns if re.search(r'dwdT_L\([A-Z]+@LIQUID\)', c, re.IGNORECASE)])
+                        # Remove duplicates and keep only existing columns
+                        p_s_cols = list(dict.fromkeys([c for c in p_s_cols if c in p_s_df.columns]))
+                        p_s_output = p_s_df[p_s_cols].copy()
+                        
+                        p_s_output_path = os.path.join(output_dir, 'P-S.xlsx')
+                        p_s_output.to_excel(p_s_output_path, index=False)
+                    
+                    # Process for Ts-S.xlsx
+                    ts_s_data_list = []
+                    for dat_file in scheil_dat_files:
+                        dat_path = os.path.join(scheil_folder, dat_file)
+                        df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
+                        
+                        df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
+                        df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                        
+                        fs_max = df['fs_num'].max()
+                        if abs(fs_max - 1.0) < 0.000001:
+                            fs_one = df[abs(df['fs_num'] - 1.0) < 0.000001].copy()
+                            max_t_row = fs_one.loc[fs_one['T_num'].idxmax()]
+                        else:
+                            max_fs_row = df[df['fs_num'] == fs_max].iloc[0]
+                            max_t_row = max_fs_row
+                        
+                        ts_s_data_list.append(max_t_row)
+                    
+                    if ts_s_data_list:
+                        ts_s_df = pd.DataFrame(ts_s_data_list)
+                        ts_s_cols = ['T', 'fs']
+                        # Add w(*) columns
+                        ts_s_cols.extend([c for c in ts_s_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
+                        # Remove duplicates and keep only existing columns
+                        ts_s_cols = list(dict.fromkeys([c for c in ts_s_cols if c in ts_s_df.columns]))
+                        ts_s_output = ts_s_df[ts_s_cols].copy()
+                        
+                        ts_s_output_path = os.path.join(output_dir, 'Ts-S.xlsx')
+                        ts_s_output.to_excel(ts_s_output_path, index=False)
+                
+                status_label.config(
+                    text=f"Success! Files saved to: {output_dir}\n"
+                         f"P.xlsx: {len(p_data_list) if p_data_list else 0} rows\n"
+                         f"Ts.xlsx: {len(ts_data_list) if ts_data_list else 0} rows\n"
+                         f"P-S.xlsx: {len(p_s_data_list) if p_s_data_list else 0} rows\n"
+                         f"Ts-S.xlsx: {len(ts_s_data_list) if ts_s_data_list else 0} rows",
+                    foreground="green"
+                )
+                messagebox.showinfo("Success", 
+                    f"Results extracted successfully!\n\n"
+                    f"Output directory: {output_dir}\n\n"
+                    f"P.xlsx: {len(p_data_list) if p_data_list else 0} rows\n"
+                    f"Ts.xlsx: {len(ts_data_list) if ts_data_list else 0} rows\n"
+                    f"P-S.xlsx: {len(p_s_data_list) if p_s_data_list else 0} rows\n"
+                    f"Ts-S.xlsx: {len(ts_s_data_list) if ts_s_data_list else 0} rows")
+                
+            except Exception as e:
+                status_label.config(text=f"Error: {str(e)}", foreground="red")
+                messagebox.showerror("Error", f"Failed to extract results:\n{str(e)}")
+                import traceback
+                traceback.print_exc()
+        
+        # Buttons
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(pady=20)
+        
+        ttk.Button(buttons_frame, text="Extract Results", command=extract_results).pack(side=tk.LEFT, padx=10)
+        ttk.Button(buttons_frame, text="Close", command=extractor_window.destroy).pack(side=tk.LEFT, padx=10)
+    
     def open_liquidus_vector_plotter(self):
         """Open liquidus vector plotter tool"""
         if not MATPLOTLIB_AVAILABLE:
@@ -1823,7 +2751,7 @@ Si: 2.0"""
         
         vector_window = tk.Toplevel(self.root)
         vector_window.title("Plot Liquidus Vectors")
-        vector_window.geometry("700x600")
+        vector_window.geometry("800x750")
         vector_window.grab_set()  # Make window modal
         
         # Create main frame
@@ -1847,24 +2775,91 @@ Si: 2.0"""
         
         file_var = tk.StringVar()
         ttk.Entry(file_frame, textvariable=file_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        ttk.Button(file_frame, text="Browse", 
-                  command=lambda: file_var.set(filedialog.askopenfilename(
-                      title="Select Excel File", filetypes=[("Excel files", "*.xls *.xlsx"), ("All files", "*.*")]))).pack(side=tk.RIGHT, padx=5)
+        def browse_excel_file():
+            file_path = filedialog.askopenfilename(
+                title="Select Excel File", 
+                filetypes=[("Excel files", "*.xls *.xlsx"), ("All files", "*.*")]
+            )
+            if file_path:
+                file_var.set(file_path)
+                on_file_selected()  # Update element options immediately
+        
+        ttk.Button(file_frame, text="Browse", command=browse_excel_file).pack(side=tk.RIGHT, padx=5)
         
         # Element selection
         element_frame = ttk.LabelFrame(main_frame, text="Element Selection", padding="15")
         element_frame.pack(fill=tk.X, pady=10)
         
+        # Store available elements from Excel file
+        excel_elements = []
+        
+        def extract_elements_from_excel():
+            """Extract available elements from selected Excel file"""
+            excel_path = file_var.get()
+            if not excel_path or not os.path.exists(excel_path):
+                return []
+            
+            try:
+                # Read Excel file to get column names
+                df = pd.read_excel(excel_path, header=0, nrows=0)  # Only read header
+                elements = []
+                
+                # Extract elements from w(*) columns
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        # Match w(ELEMENT) pattern
+                        match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()  # Convert to proper case (e.g., MG -> Mg)
+                            if element in PERIODIC_TABLE and element not in elements:
+                                elements.append(element)
+                
+                return sorted(elements)
+            except Exception as e:
+                return []
+        
+        def update_element_options():
+            """Update element dropdown options based on Excel file"""
+            elements = extract_elements_from_excel()
+            if elements:
+                excel_elements[:] = elements
+                elem_x_combo['values'] = elements
+                elem_y_combo['values'] = elements
+                # Set default values if current values are not in the list
+                if elem_x_var.get() not in elements and elements:
+                    elem_x_var.set(elements[0])
+                if elem_y_var.get() not in elements and len(elements) > 1:
+                    elem_y_var.set(elements[1])
+                elif elem_y_var.get() not in elements and elements:
+                    elem_y_var.set(elements[0])
+            else:
+                # Fallback to all elements if no Excel file or extraction fails
+                all_elements = sorted(PERIODIC_TABLE.keys())
+                excel_elements[:] = all_elements
+                elem_x_combo['values'] = all_elements
+                elem_y_combo['values'] = all_elements
+        
         ttk.Label(element_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
-        elem_x_var = tk.StringVar(value="Mg")
-        elem_values = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
-        elem_x_combo = ttk.Combobox(element_frame, textvariable=elem_x_var, values=elem_values, width=10)
+        elem_x_var = tk.StringVar(value="")
+        elem_x_combo = ttk.Combobox(element_frame, textvariable=elem_x_var, values=[], width=10, state="readonly")
         elem_x_combo.pack(side=tk.LEFT, padx=5)
         
         ttk.Label(element_frame, text="Y Element:").pack(side=tk.LEFT, padx=15)
-        elem_y_var = tk.StringVar(value="Si")
-        elem_y_combo = ttk.Combobox(element_frame, textvariable=elem_y_var, values=elem_values, width=10)
+        elem_y_var = tk.StringVar(value="")
+        elem_y_combo = ttk.Combobox(element_frame, textvariable=elem_y_var, values=[], width=10, state="readonly")
         elem_y_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Update element options when file is selected
+        def on_file_selected():
+            update_element_options()
+            if excel_elements:
+                status_label.config(text=f"Found {len(excel_elements)} elements: {', '.join(excel_elements)}", foreground="green")
+            else:
+                status_label.config(text="No elements found in Excel file. Using all elements.", foreground="orange")
+        
+        # Bind file selection to update elements
+        file_var.trace_add("write", lambda *args: on_file_selected())
         
         # Options
         options_frame = ttk.LabelFrame(main_frame, text="Options", padding="15")
@@ -2087,4 +3082,4 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
-    main()
+    main() 
