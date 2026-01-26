@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import os
 import time
 import re
+import warnings
 import pandas as pd
 import numpy as np
 import subprocess
@@ -30,8 +31,9 @@ except ImportError:
 
 try:
     from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern
     from scipy.interpolate import griddata
+    from scipy.ndimage import gaussian_filter
     SKLEARN_AVAILABLE = True
     SCIPY_AVAILABLE = True
 except ImportError:
@@ -105,7 +107,7 @@ class ElementSelector:
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         # Add remove button
-        ttk.Button(display_frame, text="Remove Selected",
+        ttk.Button(display_frame, text="Remove Selected", 
                   command=self.remove_element).grid(row=1, column=0, pady=3)
     
     def convert_at_to_wt(self, at_composition):
@@ -692,6 +694,61 @@ class ThermoQGUI:
         # Status label
         status_label = ttk.Label(main_frame, text="Please select at least P and Ts files to proceed", foreground="red")
         status_label.pack(pady=10)
+
+        def clear_imported_data():
+            """Clear currently imported Pandat data without closing the app."""
+            if not messagebox.askyesno(
+                "Clear Imported Data",
+                "This will clear all imported Pandat datasets (P, Ts, P-S, Ts-S) and reset available elements.\n\nContinue?",
+                parent=import_window
+            ):
+                return
+
+            # Clear in-memory datasets
+            self.pandat_p_data = None
+            self.pandat_ts_data = None
+            self.pandat_p_s_data = None
+            self.pandat_ts_s_data = None
+            self.available_elements = []
+            if hasattr(self, "last_result"):
+                self.last_result = None
+
+            # Reset file selectors in the import window
+            p_file_var.set("")
+            ts_file_var.set("")
+            p_s_file_var.set("")
+            ts_s_file_var.set("")
+
+            # Reset element selection UI + any previously selected composition
+            try:
+                self.update_element_availability()
+                if hasattr(self, "element_selector"):
+                    self.element_selector.selected_elements = {}
+                    self.element_selector.main_element = None
+                    self.element_selector.update_display()
+                    # Remove status labels if present
+                    for attr in ["sum_status_label", "main_element_label", "main_hint_label", "availability_label"]:
+                        if hasattr(self.element_selector, attr):
+                            try:
+                                getattr(self.element_selector, attr).destroy()
+                            except Exception:
+                                pass
+                            try:
+                                delattr(self.element_selector, attr)
+                            except Exception:
+                                pass
+                    # Recreate main hint
+                    self.element_selector.main_hint_label = ttk.Label(
+                        self.element_selector.frame,
+                        text="Hint: The first added element will be the main element",
+                        foreground="gray",
+                        wraplength=400
+                    )
+                    self.element_selector.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0, 3))
+            except Exception:
+                pass
+
+            status_label.config(text="Imported data cleared. You can import new files now.", foreground="blue")
         
         # Import button
         def import_pandat_data():
@@ -878,6 +935,7 @@ class ThermoQGUI:
         button_frame.pack(pady=20)
         
         ttk.Button(button_frame, text="Import Data", command=import_pandat_data).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Clear Imported Data", command=clear_imported_data).pack(side=tk.LEFT, padx=10)
         ttk.Button(button_frame, text="Cancel", command=import_window.destroy).pack(side=tk.LEFT, padx=10)
     
     def update_element_availability(self):
@@ -915,7 +973,7 @@ class ThermoQGUI:
         """Open phase surface plotter window (Liquidus/Solidus)"""
         plot_window = tk.Toplevel(self.root)
         plot_window.title("Plot Phase Surfaces (Liquidus/Solidus)")
-        plot_window.geometry("800x700")
+        plot_window.geometry("850x900")
         plot_window.grab_set()
 
         main_frame = ttk.Frame(plot_window, padding="20")
@@ -973,11 +1031,84 @@ class ThermoQGUI:
         ttk.Radiobutton(viz_frame, text="3D Rotation GIF", variable=viz_var, value="3D Rotation GIF").pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(viz_frame, text="Plotly 3D", variable=viz_var, value="Plotly 3D").pack(side=tk.LEFT, padx=5)
 
-        output_frame = ttk.Frame(controls)
-        output_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(output_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
+        # Smoothness control (higher = smoother / less wrinkles)
+        smooth_frame = ttk.Frame(controls)
+        smooth_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(smooth_frame, text="Smoothness:").pack(side=tk.LEFT, padx=5)
+        smoothness_var = tk.DoubleVar(value=100.0)
+        smoothness_value_label = ttk.Label(smooth_frame, text="100")
+        smoothness_value_label.pack(side=tk.RIGHT, padx=5)
+
+        def _on_smoothness_change(val):
+            try:
+                smoothness_value_label.config(text=str(int(float(val))))
+            except Exception:
+                smoothness_value_label.config(text="100")
+
+        smooth_scale = ttk.Scale(
+            smooth_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=smoothness_var,
+            command=_on_smoothness_change
+        )
+        smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # Output settings frame
+        output_settings_frame = ttk.LabelFrame(controls, text="Output Settings", padding="10")
+        output_settings_frame.pack(fill=tk.X, pady=5)
+        
+        # Output directory
+        output_dir_frame = ttk.Frame(output_settings_frame)
+        output_dir_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(output_dir_frame, text="Output Directory:").pack(side=tk.LEFT, padx=5)
+        output_dir_var = tk.StringVar()
+        ttk.Entry(output_dir_frame, textvariable=output_dir_var, width=35).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        def browse_output_dir():
+            dir_path = filedialog.askdirectory(title="Select Output Directory")
+            if dir_path:
+                output_dir_var.set(dir_path)
+        ttk.Button(output_dir_frame, text="Browse", command=browse_output_dir).pack(side=tk.RIGHT, padx=5)
+        
+        # Output prefix
+        output_prefix_frame = ttk.Frame(output_settings_frame)
+        output_prefix_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(output_prefix_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
         output_var = tk.StringVar(value="phase_surface")
-        ttk.Entry(output_frame, textvariable=output_var, width=40).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(output_prefix_frame, textvariable=output_var, width=35).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Image format (only for 2D Heatmap and 3D Static)
+        format_frame = ttk.Frame(output_settings_frame)
+        format_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(format_frame, text="Image Format (2D/3D Static):").pack(side=tk.LEFT, padx=5)
+        image_format_var = tk.StringVar(value="PNG")
+        format_options = ["PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "AI", "EPS", "PDF"]
+        format_combo = ttk.Combobox(format_frame, textvariable=image_format_var, values=format_options, 
+                                   state="readonly", width=15)
+        format_combo.pack(side=tk.LEFT, padx=5)
+        
+        # 3D Rotation GIF parameters
+        gif_params_frame = ttk.LabelFrame(controls, text="3D Rotation GIF Parameters", padding="10")
+        gif_params_frame.pack(fill=tk.X, pady=5)
+        
+        gif_speed_frame = ttk.Frame(gif_params_frame)
+        gif_speed_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_speed_frame, text="Rotation Speed (degrees/frame):").pack(side=tk.LEFT, padx=5)
+        gif_speed_var = tk.StringVar(value="5")
+        ttk.Entry(gif_speed_frame, textvariable=gif_speed_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_interval_frame = ttk.Frame(gif_params_frame)
+        gif_interval_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_interval_frame, text="Frame Interval (ms):").pack(side=tk.LEFT, padx=5)
+        gif_interval_var = tk.StringVar(value="50")
+        ttk.Entry(gif_interval_frame, textvariable=gif_interval_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_fps_frame = ttk.Frame(gif_params_frame)
+        gif_fps_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_fps_frame, text="FPS:").pack(side=tk.LEFT, padx=5)
+        gif_fps_var = tk.StringVar(value="20")
+        ttk.Entry(gif_fps_frame, textvariable=gif_fps_var, width=10).pack(side=tk.LEFT, padx=5)
 
         status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
         status_label.pack(pady=5)
@@ -1054,14 +1185,26 @@ class ThermoQGUI:
                 prefix = output_var.get().strip() or "phase_surface"
                 ds = dataset_var.get()
                 sf = surface_var.get()
-                base = f"{prefix}_{sf}_{ds}_{ex}_{ey}"
+                
+                # Get output directory
+                output_dir = output_dir_var.get().strip()
+                if output_dir and os.path.exists(output_dir):
+                    base_path = output_dir
+                else:
+                    base_path = "."
+                
+                base = os.path.join(base_path, f"{prefix}_{sf}_{ds}_{ex}_{ey}")
                 label_z = f"{sf.lower()} line (K)" if sf in ("Liquidus", "Solidus") else "Temperature (K)"
 
                 viz = viz_var.get()
                 # Create smooth surface using Gaussian Process
                 status_label.config(text="Creating smooth surface...", foreground="orange")
                 plot_window.update()
-                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(x, y, z, grid_resolution=50)
+                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
+                    x, y, z,
+                    grid_resolution=100,
+                    smoothness=smoothness_var.get()
+                )
                 
                 if xi_grid is None:
                     messagebox.showwarning("Smoothing Failed", "Could not create smooth surface. Using scatter plot instead. Please install scikit-learn and scipy for smooth surfaces.")
@@ -1076,16 +1219,13 @@ class ThermoQGUI:
                     plt.ylabel(f"w({ey}) (%)")
                     if xi_grid is not None:
                         # Use smooth surface
-                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='hot', alpha=0.9)
-                        plt.contour(xi_grid, yi_grid, zi_grid, levels=20, colors='black', alpha=0.3, linewidths=0.5)
+                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
                         plt.colorbar(contour, label=label_z)
-                        # Overlay original data points
-                        plt.scatter(x, y, c=z, cmap='hot', s=20, alpha=0.6, edgecolors='black', linewidths=0.5)
                     else:
                         # Fallback to scatter
-                        scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
+                        scatter = plt.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
                         plt.colorbar(scatter, label=label_z)
-                    plt.grid(True, linestyle='--', alpha=0.7)
+                    plt.grid(False)
                     out_path = f"{base}_Heatmap.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
                     plt.close()
@@ -1100,20 +1240,51 @@ class ThermoQGUI:
                     ax = fig.add_subplot(111, projection='3d')
                     if xi_grid is not None:
                         # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
                                               linewidth=0, antialiased=True, shade=True)
-                        # Overlay original data points
-                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
                         fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
                     else:
-                        # Fallback to scatter
-                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
-                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+                        # Fallback (avoid dot markers): use triangulated surface
+                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
-                    out_path = f"{base}_3d.png"
-                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    
+                    # Get format and extension
+                    img_format = image_format_var.get().upper()
+                    format_ext_map = {
+                        "PNG": "png", "JPEG": "jpg", "GIF": "gif", "BMP": "bmp",
+                        "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "AI": "ai", 
+                        "EPS": "eps", "PDF": "pdf"
+                    }
+                    ext = format_ext_map.get(img_format, "png")
+                    
+                    # Determine save parameters
+                    save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
+                    if img_format == "PDF":
+                        save_kwargs["format"] = "pdf"
+                    elif img_format == "EPS":
+                        save_kwargs["format"] = "eps"
+                    elif img_format == "SVG":
+                        save_kwargs["format"] = "svg"
+                    elif img_format == "AI":
+                        save_kwargs["format"] = "pdf"  # AI format not directly supported, use PDF
+                    elif img_format in ["JPEG", "JPG"]:
+                        save_kwargs["format"] = "jpeg"
+                    elif img_format == "TIFF":
+                        save_kwargs["format"] = "tiff"
+                    elif img_format == "WEBP":
+                        save_kwargs["format"] = "webp"
+                    elif img_format == "BMP":
+                        save_kwargs["format"] = "bmp"
+                    elif img_format == "GIF":
+                        save_kwargs["format"] = "gif"
+                    else:  # PNG default
+                        save_kwargs["format"] = "png"
+                    
+                    out_path = f"{base}_3d.{ext}"
+                    plt.savefig(out_path, **save_kwargs)
                     plt.close()
                     status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
                     # Open the file
@@ -1126,15 +1297,13 @@ class ThermoQGUI:
                     ax = fig.add_subplot(111, projection='3d')
                     if xi_grid is not None:
                         # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
                                               linewidth=0, antialiased=True, shade=True)
-                        # Overlay original data points
-                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
                         fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
                     else:
-                        # Fallback to scatter
-                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
-                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
+                        # Fallback (avoid dot markers): use triangulated surface
+                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
@@ -1143,9 +1312,23 @@ class ThermoQGUI:
                         ax.view_init(azim=angle)
                         return [ax]
 
-                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, 5), interval=50)
+                    # Get GIF parameters
+                    try:
+                        rotation_step = int(float(gif_speed_var.get()))
+                    except:
+                        rotation_step = 5
+                    try:
+                        interval_ms = int(float(gif_interval_var.get()))
+                    except:
+                        interval_ms = 50
+                    try:
+                        fps_val = int(float(gif_fps_var.get()))
+                    except:
+                        fps_val = 20
+                    
+                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
                     out_path = f"{base}_3d_rotation.gif"
-                    ani.save(out_path, writer='pillow', fps=20, dpi=100)
+                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
                     plt.close()
                     status_label.config(text=f"GIF saved: {out_path}", foreground="green")
                     # Open the file
@@ -1156,17 +1339,15 @@ class ThermoQGUI:
                             # Use smooth surface
                             fig_plotly = go.Figure(data=[
                                 go.Surface(x=xi_grid, y=yi_grid, z=zi_grid, 
-                                          colorscale='Jet', opacity=0.9,
-                                          colorbar=dict(title=label_z)),
-                                go.Scatter3d(x=x, y=y, z=z, mode='markers',
-                                           marker=dict(size=3, color='black', opacity=0.5))
+                                          colorscale='RdBu', reversescale=True, opacity=0.98,
+                                          colorbar=dict(title=label_z))
                             ])
                         else:
                             # Fallback to scatter
                             fig_plotly = go.Figure(data=[go.Scatter3d(
                                 x=x, y=y, z=z,
                                 mode='markers',
-                                marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
+                                marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85,
                                             colorbar=dict(title=label_z))
                             )])
                         fig_plotly.update_layout(
@@ -1196,7 +1377,7 @@ class ThermoQGUI:
                             f.write('  x: ' + str(x.tolist()) + ',\n')
                             f.write('  y: ' + str(y.tolist()) + ',\n')
                             f.write('  z: ' + str(z.tolist()) + ',\n')
-                            f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "Jet", opacity: 0.8, colorbar: {title: "' + label_z + '"} }\n')
+                            f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "RdBu", reversescale: true, opacity: 0.85, colorbar: {title: "' + label_z + '"} }\n')
                             f.write('}];\n')
                             f.write('var layout = {\n')
                             f.write('  scene: {\n')
@@ -1220,7 +1401,7 @@ class ThermoQGUI:
         ttk.Button(buttons_frame, text="Plot", command=run_plot).pack(side=tk.LEFT, padx=10)
         ttk.Button(buttons_frame, text="Close", command=plot_window.destroy).pack(side=tk.LEFT, padx=10)
 
-    def create_smooth_surface(self, x, y, z, grid_resolution=50):
+    def create_smooth_surface(self, x, y, z, grid_resolution=100, smoothness=100):
         """Create smooth surface using Gaussian Process Regression or interpolation"""
         if SKLEARN_AVAILABLE and len(x) >= 3:
             try:
@@ -1228,36 +1409,98 @@ class ThermoQGUI:
                 X_train = np.column_stack([x, y])
                 z_train = z
                 
-                # Create Gaussian Process Regressor
-                # Increase parameter bounds to avoid convergence warnings
-                # ConstantKernel: (lower, upper) for constant_value
-                # RBF: (lower, upper) for length_scale (one per dimension)
-                kernel = C(1.0, (1e-3, 1e5)) * RBF([1.0, 1.0], (1e-2, 1e4))
+                # Normalize input data to improve convergence
+                x_mean, x_std = x.mean(), x.std()
+                y_mean, y_std = y.mean(), y.std()
+                z_mean, z_std = z.mean(), z.std()
+                
+                if x_std > 0:
+                    x_norm = (x - x_mean) / x_std
+                else:
+                    x_norm = x
+                if y_std > 0:
+                    y_norm = (y - y_mean) / y_std
+                else:
+                    y_norm = y
+                if z_std > 0:
+                    z_norm = (z - z_mean) / z_std
+                else:
+                    z_norm = z
+                
+                X_train_norm = np.column_stack([x_norm, y_norm])
+                
+                # Smoothness: 0..100 (higher = smoother / less detail)
+                try:
+                    smoothness = float(smoothness)
+                except Exception:
+                    smoothness = 70.0
+                smoothness = max(0.0, min(100.0, smoothness))
+                s = smoothness / 100.0
+
+                # Calculate appropriate length scale based on data range
+                x_range_norm = x_norm.max() - x_norm.min()
+                y_range_norm = y_norm.max() - y_norm.min()
+                # Base length scales (as fraction of range), then scale by smoothness.
+                base_frac = 0.20 + 0.60 * s  # 0.20..0.80 of range
+                length_scale_x = max(base_frac * x_range_norm, 0.5 + 1.5 * s)
+                length_scale_y = max(base_frac * y_range_norm, 0.5 + 1.5 * s)
+                
+                # Create Gaussian Process Regressor with smoother kernel
+                # Matern(nu=2.5) tends to be less "wavy" than aggressive RBF fits on scattered data.
+                kernel = C(1.0, (1e-3, 1e6)) * Matern(
+                    length_scale=[length_scale_x, length_scale_y],
+                    length_scale_bounds=(
+                        max(0.5 * min(length_scale_x, length_scale_y), 0.5),
+                        min(5.0 * max(length_scale_x, length_scale_y), 1e5),
+                    ),
+                    nu=2.5
+                )
+                
+                # Regularization (alpha): increase strongly with smoothness to suppress wrinkles.
+                alpha = 1e-6 + (3e-2 - 1e-6) * (s ** 2)  # ~1e-6 .. 3e-2
+
                 gp = GaussianProcessRegressor(
                     kernel=kernel, 
-                    n_restarts_optimizer=10, 
-                    alpha=1e-6,  # Reduced alpha for better fitting
-                    normalize_y=False  # Don't normalize y values
+                    n_restarts_optimizer=10,
+                    alpha=alpha,
+                    normalize_y=True,  # Enable y normalization for better convergence
+                    optimizer='fmin_l_bfgs_b',  # Explicitly set optimizer
+                    n_jobs=-1  # Use all available cores
                 )
-                gp.fit(X_train, z_train)
                 
-                # Create grid for prediction
-                x_min, x_max = x.min(), x.max()
-                y_min, y_max = y.min(), y.max()
-                x_range = x_max - x_min
-                y_range = y_max - y_min
+                # Suppress convergence warnings during fitting
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning)
+                    gp.fit(X_train_norm, z_norm)
+                
+                # Create grid for prediction (in normalized space) with higher resolution
+                x_min_norm, x_max_norm = x_norm.min(), x_norm.max()
+                y_min_norm, y_max_norm = y_norm.min(), y_norm.max()
+                x_range_norm = x_max_norm - x_min_norm
+                y_range_norm = y_max_norm - y_min_norm
                 
                 # Add some padding
-                x_pad = x_range * 0.05
-                y_pad = y_range * 0.05
+                x_pad_norm = x_range_norm * 0.05
+                y_pad_norm = y_range_norm * 0.05
                 
-                xi = np.linspace(x_min - x_pad, x_max + x_pad, grid_resolution)
-                yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
-                xi_grid, yi_grid = np.meshgrid(xi, yi)
+                xi_norm = np.linspace(x_min_norm - x_pad_norm, x_max_norm + x_pad_norm, grid_resolution)
+                yi_norm = np.linspace(y_min_norm - y_pad_norm, y_max_norm + y_pad_norm, grid_resolution)
+                xi_grid_norm, yi_grid_norm = np.meshgrid(xi_norm, yi_norm)
                 
-                # Predict on grid
-                X_grid = np.column_stack([xi_grid.ravel(), yi_grid.ravel()])
-                zi_grid = gp.predict(X_grid).reshape(xi_grid.shape)
+                # Predict on grid (in normalized space)
+                X_grid_norm = np.column_stack([xi_grid_norm.ravel(), yi_grid_norm.ravel()])
+                zi_grid_norm = gp.predict(X_grid_norm).reshape(xi_grid_norm.shape)
+                
+                # Apply Gaussian smoothing filter to remove small-scale noise and wrinkles
+                if SCIPY_AVAILABLE:
+                    # Post-smoothing in grid space (higher smoothness -> larger sigma)
+                    sigma = 0.8 + 3.5 * s  # ~0.8..4.3 grid points
+                    zi_grid_norm = gaussian_filter(zi_grid_norm, sigma=sigma)
+                
+                # Denormalize back to original space
+                xi_grid = xi_grid_norm * x_std + x_mean if x_std > 0 else xi_grid_norm + x_mean
+                yi_grid = yi_grid_norm * y_std + y_mean if y_std > 0 else yi_grid_norm + y_mean
+                zi_grid = zi_grid_norm * z_std + z_mean if z_std > 0 else zi_grid_norm + z_mean
                 
                 return xi_grid, yi_grid, zi_grid
             except Exception as e:
@@ -1280,13 +1523,26 @@ class ThermoQGUI:
                 yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
                 xi_grid, yi_grid = np.meshgrid(xi, yi)
                 
-                # Interpolate
+                # Interpolate using cubic method for smoother surfaces
                 zi_grid = griddata((x, y), z, (xi_grid, yi_grid), method='cubic', fill_value=np.nan)
                 
                 # Fill NaN values with nearest neighbor interpolation
                 if np.isnan(zi_grid).any():
                     zi_grid_filled = griddata((x, y), z, (xi_grid, yi_grid), method='nearest')
                     zi_grid = np.where(np.isnan(zi_grid), zi_grid_filled, zi_grid)
+                
+                # Apply Gaussian smoothing filter to remove wrinkles
+                try:
+                    try:
+                        smoothness = float(smoothness)
+                    except Exception:
+                        smoothness = 70.0
+                    smoothness = max(0.0, min(100.0, smoothness))
+                    s = smoothness / 100.0
+                    sigma = 0.8 + 3.5 * s
+                    zi_grid = gaussian_filter(zi_grid, sigma=sigma)
+                except:
+                    pass  # If gaussian_filter fails, return unsmoothed result
                 
                 return xi_grid, yi_grid, zi_grid
             except Exception:
@@ -1296,7 +1552,7 @@ class ThermoQGUI:
         return None, None, None
 
     def open_file_and_offer_save_as(self, file_path, parent_window):
-        """Open a file and offer save-as option when closing"""
+        """Open a file with the system default application (no Save As prompt)."""
         try:
             # Open the file based on its extension
             if file_path.lower().endswith('.html'):
@@ -1310,18 +1566,6 @@ class ThermoQGUI:
                     subprocess.call(['open', os.path.abspath(file_path)])
                 else:  # Linux
                     subprocess.call(['xdg-open', os.path.abspath(file_path)])
-            
-            # Show a message box with save-as option
-            result = messagebox.askyesnocancel(
-                "File Opened",
-                f"File has been opened:\n{file_path}\n\nWould you like to save it to a different location?",
-                parent=parent_window
-            )
-            
-            if result is True:  # Yes - save as
-                self.save_file_as(file_path, parent_window)
-            # If result is False (No) or None (Cancel), do nothing
-            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open file: {str(e)}", parent=parent_window)
 
@@ -1361,7 +1605,7 @@ class ThermoQGUI:
         """Open Q value plotter window"""
         plot_window = tk.Toplevel(self.root)
         plot_window.title("Plot Q Values")
-        plot_window.geometry("800x600")
+        plot_window.geometry("850x900")
         plot_window.grab_set()
 
         main_frame = ttk.Frame(plot_window, padding="20")
@@ -1374,7 +1618,7 @@ class ThermoQGUI:
             main_frame,
             text=(
                 "Plot Q values (-T//fw(@FCC_A1)) using imported Pandat data.\n"
-                "X-axis: w(MG), Y-axis: w(SI), Z-axis: Q value (-T//fw(@FCC_A1)).\n"
+                "Select X and Y elements to plot Q values.\n"
                 "Equilibrium/Lever: Use P.xlsx; Scheil: Use P-S.xlsx."
             ),
             wraplength=700,
@@ -1392,6 +1636,18 @@ class ThermoQGUI:
         ttk.Radiobutton(dataset_frame, text="Equilibrium/Lever", variable=dataset_var, value="Equilibrium").pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(dataset_frame, text="Scheil", variable=dataset_var, value="Scheil").pack(side=tk.LEFT, padx=5)
 
+        elements_frame = ttk.Frame(controls)
+        elements_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(elements_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
+        elem_x_var = tk.StringVar()
+        elem_y_var = tk.StringVar()
+        elem_values = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+        elem_x_combo = ttk.Combobox(elements_frame, textvariable=elem_x_var, values=elem_values, width=10)
+        elem_x_combo.pack(side=tk.LEFT, padx=5)
+        ttk.Label(elements_frame, text="Y Element:").pack(side=tk.LEFT, padx=15)
+        elem_y_combo = ttk.Combobox(elements_frame, textvariable=elem_y_var, values=elem_values, width=10)
+        elem_y_combo.pack(side=tk.LEFT, padx=5)
+
         viz_frame = ttk.Frame(controls)
         viz_frame.pack(fill=tk.X, pady=5)
         ttk.Label(viz_frame, text="Visualization:").pack(side=tk.LEFT, padx=5)
@@ -1401,11 +1657,84 @@ class ThermoQGUI:
         ttk.Radiobutton(viz_frame, text="3D Rotation GIF", variable=viz_var, value="3D Rotation GIF").pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(viz_frame, text="Plotly 3D", variable=viz_var, value="Plotly 3D").pack(side=tk.LEFT, padx=5)
 
-        output_frame = ttk.Frame(controls)
-        output_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(output_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
+        # Smoothness control (higher = smoother / less wrinkles)
+        smooth_frame = ttk.Frame(controls)
+        smooth_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(smooth_frame, text="Smoothness:").pack(side=tk.LEFT, padx=5)
+        smoothness_var = tk.DoubleVar(value=100.0)
+        smoothness_value_label = ttk.Label(smooth_frame, text="100")
+        smoothness_value_label.pack(side=tk.RIGHT, padx=5)
+
+        def _on_smoothness_change(val):
+            try:
+                smoothness_value_label.config(text=str(int(float(val))))
+            except Exception:
+                smoothness_value_label.config(text="100")
+
+        smooth_scale = ttk.Scale(
+            smooth_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=smoothness_var,
+            command=_on_smoothness_change
+        )
+        smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # Output settings frame
+        output_settings_frame = ttk.LabelFrame(controls, text="Output Settings", padding="10")
+        output_settings_frame.pack(fill=tk.X, pady=5)
+        
+        # Output directory
+        output_dir_frame = ttk.Frame(output_settings_frame)
+        output_dir_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(output_dir_frame, text="Output Directory:").pack(side=tk.LEFT, padx=5)
+        output_dir_var = tk.StringVar()
+        ttk.Entry(output_dir_frame, textvariable=output_dir_var, width=35).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        def browse_output_dir():
+            dir_path = filedialog.askdirectory(title="Select Output Directory")
+            if dir_path:
+                output_dir_var.set(dir_path)
+        ttk.Button(output_dir_frame, text="Browse", command=browse_output_dir).pack(side=tk.RIGHT, padx=5)
+        
+        # Output prefix
+        output_prefix_frame = ttk.Frame(output_settings_frame)
+        output_prefix_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(output_prefix_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
         output_var = tk.StringVar(value="q_value")
-        ttk.Entry(output_frame, textvariable=output_var, width=40).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(output_prefix_frame, textvariable=output_var, width=35).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Image format (only for 2D Heatmap and 3D Static)
+        format_frame = ttk.Frame(output_settings_frame)
+        format_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(format_frame, text="Image Format (2D/3D Static):").pack(side=tk.LEFT, padx=5)
+        image_format_var = tk.StringVar(value="PNG")
+        format_options = ["PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "AI", "EPS", "PDF"]
+        format_combo = ttk.Combobox(format_frame, textvariable=image_format_var, values=format_options, 
+                                   state="readonly", width=15)
+        format_combo.pack(side=tk.LEFT, padx=5)
+        
+        # 3D Rotation GIF parameters
+        gif_params_frame = ttk.LabelFrame(controls, text="3D Rotation GIF Parameters", padding="10")
+        gif_params_frame.pack(fill=tk.X, pady=5)
+        
+        gif_speed_frame = ttk.Frame(gif_params_frame)
+        gif_speed_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_speed_frame, text="Rotation Speed (degrees/frame):").pack(side=tk.LEFT, padx=5)
+        gif_speed_var = tk.StringVar(value="5")
+        ttk.Entry(gif_speed_frame, textvariable=gif_speed_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_interval_frame = ttk.Frame(gif_params_frame)
+        gif_interval_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_interval_frame, text="Frame Interval (ms):").pack(side=tk.LEFT, padx=5)
+        gif_interval_var = tk.StringVar(value="50")
+        ttk.Entry(gif_interval_frame, textvariable=gif_interval_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_fps_frame = ttk.Frame(gif_params_frame)
+        gif_fps_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_fps_frame, text="FPS:").pack(side=tk.LEFT, padx=5)
+        gif_fps_var = tk.StringVar(value="20")
+        ttk.Entry(gif_fps_frame, textvariable=gif_fps_var, width=10).pack(side=tk.LEFT, padx=5)
 
         status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
         status_label.pack(pady=5)
@@ -1424,9 +1753,15 @@ class ThermoQGUI:
                     messagebox.showerror("Data Missing", "No data found. Please import P.xlsx (Equilibrium) or P-S.xlsx (Scheil) via Import → Pandat to ThermoQ first.")
                     return
 
-                # Fixed columns: X = w(MG), Y = w(SI), Z = -T//fw(@FCC_A1)
-                col_x = "w(MG)"
-                col_y = "w(SI)"
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    messagebox.showerror("Element Selection", "Please select X and Y elements first.")
+                    return
+                
+                # Dynamic columns: X = w(selected X element), Y = w(selected Y element), Z = -T//fw(@FCC_A1)
+                col_x_pattern = f"w({ex})"
+                col_y_pattern = f"w({ey})"
                 col_q = "-T//fw(@FCC_A1)"
                 
                 # Try case-insensitive column matching
@@ -1437,9 +1772,10 @@ class ThermoQGUI:
                 for col in df.columns:
                     if isinstance(col, str):
                         col_upper = col.upper()
-                        if col_upper == "W(MG)":
+                        # Match w(ELEMENT) columns
+                        if col_upper == col_x_pattern.upper():
                             col_x_found = col
-                        elif col_upper == "W(SI)":
+                        elif col_upper == col_y_pattern.upper():
                             col_y_found = col
                         elif col_upper == "-T//FW(@FCC_A1)":
                             col_q_found = col
@@ -1448,7 +1784,7 @@ class ThermoQGUI:
                     available_cols = [str(c) for c in df.columns[:20]]
                     messagebox.showerror("Column Not Found", 
                         f"Required columns not found in dataset.\n"
-                        f"Looking for: {col_x}, {col_y}, {col_q}\n"
+                        f"Looking for: {col_x_pattern}, {col_y_pattern}, {col_q}\n"
                         f"Available columns (first 20): {', '.join(available_cols)}")
                     return
 
@@ -1466,13 +1802,25 @@ class ThermoQGUI:
 
                 prefix = output_var.get().strip() or "q_value"
                 ds = dataset_var.get()
-                base = f"{prefix}_{ds}"
+                
+                # Get output directory
+                output_dir = output_dir_var.get().strip()
+                if output_dir and os.path.exists(output_dir):
+                    base_path = output_dir
+                else:
+                    base_path = "."
+                
+                base = os.path.join(base_path, f"{prefix}_{ds}")
                 label_z = "Q Value (-T//fw(@FCC_A1))"
 
                 # Create smooth surface using Gaussian Process
                 status_label.config(text="Creating smooth surface...", foreground="orange")
                 plot_window.update()
-                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(x, y, z, grid_resolution=50)
+                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
+                    x, y, z,
+                    grid_resolution=100,
+                    smoothness=smoothness_var.get()
+                )
                 
                 if xi_grid is None:
                     messagebox.showwarning("Smoothing Failed", "Could not create smooth surface. Using scatter plot instead. Please install scikit-learn and scipy for smooth surfaces.")
@@ -1484,20 +1832,17 @@ class ThermoQGUI:
                         messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 2D heatmap.")
                         return
                     plt.figure(figsize=(10, 8))
-                    plt.xlabel("w(MG) (%)")
-                    plt.ylabel("w(SI) (%)")
+                    plt.xlabel(f"w({ex}) (%)")
+                    plt.ylabel(f"w({ey}) (%)")
                     if xi_grid is not None:
                         # Use smooth surface
-                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='hot', alpha=0.9)
-                        plt.contour(xi_grid, yi_grid, zi_grid, levels=20, colors='black', alpha=0.3, linewidths=0.5)
+                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
                         plt.colorbar(contour, label=label_z)
-                        # Overlay original data points
-                        plt.scatter(x, y, c=z, cmap='hot', s=20, alpha=0.6, edgecolors='black', linewidths=0.5)
                     else:
                         # Fallback to scatter
-                        scatter = plt.scatter(x, y, c=z, cmap='hot', s=50, alpha=0.8)
+                        scatter = plt.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
                         plt.colorbar(scatter, label=label_z)
-                    plt.grid(True, linestyle='--', alpha=0.7)
+                    plt.grid(False)
                     out_path = f"{base}_Heatmap.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
                     plt.close()
@@ -1512,17 +1857,15 @@ class ThermoQGUI:
                     ax = fig.add_subplot(111, projection='3d')
                     if xi_grid is not None:
                         # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
                                               linewidth=0, antialiased=True, shade=True)
-                        # Overlay original data points
-                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
                         fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
                     else:
-                        # Fallback to scatter
-                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
-                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel("w(MG) (%)")
-                    ax.set_ylabel("w(SI) (%)")
+                        # Fallback (avoid dot markers): use triangulated surface
+                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
+                    ax.set_xlabel(f"w({ex}) (%)")
+                    ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
                     out_path = f"{base}_3d.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -1538,26 +1881,38 @@ class ThermoQGUI:
                     ax = fig.add_subplot(111, projection='3d')
                     if xi_grid is not None:
                         # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.9, 
+                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
                                               linewidth=0, antialiased=True, shade=True)
-                        # Overlay original data points
-                        ax.scatter(x, y, z, c='black', s=10, alpha=0.5)
                         fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
                     else:
-                        # Fallback to scatter
-                        sc3d = ax.scatter(x, y, z, c=z, cmap='coolwarm', s=30, alpha=0.8)
-                        fig.colorbar(sc3d, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel("w(MG) (%)")
-                    ax.set_ylabel("w(SI) (%)")
+                        # Fallback (avoid dot markers): use triangulated surface
+                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
+                    ax.set_xlabel(f"w({ex}) (%)")
+                    ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
 
                     def _rotate(angle):
                         ax.view_init(azim=angle)
                         return [ax]
 
-                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, 5), interval=50)
+                    # Get GIF parameters
+                    try:
+                        rotation_step = int(float(gif_speed_var.get()))
+                    except:
+                        rotation_step = 5
+                    try:
+                        interval_ms = int(float(gif_interval_var.get()))
+                    except:
+                        interval_ms = 50
+                    try:
+                        fps_val = int(float(gif_fps_var.get()))
+                    except:
+                        fps_val = 20
+                    
+                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
                     out_path = f"{base}_3d_rotation.gif"
-                    ani.save(out_path, writer='pillow', fps=20, dpi=100)
+                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
                     plt.close()
                     status_label.config(text=f"GIF saved: {out_path}", foreground="green")
                     # Open the file
@@ -1568,23 +1923,21 @@ class ThermoQGUI:
                             # Use smooth surface
                             fig_plotly = go.Figure(data=[
                                 go.Surface(x=xi_grid, y=yi_grid, z=zi_grid, 
-                                          colorscale='Jet', opacity=0.9,
-                                          colorbar=dict(title=label_z)),
-                                go.Scatter3d(x=x, y=y, z=z, mode='markers',
-                                           marker=dict(size=3, color='black', opacity=0.5))
+                                          colorscale='RdBu', reversescale=True, opacity=0.98,
+                                          colorbar=dict(title=label_z))
                             ])
                         else:
                             # Fallback to scatter
                             fig_plotly = go.Figure(data=[go.Scatter3d(
                                 x=x, y=y, z=z,
                                 mode='markers',
-                                marker=dict(size=3, color=z, colorscale='Jet', opacity=0.8,
+                                marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85,
                                             colorbar=dict(title=label_z))
                             )])
                         fig_plotly.update_layout(
                             scene=dict(
-                                xaxis_title="w(MG) (%)",
-                                yaxis_title="w(SI) (%)",
+                                xaxis_title=f"w({ex}) (%)",
+                                yaxis_title=f"w({ey}) (%)",
                                 zaxis_title=label_z,
                             ),
                             width=900, height=700,
@@ -1632,8 +1985,8 @@ class ThermoQGUI:
                                 f.write('}];\n')
                             f.write('var layout = {\n')
                             f.write('  scene: {\n')
-                            f.write('    xaxis: {title: "w(MG) (%)"},\n')
-                            f.write('    yaxis: {title: "w(SI) (%)"},\n')
+                            f.write(f'    xaxis: {{title: "w({ex}) (%)"}},\n')
+                            f.write(f'    yaxis: {{title: "w({ey}) (%)"}},\n')
                             f.write('    zaxis: {title: "' + label_z + '"}\n')
                             f.write('  }\n')
                             f.write('};\n')
@@ -1757,7 +2110,7 @@ class ThermoQGUI:
         """Open composition converter tool window"""
         converter_window = tk.Toplevel(self.root)
         converter_window.title("Composition Converter (wt% ↔ at%)")
-        converter_window.geometry("800x800")
+        converter_window.geometry("900x900")
         converter_window.grab_set()  # Make window modal
         
         # Create main frame
@@ -1956,7 +2309,7 @@ Si: 2.0"""
         """Open Thermo-calc batch file generator tool"""
         generator_window = tk.Toplevel(self.root)
         generator_window.title("Generate Thermo-calc Batch File")
-        generator_window.geometry("900x800")
+        generator_window.geometry("950x900")
         generator_window.grab_set()  # Make window modal
         
         # Create main frame with scrollable area
@@ -2751,7 +3104,7 @@ Si: 2.0"""
         
         vector_window = tk.Toplevel(self.root)
         vector_window.title("Plot Liquidus Vectors")
-        vector_window.geometry("800x750")
+        vector_window.geometry("900x950")
         vector_window.grab_set()  # Make window modal
         
         # Create main frame
@@ -2764,81 +3117,36 @@ Si: 2.0"""
         
         # Instructions
         info_label = ttk.Label(main_frame, 
-            text="Plot quiver plots showing liquidus vectors from Excel data.\n"
-                 "Requires columns: w(X), w(Y), 1/dwdT_L(X@LIQUID), 1/dwdT_L(Y@LIQUID)",
+            text="Plot quiver plots showing liquidus vectors from Pandat data.\n"
+                 "Data is read from P file (Equilibrium/Lever) or P-S file (Scheil) imported via Pandat to ThermoQ.",
             wraplength=650, justify='center')
         info_label.pack(pady=(0, 20))
         
-        # Excel file selection
-        file_frame = ttk.LabelFrame(main_frame, text="Select Excel File", padding="15")
-        file_frame.pack(fill=tk.X, pady=10)
+        # Dataset selection (Equilibrium/Lever or Scheil)
+        dataset_frame = ttk.LabelFrame(main_frame, text="Solidification Mode", padding="15")
+        dataset_frame.pack(fill=tk.X, pady=10)
         
-        file_var = tk.StringVar()
-        ttk.Entry(file_frame, textvariable=file_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        def browse_excel_file():
-            file_path = filedialog.askopenfilename(
-                title="Select Excel File", 
-                filetypes=[("Excel files", "*.xls *.xlsx"), ("All files", "*.*")]
-            )
-            if file_path:
-                file_var.set(file_path)
-                on_file_selected()  # Update element options immediately
-        
-        ttk.Button(file_frame, text="Browse", command=browse_excel_file).pack(side=tk.RIGHT, padx=5)
+        dataset_var = tk.StringVar(value="Equilibrium")
+        ttk.Radiobutton(dataset_frame, text="Equilibrium/Lever (P file)", variable=dataset_var, value="Equilibrium").pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(dataset_frame, text="Scheil (P-S file)", variable=dataset_var, value="Scheil").pack(side=tk.LEFT, padx=10)
         
         # Element selection
         element_frame = ttk.LabelFrame(main_frame, text="Element Selection", padding="15")
         element_frame.pack(fill=tk.X, pady=10)
         
-        # Store available elements from Excel file
-        excel_elements = []
-        
-        def extract_elements_from_excel():
-            """Extract available elements from selected Excel file"""
-            excel_path = file_var.get()
-            if not excel_path or not os.path.exists(excel_path):
-                return []
-            
-            try:
-                # Read Excel file to get column names
-                df = pd.read_excel(excel_path, header=0, nrows=0)  # Only read header
-                elements = []
-                
-                # Extract elements from w(*) columns
-                for col in df.columns:
-                    if isinstance(col, str):
-                        col_upper = col.strip().upper()
-                        # Match w(ELEMENT) pattern
-                        match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
-                        if match:
-                            element = match.group(1).capitalize()  # Convert to proper case (e.g., MG -> Mg)
-                            if element in PERIODIC_TABLE and element not in elements:
-                                elements.append(element)
-                
-                return sorted(elements)
-            except Exception as e:
-                return []
-        
         def update_element_options():
-            """Update element dropdown options based on Excel file"""
-            elements = extract_elements_from_excel()
-            if elements:
-                excel_elements[:] = elements
-                elem_x_combo['values'] = elements
-                elem_y_combo['values'] = elements
-                # Set default values if current values are not in the list
-                if elem_x_var.get() not in elements and elements:
-                    elem_x_var.set(elements[0])
-                if elem_y_var.get() not in elements and len(elements) > 1:
-                    elem_y_var.set(elements[1])
-                elif elem_y_var.get() not in elements and elements:
-                    elem_y_var.set(elements[0])
-            else:
-                # Fallback to all elements if no Excel file or extraction fails
-                all_elements = sorted(PERIODIC_TABLE.keys())
-                excel_elements[:] = all_elements
-                elem_x_combo['values'] = all_elements
-                elem_y_combo['values'] = all_elements
+            """Update element dropdown options based on Pandat data"""
+            # Get available elements from imported Pandat data
+            elements = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+            elem_x_combo['values'] = elements
+            elem_y_combo['values'] = elements
+            # Set default values if current values are not in the list
+            if elem_x_var.get() not in elements and elements:
+                elem_x_var.set(elements[0])
+            if elem_y_var.get() not in elements and len(elements) > 1:
+                elem_y_var.set(elements[1])
+            elif elem_y_var.get() not in elements and elements:
+                elem_y_var.set(elements[0])
         
         ttk.Label(element_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
         elem_x_var = tk.StringVar(value="")
@@ -2850,35 +3158,420 @@ Si: 2.0"""
         elem_y_combo = ttk.Combobox(element_frame, textvariable=elem_y_var, values=[], width=10, state="readonly")
         elem_y_combo.pack(side=tk.LEFT, padx=5)
         
-        # Update element options when file is selected
-        def on_file_selected():
-            update_element_options()
-            if excel_elements:
-                status_label.config(text=f"Found {len(excel_elements)} elements: {', '.join(excel_elements)}", foreground="green")
-            else:
-                status_label.config(text="No elements found in Excel file. Using all elements.", foreground="orange")
+        # Status label (created early so it can be accessed by on_dataset_changed)
+        status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
+        status_label.pack(pady=10)
         
-        # Bind file selection to update elements
-        file_var.trace_add("write", lambda *args: on_file_selected())
+        # Update element options when dataset changes
+        def on_dataset_changed():
+            update_element_options()
+            if self.available_elements:
+                status_label.config(text=f"Available elements: {', '.join(sorted(self.available_elements))}", foreground="green")
+            else:
+                status_label.config(text="No Pandat data imported. Please import data via Import → Pandat to ThermoQ first.", foreground="orange")
+        
+        dataset_var.trace_add("write", lambda *args: on_dataset_changed())
+        # Initial update
+        on_dataset_changed()
         
         # Options
         options_frame = ttk.LabelFrame(main_frame, text="Options", padding="15")
         options_frame.pack(fill=tk.X, pady=10)
         
-        clean_fill_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(options_frame, text="Clean and fill data before plotting", 
-                       variable=clean_fill_var).pack(side=tk.LEFT, padx=5)
+        # Export processed data (before clean and fill)
+        export_processed_frame = ttk.LabelFrame(main_frame, text="Export Processed Data (T, w(*), 1/dwdT_L(*@LIQUID))", padding="15")
+        export_processed_frame.pack(fill=tk.X, pady=10)
         
-        # Output prefix
-        output_frame = ttk.LabelFrame(main_frame, text="Output Prefix", padding="15")
+        processed_export_var = tk.StringVar()
+        processed_export_entry = ttk.Entry(export_processed_frame, textvariable=processed_export_var, width=50)
+        processed_export_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        def browse_processed_export():
+            file_path = filedialog.asksaveasfilename(
+                title="Save Processed Excel File",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
+            if file_path:
+                processed_export_var.set(file_path)
+        
+        def export_processed_data():
+            """Export processed data (T, w(*), 1/dwdT_L(*@LIQUID)) before clean and fill"""
+            try:
+                # Get dataset based on solidification mode
+                ds = dataset_var.get()
+                if ds == "Equilibrium":
+                    source_df = self.pandat_p_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P file data found. Please import P file via Import → Pandat to ThermoQ first.")
+                        return
+                else:  # Scheil
+                    source_df = self.pandat_p_s_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P-S file data found. Please import P-S file via Import → Pandat to ThermoQ first.")
+                        return
+                
+                status_label.config(text="Processing data for export...", foreground="orange")
+                vector_window.update()
+                
+                # Create a copy of the source dataframe
+                df = source_df.copy()
+                df = _standardize_columns(df)
+                
+                # Find T column
+                col_t = None
+                for col in df.columns:
+                    if isinstance(col, str) and col.strip().upper() == 'T':
+                        col_t = col
+                        break
+                
+                if col_t is None:
+                    messagebox.showerror("Error", "Temperature column T not found in data!")
+                    return
+                
+                # Find w(*) columns for all elements
+                w_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                w_cols[element] = col
+                
+                # Find dwdT_L(*@LIQUID) columns and calculate 1/dwdT_L(*@LIQUID)
+                dwdt_cols = {}
+                inv_dwdt_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        # Match dwdT_L(ELEMENT@LIQUID) pattern
+                        match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                dwdt_cols[element] = col
+                                # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
+                                inv_col_name = f"1/dwdT_L({element}@LIQUID)"
+                                # Convert to numeric and calculate inverse
+                                dwdt_values = pd.to_numeric(df[col], errors='coerce')
+                                # Avoid division by zero
+                                inv_values = np.where(dwdt_values != 0, 1.0 / dwdt_values, np.nan)
+                                df[inv_col_name] = inv_values
+                                inv_dwdt_cols[element] = inv_col_name
+                
+                # Select columns: T, w(*) for all elements, 1/dwdT_L(*@LIQUID)
+                selected_cols = [col_t]
+                selected_cols.extend(w_cols.values())
+                selected_cols.extend(inv_dwdt_cols.values())
+                
+                # Create new dataframe with selected columns
+                processed_df = df[selected_cols].copy()
+                processed_df = processed_df.replace(r"^\s*$", np.nan, regex=True).dropna(how="all")
+                
+                # Get export path
+                export_path = processed_export_var.get().strip()
+                if not export_path:
+                    messagebox.showerror("Error", "Please specify export path!")
+                    return
+                
+                # Export to Excel
+                try:
+                    processed_df.to_excel(export_path, index=False)
+                    status_label.config(text=f"Processed data exported to: {os.path.basename(export_path)}", foreground="green")
+                    messagebox.showinfo("Success", f"Processed data exported successfully to:\n{export_path}")
+                except Exception as e:
+                    messagebox.showerror("Export Error", f"Failed to export processed Excel file:\n{str(e)}")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to export processed data:\n{str(e)}")
+        
+        processed_export_btn = ttk.Button(export_processed_frame, text="Browse", command=browse_processed_export)
+        processed_export_btn.pack(side=tk.RIGHT, padx=5)
+        
+        export_processed_btn = ttk.Button(export_processed_frame, text="Export", command=export_processed_data)
+        export_processed_btn.pack(side=tk.RIGHT, padx=5)
+        
+        clean_fill_var = tk.BooleanVar(value=False)
+        clean_fill_cb = ttk.Checkbutton(options_frame, text="Clean and fill data before plotting", 
+                       variable=clean_fill_var)
+        clean_fill_cb.pack(side=tk.LEFT, padx=5)
+        
+        # Excel export path (only shown when clean_fill is checked)
+        excel_export_frame = ttk.LabelFrame(main_frame, text="Export Cleaned Data (Excel)", padding="15")
+        excel_export_frame.pack(fill=tk.X, pady=10)
+        
+        excel_export_var = tk.StringVar()
+        excel_export_entry = ttk.Entry(excel_export_frame, textvariable=excel_export_var, width=50)
+        excel_export_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        def browse_excel_export():
+            file_path = filedialog.asksaveasfilename(
+                title="Save Cleaned Excel File",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
+            if file_path:
+                excel_export_var.set(file_path)
+        
+        def export_cleaned_data():
+            """Export cleaned data (after clean and fill)"""
+            try:
+                # Get dataset based on solidification mode
+                ds = dataset_var.get()
+                if ds == "Equilibrium":
+                    source_df = self.pandat_p_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P file data found. Please import P file via Import → Pandat to ThermoQ first.")
+                        return
+                else:  # Scheil
+                    source_df = self.pandat_p_s_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P-S file data found. Please import P-S file via Import → Pandat to ThermoQ first.")
+                        return
+                
+                status_label.config(text="Processing and cleaning data for export...", foreground="orange")
+                vector_window.update()
+                
+                # Create a copy of the source dataframe
+                df = source_df.copy()
+                df = _standardize_columns(df)
+                
+                # Find T column
+                col_t = None
+                for col in df.columns:
+                    if isinstance(col, str) and col.strip().upper() == 'T':
+                        col_t = col
+                        break
+                
+                if col_t is None:
+                    messagebox.showerror("Error", "Temperature column T not found in data!")
+                    return
+                
+                # Find w(*) columns for all elements
+                w_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                w_cols[element] = col
+                
+                # Find dwdT_L(*@LIQUID) columns and calculate 1/dwdT_L(*@LIQUID)
+                dwdt_cols = {}
+                inv_dwdt_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        # Match dwdT_L(ELEMENT@LIQUID) pattern
+                        match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                dwdt_cols[element] = col
+                                # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
+                                inv_col_name = f"1/dwdT_L({element}@LIQUID)"
+                                # Convert to numeric and calculate inverse
+                                dwdt_values = pd.to_numeric(df[col], errors='coerce')
+                                # Avoid division by zero
+                                inv_values = np.where(dwdt_values != 0, 1.0 / dwdt_values, np.nan)
+                                df[inv_col_name] = inv_values
+                                inv_dwdt_cols[element] = inv_col_name
+                
+                # Select columns: T, w(*) for all elements, 1/dwdT_L(*@LIQUID)
+                selected_cols = [col_t]
+                selected_cols.extend(w_cols.values())
+                selected_cols.extend(inv_dwdt_cols.values())
+                
+                # Create new dataframe with selected columns
+                df = df[selected_cols].copy()
+                df = df.replace(r"^\s*$", np.nan, regex=True).dropna(how="all")
+                
+                # Clean and fill data
+                status_label.config(text="Cleaning and filling data...", foreground="orange")
+                vector_window.update()
+                
+                # Newton forward difference interpolation for specific cases
+                def newton_forward_interpolation(f1, f2, f3):
+                    """
+                    Newton forward difference interpolation for x=0 using points at x=1,2,3
+                    Formula: f(0) = 2.5*f(1) - 2*f(2) + 0.5*f(3)
+                    """
+                    if pd.isna(f1) or pd.isna(f2) or pd.isna(f3):
+                        return np.nan
+                    return 2.5 * f1 - 2.0 * f2 + 0.5 * f3
+                
+                # Get element names from selected elements (ex and ey are not available here, need to get from UI)
+                # We'll need to get the selected elements from the comboboxes
+                # For now, we'll process all elements that have inv_dwdt_cols
+                # But we need ex and ey - let's get them from the UI state
+                # Actually, in export_cleaned_data, we don't have ex and ey selected yet
+                # So we'll need to handle this differently - maybe skip the specific interpolation
+                # and just do general interpolation, or we need to get ex and ey from the UI
+                
+                # Get selected elements from UI
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if ex and ey and ex in w_cols and ey in w_cols and ex in inv_dwdt_cols and ey in inv_dwdt_cols:
+                    # Get column names for selected elements
+                    col_wx = w_cols[ex]
+                    col_wy = w_cols[ey]
+                    col_inv_x = inv_dwdt_cols[ex]
+                    col_inv_y = inv_dwdt_cols[ey]
+                    
+                    # Convert to numeric
+                    wx_vals = pd.to_numeric(df[col_wx], errors='coerce')
+                    wy_vals = pd.to_numeric(df[col_wy], errors='coerce')
+                    inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
+                    inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
+                    
+                    # Step 1: For w(X) = 0 and w(Y) ≠ 0, interpolate 1/dwdT_L(X@LIQUID)
+                    mask_step1 = (wx_vals == 0) & (wy_vals != 0) & pd.isna(inv_x_vals)
+                    for idx in df[mask_step1].index:
+                        current_wy = wy_vals.loc[idx]
+                        candidates = df[
+                            (wy_vals == current_wy) & 
+                            (wx_vals.isin([1, 2, 3])) & 
+                            inv_x_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wx_vals == 1][col_inv_x].values
+                            val_2 = candidates[wx_vals == 2][col_inv_x].values
+                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_x] = interpolated
+                    
+                    inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
+                    
+                    # Step 2: For w(Y) = 0 and w(X) ≠ 0, interpolate 1/dwdT_L(Y@LIQUID)
+                    mask_step2 = (wy_vals == 0) & (wx_vals != 0) & pd.isna(inv_y_vals)
+                    for idx in df[mask_step2].index:
+                        current_wx = wx_vals.loc[idx]
+                        candidates = df[
+                            (wx_vals == current_wx) & 
+                            (wy_vals.isin([1, 2, 3])) & 
+                            inv_y_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wy_vals == 1][col_inv_y].values
+                            val_2 = candidates[wy_vals == 2][col_inv_y].values
+                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_y] = interpolated
+                    
+                    inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
+                    
+                    # Step 3: For w(X) = 0 and w(Y) = 0
+                    mask_step3a = (wx_vals == 0) & (wy_vals == 0) & pd.isna(inv_x_vals)
+                    for idx in df[mask_step3a].index:
+                        candidates = df[
+                            (wy_vals == 0) & 
+                            (wx_vals.isin([1, 2, 3])) & 
+                            inv_x_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wx_vals == 1][col_inv_x].values
+                            val_2 = candidates[wx_vals == 2][col_inv_x].values
+                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_x] = interpolated
+                    
+                    mask_step3b = (wx_vals == 0) & (wy_vals == 0) & pd.isna(inv_y_vals)
+                    for idx in df[mask_step3b].index:
+                        candidates = df[
+                            (wx_vals == 0) & 
+                            (wy_vals.isin([1, 2, 3])) & 
+                            inv_y_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wy_vals == 1][col_inv_y].values
+                            val_2 = candidates[wy_vals == 2][col_inv_y].values
+                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_y] = interpolated
+                
+                # Fill remaining NaN values with linear interpolation
+                numeric_cols = df.select_dtypes(include=[np.number]).columns
+                df[numeric_cols] = df[numeric_cols].interpolate(method='linear', limit_direction='both')
+                cleaned_df = df.copy()
+                
+                # Get export path
+                export_path = excel_export_var.get().strip()
+                if not export_path:
+                    messagebox.showerror("Error", "Please specify export path!")
+                    return
+                
+                # Export to Excel
+                try:
+                    cleaned_df.to_excel(export_path, index=False)
+                    status_label.config(text=f"Cleaned data exported to: {os.path.basename(export_path)}", foreground="green")
+                    messagebox.showinfo("Success", f"Cleaned data exported successfully to:\n{export_path}")
+                except Exception as e:
+                    messagebox.showerror("Export Error", f"Failed to export cleaned Excel file:\n{str(e)}")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to export cleaned data:\n{str(e)}")
+        
+        excel_export_btn = ttk.Button(excel_export_frame, text="Browse", command=browse_excel_export)
+        excel_export_btn.pack(side=tk.RIGHT, padx=5)
+        
+        export_cleaned_btn = ttk.Button(excel_export_frame, text="Export", command=export_cleaned_data)
+        export_cleaned_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Initially hide Excel export frame
+        excel_export_frame.pack_forget()
+        
+        def toggle_excel_export():
+            if clean_fill_var.get():
+                excel_export_frame.pack(fill=tk.X, pady=10, before=output_frame)
+            else:
+                excel_export_frame.pack_forget()
+        
+        clean_fill_var.trace_add("write", lambda *args: toggle_excel_export())
+        
+        # Output settings
+        output_frame = ttk.LabelFrame(main_frame, text="Output Settings", padding="15")
         output_frame.pack(fill=tk.X, pady=10)
         
-        output_var = tk.StringVar(value="liquid_vectors")
-        ttk.Entry(output_frame, textvariable=output_var, width=50).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        # Output directory
+        output_dir_frame = ttk.Frame(output_frame)
+        output_dir_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(output_dir_frame, text="Output Directory:").pack(side=tk.LEFT, padx=5)
+        output_dir_var = tk.StringVar()
+        ttk.Entry(output_dir_frame, textvariable=output_dir_var, width=40).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        def browse_output_dir():
+            dir_path = filedialog.askdirectory(title="Select Output Directory")
+            if dir_path:
+                output_dir_var.set(dir_path)
+        ttk.Button(output_dir_frame, text="Browse", command=browse_output_dir).pack(side=tk.RIGHT, padx=5)
         
-        # Status label
-        status_label = ttk.Label(main_frame, text="Ready to plot", foreground="blue")
-        status_label.pack(pady=10)
+        # Output prefix
+        output_prefix_frame = ttk.Frame(output_frame)
+        output_prefix_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(output_prefix_frame, text="Output Prefix:").pack(side=tk.LEFT, padx=5)
+        output_var = tk.StringVar(value="liquid_vectors")
+        ttk.Entry(output_prefix_frame, textvariable=output_var, width=40).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Image format selection
+        format_frame = ttk.Frame(output_frame)
+        format_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(format_frame, text="Image Format:").pack(side=tk.LEFT, padx=5)
+        image_format_var = tk.StringVar(value="PNG")
+        format_options = ["PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "PDF", "EPS"]
+        format_combo = ttk.Combobox(format_frame, textvariable=image_format_var, values=format_options, 
+                                   state="readonly", width=15)
+        format_combo.pack(side=tk.LEFT, padx=5)
         
         def _standardize_columns(df):
             """Standardize column names"""
@@ -2922,10 +3615,18 @@ Si: 2.0"""
         def plot_vectors():
             """Plot liquidus vectors"""
             try:
-                excel_path = file_var.get()
-                if not excel_path or not os.path.exists(excel_path):
-                    messagebox.showerror("Error", "Please select a valid Excel file!")
-                    return
+                # Get dataset based on solidification mode
+                ds = dataset_var.get()
+                if ds == "Equilibrium":
+                    source_df = self.pandat_p_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P file data found. Please import P file via Import → Pandat to ThermoQ first.")
+                        return
+                else:  # Scheil
+                    source_df = self.pandat_p_s_data
+                    if source_df is None or len(source_df) == 0:
+                        messagebox.showerror("Error", "No P-S file data found. Please import P-S file via Import → Pandat to ThermoQ first.")
+                        return
                 
                 ex = elem_x_var.get().strip()
                 ey = elem_y_var.get().strip()
@@ -2937,25 +3638,211 @@ Si: 2.0"""
                     messagebox.showerror("Error", f"Invalid elements: {ex} or {ey}")
                     return
                 
-                status_label.config(text="Loading data...", foreground="orange")
+                status_label.config(text="Processing data...", foreground="orange")
                 vector_window.update()
                 
-                # Load data
-                df = pd.read_excel(excel_path, header=0)
+                # Create a copy of the source dataframe
+                df = source_df.copy()
                 df = _standardize_columns(df)
+                
+                # Find T column
+                col_t = None
+                for col in df.columns:
+                    if isinstance(col, str) and col.strip().upper() == 'T':
+                        col_t = col
+                        break
+                
+                if col_t is None:
+                    messagebox.showerror("Error", "Temperature column T not found in data!")
+                    return
+                
+                # Find w(*) columns for all elements
+                w_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                w_cols[element] = col
+                
+                # Find dwdT_L(*@LIQUID) columns and calculate 1/dwdT_L(*@LIQUID)
+                dwdt_cols = {}
+                inv_dwdt_cols = {}
+                for col in df.columns:
+                    if isinstance(col, str):
+                        col_upper = col.strip().upper()
+                        # Match dwdT_L(ELEMENT@LIQUID) pattern
+                        match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
+                        if match:
+                            element = match.group(1).capitalize()
+                            if element in PERIODIC_TABLE:
+                                dwdt_cols[element] = col
+                                # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
+                                inv_col_name = f"1/dwdT_L({element}@LIQUID)"
+                                # Convert to numeric and calculate inverse
+                                dwdt_values = pd.to_numeric(df[col], errors='coerce')
+                                # Avoid division by zero
+                                inv_values = np.where(dwdt_values != 0, 1.0 / dwdt_values, np.nan)
+                                df[inv_col_name] = inv_values
+                                inv_dwdt_cols[element] = inv_col_name
+                
+                # Select columns: T, w(*) for all elements
+                selected_cols = [col_t]
+                selected_cols.extend(w_cols.values())
+                selected_cols.extend(inv_dwdt_cols.values())
+                
+                # Create new dataframe with selected columns
+                df = df[selected_cols].copy()
                 df = df.replace(r"^\s*$", np.nan, regex=True).dropna(how="all")
                 
+                # Check if required elements exist
+                if ex not in w_cols:
+                    messagebox.showerror("Error", f"Element {ex} not found in data. Available elements: {', '.join(sorted(w_cols.keys()))}")
+                    return
+                if ey not in w_cols:
+                    messagebox.showerror("Error", f"Element {ey} not found in data. Available elements: {', '.join(sorted(w_cols.keys()))}")
+                    return
+                if ex not in inv_dwdt_cols:
+                    messagebox.showerror("Error", f"Column dwdT_L({ex}@LIQUID) not found in data!")
+                    return
+                if ey not in inv_dwdt_cols:
+                    messagebox.showerror("Error", f"Column dwdT_L({ey}@LIQUID) not found in data!")
+                    return
+                
+                col_wx = w_cols[ex]
+                col_wy = w_cols[ey]
+                col_inv_x = inv_dwdt_cols[ex]
+                col_inv_y = inv_dwdt_cols[ey]
+                
                 # Clean and fill if requested
+                cleaned_df = None
                 if clean_fill_var.get():
                     status_label.config(text="Cleaning and filling data...", foreground="orange")
                     vector_window.update()
-                    # This is a simplified version - full implementation would use process_excel_clean_fill logic
-                    # For now, just do basic interpolation
+                    
+                    # Newton forward difference interpolation for specific cases
+                    def newton_forward_interpolation(f1, f2, f3):
+                        """
+                        Newton forward difference interpolation for x=0 using points at x=1,2,3
+                        Formula: f(0) = 2.5*f(1) - 2*f(2) + 0.5*f(3)
+                        """
+                        if pd.isna(f1) or pd.isna(f2) or pd.isna(f3):
+                            return np.nan
+                        return 2.5 * f1 - 2.0 * f2 + 0.5 * f3
+                    
+                    # Get column names for selected elements
+                    col_wx = w_cols[ex]
+                    col_wy = w_cols[ey]
+                    col_inv_x = inv_dwdt_cols[ex]
+                    col_inv_y = inv_dwdt_cols[ey]
+                    
+                    # Convert to numeric
+                    wx_vals = pd.to_numeric(df[col_wx], errors='coerce')
+                    wy_vals = pd.to_numeric(df[col_wy], errors='coerce')
+                    inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
+                    inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
+                    
+                    # Step 1: For w(X) = 0 and w(Y) ≠ 0, interpolate 1/dwdT_L(X@LIQUID)
+                    # Find rows where w(X) = 0 and w(Y) ≠ 0
+                    mask_step1 = (wx_vals == 0) & (wy_vals != 0) & pd.isna(inv_x_vals)
+                    for idx in df[mask_step1].index:
+                        current_wy = wy_vals.loc[idx]
+                        # Find rows with same w(Y) and w(X) = 1, 2, 3
+                        candidates = df[
+                            (wy_vals == current_wy) & 
+                            (wx_vals.isin([1, 2, 3])) & 
+                            inv_x_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            # Get values at w(X) = 1, 2, 3
+                            val_1 = candidates[wx_vals == 1][col_inv_x].values
+                            val_2 = candidates[wx_vals == 2][col_inv_x].values
+                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_x] = interpolated
+                    
+                    # Update inv_x_vals after step 1
+                    inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
+                    
+                    # Step 2: For w(Y) = 0 and w(X) ≠ 0, interpolate 1/dwdT_L(Y@LIQUID)
+                    # Find rows where w(Y) = 0 and w(X) ≠ 0
+                    mask_step2 = (wy_vals == 0) & (wx_vals != 0) & pd.isna(inv_y_vals)
+                    for idx in df[mask_step2].index:
+                        current_wx = wx_vals.loc[idx]
+                        # Find rows with same w(X) and w(Y) = 1, 2, 3
+                        candidates = df[
+                            (wx_vals == current_wx) & 
+                            (wy_vals.isin([1, 2, 3])) & 
+                            inv_y_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            # Get values at w(Y) = 1, 2, 3
+                            val_1 = candidates[wy_vals == 1][col_inv_y].values
+                            val_2 = candidates[wy_vals == 2][col_inv_y].values
+                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_y] = interpolated
+                    
+                    # Update inv_y_vals after step 2
+                    inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
+                    
+                    # Step 3: For w(X) = 0 and w(Y) = 0, interpolate both
+                    # 3a: For 1/dwdT_L(X@LIQUID), use values from step 1 (w(Y) = 0, w(X) = 1, 2, 3)
+                    mask_step3a = (wx_vals == 0) & (wy_vals == 0) & pd.isna(inv_x_vals)
+                    for idx in df[mask_step3a].index:
+                        # Find rows with w(Y) = 0 and w(X) = 1, 2, 3 (should have values from step 1)
+                        candidates = df[
+                            (wy_vals == 0) & 
+                            (wx_vals.isin([1, 2, 3])) & 
+                            inv_x_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wx_vals == 1][col_inv_x].values
+                            val_2 = candidates[wx_vals == 2][col_inv_x].values
+                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_x] = interpolated
+                    
+                    # 3b: For 1/dwdT_L(Y@LIQUID), use values from step 2 (w(X) = 0, w(Y) = 1, 2, 3)
+                    mask_step3b = (wx_vals == 0) & (wy_vals == 0) & pd.isna(inv_y_vals)
+                    for idx in df[mask_step3b].index:
+                        # Find rows with w(X) = 0 and w(Y) = 1, 2, 3 (should have values from step 2)
+                        candidates = df[
+                            (wx_vals == 0) & 
+                            (wy_vals.isin([1, 2, 3])) & 
+                            inv_y_vals.notna()
+                        ]
+                        if len(candidates) >= 3:
+                            val_1 = candidates[wy_vals == 1][col_inv_y].values
+                            val_2 = candidates[wy_vals == 2][col_inv_y].values
+                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
+                                interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
+                                if not pd.isna(interpolated):
+                                    df.loc[idx, col_inv_y] = interpolated
+                    
+                    # Fill remaining NaN values with linear interpolation for other columns
                     numeric_cols = df.select_dtypes(include=[np.number]).columns
                     df[numeric_cols] = df[numeric_cols].interpolate(method='linear', limit_direction='both')
-                
-                # Find required columns
-                col_wx, col_wy, col_inv_x, col_inv_y = _find_required_columns(df, ex, ey)
+                    cleaned_df = df.copy()
+                    
+                    # Export cleaned Excel if path is specified
+                    excel_export_path = excel_export_var.get().strip()
+                    if excel_export_path:
+                        try:
+                            cleaned_df.to_excel(excel_export_path, index=False)
+                            status_label.config(text=f"Cleaned data exported to: {os.path.basename(excel_export_path)}", foreground="green")
+                            messagebox.showinfo("Success", f"Cleaned data exported successfully to:\n{excel_export_path}")
+                        except Exception as e:
+                            messagebox.showerror("Export Error", f"Failed to export cleaned Excel file:\n{str(e)}")
                 
                 status_label.config(text="Processing data...", foreground="orange")
                 vector_window.update()
@@ -2988,12 +3875,48 @@ Si: 2.0"""
                 x_min, x_max = float(wx.min()), float(wx.max())
                 y_min, y_max = float(wy.min()), float(wy.max())
                 
+                # Get temperature data for 3D plot
+                t_data = pd.to_numeric(df[col_t], errors="coerce")[valid]
+                
                 prefix = output_var.get().strip() or "liquid_vectors"
-                base_path = os.path.dirname(excel_path) or "."
-                base_name = os.path.splitext(os.path.basename(excel_path))[0]
+                # Get output directory
+                output_dir = output_dir_var.get().strip()
+                if output_dir and os.path.exists(output_dir):
+                    base_path = output_dir
+                else:
+                    base_path = "."
+                
+                # Get image format
+                img_format = image_format_var.get().upper()
+                format_ext_map = {
+                    "PNG": "png", "JPEG": "jpg", "GIF": "gif", "BMP": "bmp",
+                    "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "PDF": "pdf", "EPS": "eps"
+                }
+                ext = format_ext_map.get(img_format, "png")
                 
                 status_label.config(text="Generating plots...", foreground="orange")
                 vector_window.update()
+                
+                # Determine save parameters based on format
+                save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
+                if img_format == "PDF":
+                    save_kwargs["format"] = "pdf"
+                elif img_format == "EPS":
+                    save_kwargs["format"] = "eps"
+                elif img_format == "SVG":
+                    save_kwargs["format"] = "svg"
+                elif img_format in ["JPEG", "JPG"]:
+                    save_kwargs["format"] = "jpeg"
+                elif img_format == "TIFF":
+                    save_kwargs["format"] = "tiff"
+                elif img_format == "WEBP":
+                    save_kwargs["format"] = "webp"
+                elif img_format == "BMP":
+                    save_kwargs["format"] = "bmp"
+                elif img_format == "GIF":
+                    save_kwargs["format"] = "gif"
+                else:  # PNG default
+                    save_kwargs["format"] = "png"
                 
                 # Figure 1: U arrows (horizontal)
                 fig1, ax1 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -3004,12 +3927,13 @@ Si: 2.0"""
                 ax1.set_xlabel(col_wx)
                 ax1.set_ylabel(col_wy)
                 ax1.set_title(f"U arrows (scaled by ratio to min of 1/dwdT_L({ex}@LIQUID))")
-                ax1.grid(True, ls=":", alpha=0.4)
+                ax1.grid(False)
                 ax1.set_aspect("equal", adjustable="box")
                 fig1.tight_layout()
-                out1 = os.path.join(base_path, f"{prefix}_{ex}_horizontal.png")
-                fig1.savefig(out1)
+                out1 = os.path.join(base_path, f"{prefix}_{ex}_horizontal.{ext}")
+                fig1.savefig(out1, **save_kwargs)
                 plt.close(fig1)
+                self.open_file_and_offer_save_as(out1, vector_window)
                 
                 # Figure 2: V arrows (vertical)
                 fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -3020,12 +3944,13 @@ Si: 2.0"""
                 ax2.set_xlabel(col_wx)
                 ax2.set_ylabel(col_wy)
                 ax2.set_title(f"V arrows (scaled by ratio to min of 1/dwdT_L({ey}@LIQUID))")
-                ax2.grid(True, ls=":", alpha=0.4)
+                ax2.grid(False)
                 ax2.set_aspect("equal", adjustable="box")
                 fig2.tight_layout()
-                out2 = os.path.join(base_path, f"{prefix}_{ey}_vertical.png")
-                fig2.savefig(out2)
+                out2 = os.path.join(base_path, f"{prefix}_{ey}_vertical.{ext}")
+                fig2.savefig(out2, **save_kwargs)
                 plt.close(fig2)
+                self.open_file_and_offer_save_as(out2, vector_window)
                 
                 # Figure 3: Resultant Z vector
                 fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -3036,22 +3961,155 @@ Si: 2.0"""
                 ax3.set_xlabel(col_wx)
                 ax3.set_ylabel(col_wy)
                 ax3.set_title(f"Resultant Z = vector sum of U and V (scaled)")
-                ax3.grid(True, ls=":", alpha=0.4)
+                ax3.grid(False)
                 ax3.set_aspect("equal", adjustable="box")
                 fig3.tight_layout()
-                out3 = os.path.join(base_path, f"{prefix}_Z_resultant.png")
-                fig3.savefig(out3)
+                out3 = os.path.join(base_path, f"{prefix}_Z_resultant.{ext}")
+                fig3.savefig(out3, **save_kwargs)
                 plt.close(fig3)
+                self.open_file_and_offer_save_as(out3, vector_window)
                 
-                status_label.config(
-                    text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}",
-                    foreground="green"
-                )
-                messagebox.showinfo("Success", 
-                    f"Vector plots generated successfully!\n\n"
-                    f"U horizontal: {out1}\n"
-                    f"V vertical: {out2}\n"
-                    f"Z resultant: {out3}")
+                # Figure 4: 3D plot with Z vectors on liquidus surface
+                if len(t_data) > 0 and not t_data.isna().all():
+                    try:
+                        # Create smooth liquidus surface
+                        status_label.config(text="Creating 3D surface plot...", foreground="orange")
+                        vector_window.update()
+                        
+                        # Use create_smooth_surface to get smooth T surface
+                        xi = np.linspace(x_min, x_max, 50)
+                        yi = np.linspace(y_min, y_max, 50)
+                        xi_grid, yi_grid = np.meshgrid(xi, yi)
+                        
+                        # Get smooth surface for temperature
+                        t_smooth = self.create_smooth_surface(
+                            wx.values, wy.values, t_data.values, 
+                            grid_resolution=50, smoothness=100
+                        )
+                        
+                        if t_smooth is not None:
+                            xi_grid_smooth, yi_grid_smooth, zi_grid = t_smooth
+                            
+                            # Create 3D plot
+                            fig4 = plt.figure(figsize=(10, 8), dpi=140)
+                            ax4 = fig4.add_subplot(111, projection='3d')
+                            
+                            # Plot liquidus surface
+                            surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, 
+                                                   cmap='coolwarm', alpha=0.7, linewidth=0, antialiased=True)
+                            
+                            # Plot Z vectors on the surface
+                            # For each data point, find the corresponding Z value on the surface
+                            z_surface_values = []
+                            for i in range(len(wx.values)):
+                                # Find closest grid point
+                                x_idx = np.argmin(np.abs(xi_grid_smooth[0, :] - wx.values[i]))
+                                y_idx = np.argmin(np.abs(yi_grid_smooth[:, 0] - wy.values[i]))
+                                z_surf = zi_grid[y_idx, x_idx]
+                                z_surface_values.append(z_surf)
+                            
+                            z_surface_values = np.array(z_surface_values)
+                            
+                            # Calculate 3D vector components
+                            # Scale vectors appropriately for 3D display
+                            scale_factor = 0.1 * (t_data.max() - t_data.min()) / max(np.abs(z_dx).max(), np.abs(z_dy).max())
+                            
+                            # Plot vectors on surface
+                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):  # Sample points for clarity
+                                x_start = wx.values[i]
+                                y_start = wy.values[i]
+                                z_start = z_surface_values[i]
+                                
+                                dx_3d = z_dx[i] * scale_factor
+                                dy_3d = z_dy[i] * scale_factor
+                                # Estimate dz based on gradient (simplified)
+                                dz_3d = 0  # Vectors are primarily in x-y plane
+                                
+                                ax4.quiver(x_start, y_start, z_start, 
+                                          dx_3d, dy_3d, dz_3d,
+                                          color='green', arrow_length_ratio=0.3, linewidth=1.5)
+                            
+                            ax4.set_xlabel(col_wx)
+                            ax4.set_ylabel(col_wy)
+                            ax4.set_zlabel('T (Temperature)')
+                            ax4.set_title(f'Z Vectors on Liquidus Surface')
+                            
+                            fig4.tight_layout()
+                            out4 = os.path.join(base_path, f"{prefix}_Z_3D_surface.{ext}")
+                            fig4.savefig(out4, **save_kwargs)
+                            plt.close(fig4)
+                            self.open_file_and_offer_save_as(out4, vector_window)
+                            
+                            status_label.config(
+                                text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n{os.path.basename(out4)}",
+                                foreground="green"
+                            )
+                            messagebox.showinfo("Success", 
+                                f"Vector plots generated successfully!\n\n"
+                                f"U horizontal: {out1}\n"
+                                f"V vertical: {out2}\n"
+                                f"Z resultant: {out3}\n"
+                                f"Z 3D surface: {out4}")
+                        else:
+                            # Fallback: simple 3D scatter with vectors
+                            fig4 = plt.figure(figsize=(10, 8), dpi=140)
+                            ax4 = fig4.add_subplot(111, projection='3d')
+                            
+                            # Plot temperature as surface (scatter)
+                            ax4.scatter(wx.values, wy.values, t_data.values, 
+                                      c=t_data.values, cmap='coolwarm', alpha=0.6, s=20)
+                            
+                            # Plot vectors
+                            scale_factor = 0.1 * (t_data.max() - t_data.min()) / max(np.abs(z_dx).max(), np.abs(z_dy).max())
+                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):
+                                ax4.quiver(wx.values[i], wy.values[i], t_data.values[i],
+                                          z_dx[i] * scale_factor, z_dy[i] * scale_factor, 0,
+                                          color='green', arrow_length_ratio=0.3, linewidth=1.5)
+                            
+                            ax4.set_xlabel(col_wx)
+                            ax4.set_ylabel(col_wy)
+                            ax4.set_zlabel('T (Temperature)')
+                            ax4.set_title(f'Z Vectors on Liquidus Surface')
+                            
+                            fig4.tight_layout()
+                            out4 = os.path.join(base_path, f"{prefix}_Z_3D_surface.{ext}")
+                            fig4.savefig(out4, **save_kwargs)
+                            plt.close(fig4)
+                            self.open_file_and_offer_save_as(out4, vector_window)
+                            
+                            status_label.config(
+                                text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n{os.path.basename(out4)}",
+                                foreground="green"
+                            )
+                            messagebox.showinfo("Success", 
+                                f"Vector plots generated successfully!\n\n"
+                                f"U horizontal: {out1}\n"
+                                f"V vertical: {out2}\n"
+                                f"Z resultant: {out3}\n"
+                                f"Z 3D surface: {out4}")
+                    except Exception as e:
+                        # If 3D plot fails, just show the 3 regular plots
+                        status_label.config(
+                            text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n(3D plot failed: {str(e)})",
+                            foreground="orange"
+                        )
+                        messagebox.showwarning("Partial Success", 
+                            f"Vector plots generated, but 3D surface plot failed:\n{str(e)}\n\n"
+                            f"U horizontal: {out1}\n"
+                            f"V vertical: {out2}\n"
+                            f"Z resultant: {out3}")
+                else:
+                    # No temperature data available
+                    status_label.config(
+                        text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}",
+                        foreground="green"
+                    )
+                    messagebox.showinfo("Success", 
+                        f"Vector plots generated successfully!\n\n"
+                        f"U horizontal: {out1}\n"
+                        f"V vertical: {out2}\n"
+                        f"Z resultant: {out3}\n\n"
+                        f"Note: 3D surface plot skipped (no temperature data)")
                 
             except Exception as e:
                 status_label.config(text=f"Error: {str(e)}", foreground="red")
