@@ -11,7 +11,7 @@ l-c
 c-e
 
 s-a-v 1 t 300 2000 12.5
-save_workspace Al0.00Fe1.00Si_np-T.POL y
+save_workspace Al0.00Mg1.00Si_np-T.POL y
 step normal
 
 post
@@ -19,4 +19,4 @@ post
 s-d-a x t
 s-d-a y np(liquid)
 
-make file Al0.00Fe1.00Si_np-T.exp
+make file Al0.00Mg1.00Si_np-T.exp

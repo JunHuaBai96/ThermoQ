@@ -343,7 +343,7 @@ class ThermoQGUI:
         self.plot_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Plot", menu=self.plot_menu)
         self.plot_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
-        self.plot_menu.add_command(label="Plot Q Values", command=self.open_q_value_plotter)
+        self.plot_menu.add_command(label="Plot Qtrue Values", command=self.open_q_value_plotter)
         self.plot_menu.add_command(label="Plot Liquidus Vectors", command=self.open_liquidus_vector_plotter)
         
         self.tools_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -433,28 +433,82 @@ class ThermoQGUI:
             results = {}
             errors = []
             
-            # 1. Calculate Q (from P.xlsx or P-S.xlsx)
+            # 1. Calculate Qtrue and Components (from P.xlsx or P-S.xlsx)
             q_lever = None
             q_scheil = None
             
-            # Q from P.xlsx (Lever/Equilibrium)
+            # Qtrue and Components from P.xlsx (Lever/Equilibrium)
             try:
                 p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
+                row = self.pandat_p_data.iloc[p_idx]
+                
+                # Qtrue
                 if '-T//fw(@FCC_A1)' in self.pandat_p_data.columns:
-                    q_lever = self.pandat_p_data.iloc[p_idx]['-T//fw(@FCC_A1)']
-                    results['Q (Lever)'] = float(q_lever)
+                    q_lever = row['-T//fw(@FCC_A1)']
+                    results['Qtrue (Lever)'] = float(q_lever)
+                
+                # Components (Mg, Si)
+                for elem in ['MG', 'SI']:
+                    col_w = f'w({elem})'
+                    col_fcc = f'w({elem}@FCC_A1)'
+                    col_liq = f'w({elem}@LIQUID)'
+                    col_slope = f'dwdT_L({elem}@LIQUID)'
+                    
+                    if all(c in self.pandat_p_data.columns for c in [col_w, col_fcc, col_liq, col_slope]):
+                        w = float(row[col_w])
+                        w_fcc = float(row[col_fcc])
+                        w_liq = float(row[col_liq])
+                        slope = float(row[col_slope])
+                        
+                        if w_liq != 0 and slope != 0:
+                            ratio = w_fcc / w_liq
+                            # Q(*) = (ratio - 1) * (1/slope) * 0.01 * w
+                            q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
+                            results[f'Q ({elem} Lever)'] = q_comp
+                            
+                            # P(*) = Q(*) / ratio
+                            if ratio != 0:
+                                p_comp = q_comp / ratio
+                                results[f'P ({elem} Lever)'] = p_comp
             except Exception as e:
-                errors.append(f"Q (Lever) calculation failed: {str(e)}")
+                errors.append(f"Lever calculation failed: {str(e)}")
             
-            # Q from P-S.xlsx (Scheil)
+            # Qtrue and Components from P-S.xlsx (Scheil)
             if self.pandat_p_s_data is not None:
                 try:
                     p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
+                    row_s = self.pandat_p_s_data.iloc[p_s_idx]
+                    
+                    # Qtrue
                     if '-T//fw(@FCC_A1)' in self.pandat_p_s_data.columns:
-                        q_scheil = self.pandat_p_s_data.iloc[p_s_idx]['-T//fw(@FCC_A1)']
-                        results['Q (Scheil)'] = float(q_scheil)
+                        q_scheil = row_s['-T//fw(@FCC_A1)']
+                        results['Qtrue (Scheil)'] = float(q_scheil)
+                    
+                    # Components (Mg, Si)
+                    for elem in ['MG', 'SI']:
+                        col_w = f'w({elem})'
+                        col_fcc = f'w({elem}@FCC_A1)'
+                        col_liq = f'w({elem}@LIQUID)'
+                        col_slope = f'dwdT_L({elem}@LIQUID)'
+                        
+                        if all(c in self.pandat_p_s_data.columns for c in [col_w, col_fcc, col_liq, col_slope]):
+                            w = float(row_s[col_w])
+                            w_fcc = float(row_s[col_fcc])
+                            w_liq = float(row_s[col_liq])
+                            slope = float(row_s[col_slope])
+                            
+                            if w_liq != 0 and slope != 0:
+                                ratio = w_fcc / w_liq
+                                # Q(*) = (ratio - 1) * (1/slope) * 0.01 * w
+                                q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
+                                results[f'Q ({elem} Scheil)'] = q_comp
+                                
+                                # P(*) = Q(*) / ratio
+                                if ratio != 0:
+                                    p_comp = q_comp / ratio
+                                    results[f'P ({elem} Scheil)'] = p_comp
                 except Exception as e:
-                    errors.append(f"Q (Scheil) calculation failed: {str(e)}")
+                    errors.append(f"Scheil calculation failed: {str(e)}")
             
             # 2. Calculate ΔT = T(P.xlsx) - T(Ts.xlsx)
             try:
@@ -490,10 +544,22 @@ class ThermoQGUI:
             result_msg = "Calculation Results:\n\n"
             result_msg += f"Composition: {', '.join([f'{elem}: {comp:.2f}wt%' for elem, comp in wt_composition.items()])}\n\n"
             
-            if 'Q (Lever)' in results:
-                result_msg += f"Q (Lever): {results['Q (Lever)']:.4f}\n"
-            if 'Q (Scheil)' in results:
-                result_msg += f"Q (Scheil): {results['Q (Scheil)']:.4f}\n"
+            if 'Qtrue (Lever)' in results:
+                result_msg += f"Qtrue (Lever): {results['Qtrue (Lever)']:.4f}\n"
+            if 'Qtrue (Scheil)' in results:
+                result_msg += f"Qtrue (Scheil): {results['Qtrue (Scheil)']:.4f}\n"
+            
+            # Add Component Results
+            for elem in ['MG', 'SI']:
+                if f'Q ({elem} Lever)' in results:
+                    result_msg += f"Q ({elem} Lever): {results[f'Q ({elem} Lever)']:.4f}\n"
+                if f'P ({elem} Lever)' in results:
+                    result_msg += f"P ({elem} Lever): {results[f'P ({elem} Lever)']:.4f}\n"
+                if f'Q ({elem} Scheil)' in results:
+                    result_msg += f"Q ({elem} Scheil): {results[f'Q ({elem} Scheil)']:.4f}\n"
+                if f'P ({elem} Scheil)' in results:
+                    result_msg += f"P ({elem} Scheil): {results[f'P ({elem} Scheil)']:.4f}\n"
+            
             if 'ΔT' in results:
                 result_msg += f"ΔT: {results['ΔT']:.4f}\n"
             if 'ΔTs' in results:
@@ -560,15 +626,27 @@ class ThermoQGUI:
         if results:
             results_text.insert("1.0", "Calculation Results:\n\n")
             
-            if 'Q (Lever)' in results:
-                results_text.insert(tk.END, f"Q (Lever): {results['Q (Lever)']:.6f}\n")
+            if 'Qtrue (Lever)' in results:
+                results_text.insert(tk.END, f"Qtrue (Lever): {results['Qtrue (Lever)']:.6f}\n")
             else:
-                results_text.insert(tk.END, "Q (Lever): Not available\n")
+                results_text.insert(tk.END, "Qtrue (Lever): Not available\n")
             
-            if 'Q (Scheil)' in results:
-                results_text.insert(tk.END, f"Q (Scheil): {results['Q (Scheil)']:.6f}\n")
+            if 'Qtrue (Scheil)' in results:
+                results_text.insert(tk.END, f"Qtrue (Scheil): {results['Qtrue (Scheil)']:.6f}\n")
             else:
-                results_text.insert(tk.END, "Q (Scheil): Not available\n")
+                results_text.insert(tk.END, "Qtrue (Scheil): Not available\n")
+            
+            results_text.insert(tk.END, "\nComponent Results:\n")
+            for elem in ['MG', 'SI']:
+                if f'Q ({elem} Lever)' in results:
+                    results_text.insert(tk.END, f"Q ({elem} Lever): {results[f'Q ({elem} Lever)']:.6f}\n")
+                if f'P ({elem} Lever)' in results:
+                    results_text.insert(tk.END, f"P ({elem} Lever): {results[f'P ({elem} Lever)']:.6f}\n")
+                if f'Q ({elem} Scheil)' in results:
+                    results_text.insert(tk.END, f"Q ({elem} Scheil): {results[f'Q ({elem} Scheil)']:.6f}\n")
+                if f'P ({elem} Scheil)' in results:
+                    results_text.insert(tk.END, f"P ({elem} Scheil): {results[f'P ({elem} Scheil)']:.6f}\n")
+            results_text.insert(tk.END, "\n")
             
             if 'ΔT' in results:
                 results_text.insert(tk.END, f"ΔT: {results['ΔT']:.6f}\n")
@@ -1055,6 +1133,24 @@ class ThermoQGUI:
         )
         smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
+        # 3D Static view (camera) settings
+        view_frame = ttk.LabelFrame(controls, text="3D Static View (Rotation Angles)", padding="10")
+        view_frame.pack(fill=tk.X, pady=5)
+        elev_var = tk.DoubleVar(value=30.0)
+        azim_var = tk.DoubleVar(value=-60.0)
+
+        elev_row = ttk.Frame(view_frame)
+        elev_row.pack(fill=tk.X, pady=2)
+        ttk.Label(elev_row, text="Elevation (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(elev_row, textvariable=elev_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(elev_row, text="(0–90)").pack(side=tk.LEFT, padx=5)
+
+        azim_row = ttk.Frame(view_frame)
+        azim_row.pack(fill=tk.X, pady=2)
+        ttk.Label(azim_row, text="Azimuth (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(azim_row, textvariable=azim_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(azim_row, text="(-180–180)").pack(side=tk.LEFT, padx=5)
+
         # Output settings frame
         output_settings_frame = ttk.LabelFrame(controls, text="Output Settings", padding="10")
         output_settings_frame.pack(fill=tk.X, pady=5)
@@ -1250,6 +1346,11 @@ class ThermoQGUI:
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
+                    # Apply user-selected view angles for 3D Static
+                    try:
+                        ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
+                    except Exception:
+                        pass
                     
                     # Get format and extension
                     img_format = image_format_var.get().upper()
@@ -1604,21 +1705,21 @@ class ThermoQGUI:
     def open_q_value_plotter(self):
         """Open Q value plotter window"""
         plot_window = tk.Toplevel(self.root)
-        plot_window.title("Plot Q Values")
+        plot_window.title("Plot Qtrue Values")
         plot_window.geometry("850x900")
         plot_window.grab_set()
 
         main_frame = ttk.Frame(plot_window, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        title_label = ttk.Label(main_frame, text="Q Value Plotter", font=('Arial', 14, 'bold'))
+        title_label = ttk.Label(main_frame, text="Qtrue Value Plotter", font=('Arial', 14, 'bold'))
         title_label.pack(pady=(0, 15))
 
         info_label = ttk.Label(
             main_frame,
             text=(
-                "Plot Q values (-T//fw(@FCC_A1)) using imported Pandat data.\n"
-                "Select X and Y elements to plot Q values.\n"
+                "Plot Qtrue values (-T//fw(@FCC_A1)) using imported Pandat data.\n"
+                "Select X and Y elements to plot Qtrue values.\n"
                 "Equilibrium/Lever: Use P.xlsx; Scheil: Use P-S.xlsx."
             ),
             wraplength=700,
@@ -1680,6 +1781,24 @@ class ThermoQGUI:
             command=_on_smoothness_change
         )
         smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # 3D Static view (camera) settings
+        view_frame = ttk.LabelFrame(controls, text="3D Static View (Rotation Angles)", padding="10")
+        view_frame.pack(fill=tk.X, pady=5)
+        elev_var = tk.DoubleVar(value=30.0)
+        azim_var = tk.DoubleVar(value=-60.0)
+
+        elev_row = ttk.Frame(view_frame)
+        elev_row.pack(fill=tk.X, pady=2)
+        ttk.Label(elev_row, text="Elevation (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(elev_row, textvariable=elev_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(elev_row, text="(0–90)").pack(side=tk.LEFT, padx=5)
+
+        azim_row = ttk.Frame(view_frame)
+        azim_row.pack(fill=tk.X, pady=2)
+        ttk.Label(azim_row, text="Azimuth (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(azim_row, textvariable=azim_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(azim_row, text="(-180–180)").pack(side=tk.LEFT, padx=5)
 
         # Output settings frame
         output_settings_frame = ttk.LabelFrame(controls, text="Output Settings", padding="10")
@@ -1867,6 +1986,11 @@ class ThermoQGUI:
                     ax.set_xlabel(f"w({ex}) (%)")
                     ax.set_ylabel(f"w({ey}) (%)")
                     ax.set_zlabel(label_z)
+                    # Apply user-selected view angles for 3D Static
+                    try:
+                        ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
+                    except Exception:
+                        pass
                     out_path = f"{base}_3d.png"
                     plt.savefig(out_path, dpi=300, bbox_inches='tight')
                     plt.close()
@@ -2341,7 +2465,7 @@ Si: 2.0"""
         info_label.pack(pady=(0, 20))
         
         # Template files selection
-        template0_frame = ttk.LabelFrame(main_frame, text="Template0 File (Header)", padding="10")
+        template0_frame = ttk.LabelFrame(main_frame, text="Template0 File (Complete TCM for single point calculation)", padding="10")
         template0_frame.pack(fill=tk.X, pady=5)
         
         template0_var = tk.StringVar()
@@ -2350,16 +2474,15 @@ Si: 2.0"""
                   command=lambda: template0_var.set(filedialog.askopenfilename(
                       title="Select Template0 File", filetypes=[("Text files", "*.txt"), ("All files", "*.*")]))).pack(side=tk.RIGHT, padx=5)
         
-        template_frame = ttk.LabelFrame(main_frame, text="Template File (with placeholders like %Element%)", padding="10")
+        template_frame = ttk.LabelFrame(main_frame, text="Template File (Loop body)", padding="10")
         template_frame.pack(fill=tk.X, pady=5)
         
         template_var = tk.StringVar()
         ttk.Entry(template_frame, textvariable=template_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         ttk.Button(template_frame, text="Browse", 
-                  command=lambda: template_var.set(filedialog.askopenfilename(
-                      title="Select Template File", filetypes=[("Text files", "*.txt"), ("All files", "*.*")]))).pack(side=tk.RIGHT, padx=5)
+                  command=lambda: browse_template()).pack(side=tk.RIGHT, padx=5)
         
-        template1_frame = ttk.LabelFrame(main_frame, text="Template1 File (Footer)", padding="10")
+        template1_frame = ttk.LabelFrame(main_frame, text="Template1 File (Optional - TCM for abnormal point calculation)", padding="10")
         template1_frame.pack(fill=tk.X, pady=5)
         
         template1_var = tk.StringVar()
@@ -2416,6 +2539,62 @@ Si: 2.0"""
         step_var = tk.StringVar(value="0.01")
         ttk.Entry(add_element_frame, textvariable=step_var, width=10).pack(side=tk.LEFT, padx=5)
         
+        # State for locked elements
+        generator_state = {'allowed_elements': None}
+        
+        def parse_template(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Find all placeholders like %Element%
+                matches = re.findall(r'%([A-Za-z]+)%', content)
+                
+                found_elements = set()
+                for m in matches:
+                    el = m.title()
+                    if el in PERIODIC_TABLE:
+                        found_elements.add(el)
+                
+                if not found_elements:
+                    generator_state['allowed_elements'] = None
+                    element_combo.config(state='normal', values=sorted(PERIODIC_TABLE.keys()))
+                    messagebox.showinfo("Template Info", "No element placeholders (like %Al%) found in template.")
+                    return
+
+                # Lock elements
+                generator_state['allowed_elements'] = sorted(list(found_elements))
+                
+                # Clear existing
+                for item in elements_tree.get_children():
+                    elements_tree.delete(item)
+                
+                # Auto-populate
+                for el in generator_state['allowed_elements']:
+                    elements_tree.insert("", "end", values=(el, 0.0, 1.0, 0.01))
+                
+                # Update UI
+                element_combo.set("")
+                element_combo.config(values=generator_state['allowed_elements'])
+                if generator_state['allowed_elements']:
+                    element_combo.set(generator_state['allowed_elements'][0])
+                
+                messagebox.showinfo("Template Loaded", 
+                    f"Found elements: {', '.join(generator_state['allowed_elements'])}\n\n"
+                    "Element selection has been locked to these elements.\n"
+                    "Please configure Min/Max/Step for each.")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to parse template: {str(e)}")
+
+        def browse_template():
+            file_path = filedialog.askopenfilename(
+                title="Select Template File", filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+            if file_path:
+                template_var.set(file_path)
+                parse_template(file_path)
+
         def add_element_config():
             element = element_var.get().strip()
             try:
@@ -2427,6 +2606,12 @@ Si: 2.0"""
                     messagebox.showerror("Error", f"Invalid element: {element}")
                     return
                 
+                # Check lock
+                if generator_state['allowed_elements'] is not None:
+                    if element not in generator_state['allowed_elements']:
+                        messagebox.showerror("Error", f"Element {element} is not in the template!\nAllowed: {', '.join(generator_state['allowed_elements'])}")
+                        return
+
                 if min_val < 0 or max_val > 1 or min_val > max_val:
                     messagebox.showerror("Error", "Invalid range! Min should be >= 0, Max should be <= 1, and Min < Max")
                     return
@@ -2436,13 +2621,21 @@ Si: 2.0"""
                     return
                 
                 # Check if element already exists
+                existing_item = None
                 for item in elements_tree.get_children():
                     if elements_tree.item(item)['values'][0] == element:
-                        messagebox.showwarning("Warning", f"Element {element} already added!")
-                        return
+                        existing_item = item
+                        break
                 
-                elements_tree.insert("", "end", values=(element, min_val, max_val, step_val))
-                element_var.set("")
+                if existing_item:
+                    # Update existing
+                    elements_tree.item(existing_item, values=(element, min_val, max_val, step_val))
+                else:
+                    elements_tree.insert("", "end", values=(element, min_val, max_val, step_val))
+                
+                if generator_state['allowed_elements'] is None:
+                    element_var.set("")
+                
                 min_var.set("0.0")
                 max_var.set("1.0")
                 step_var.set("0.01")
@@ -2450,9 +2643,20 @@ Si: 2.0"""
             except ValueError:
                 messagebox.showerror("Error", "Please enter valid numbers for Min, Max, and Step!")
         
+        def remove_element_config():
+            if not elements_tree.selection():
+                return
+            
+            # Check lock
+            if generator_state['allowed_elements'] is not None:
+                messagebox.showwarning("Locked", "Cannot remove elements when locked by template.\nYou can only modify their ranges.")
+                return
+                
+            elements_tree.delete(elements_tree.selection()[0])
+
         ttk.Button(add_element_frame, text="Add Element", command=add_element_config).pack(side=tk.LEFT, padx=10)
         ttk.Button(add_element_frame, text="Remove Selected", 
-                  command=lambda: elements_tree.delete(elements_tree.selection()[0]) if elements_tree.selection() else None).pack(side=tk.LEFT, padx=5)
+                  command=remove_element_config).pack(side=tk.LEFT, padx=5)
         
         # Constraints
         constraints_frame = ttk.LabelFrame(main_frame, text="Constraints (Optional)", padding="10")
@@ -2498,9 +2702,7 @@ Si: 2.0"""
                     messagebox.showerror("Error", "Please select a valid Template file!")
                     return
                 
-                if not template1_file or not os.path.exists(template1_file):
-                    messagebox.showerror("Error", "Please select a valid Template1 file!")
-                    return
+                # Template1 is optional
                 
                 if not output_file:
                     messagebox.showerror("Error", "Please specify an output file!")
@@ -2583,10 +2785,11 @@ Si: 2.0"""
                         status_label.config(text=f"Processing... {idx + 1}/{total} combinations", foreground="orange")
                         generator_window.update()
                 
-                # Add template1
-                out.append('\n')
-                with open(template1_file, "r", encoding="utf-8") as f1:
-                    out.extend(f1.readlines())
+                # Add template1 (optional)
+                if template1_file and os.path.exists(template1_file):
+                    out.append('\n')
+                    with open(template1_file, "r", encoding="utf-8") as f1:
+                        out.extend(f1.readlines())
                 
                 # Write output file
                 with open(output_file, 'w', encoding="utf-8") as fp:
@@ -2610,7 +2813,7 @@ Si: 2.0"""
         """Open Thermo-calc results extractor tool"""
         processor_window = tk.Toplevel(self.root)
         processor_window.title("Extract Thermo-calc Results")
-        processor_window.geometry("800x600")
+        processor_window.geometry("800x800")
         processor_window.grab_set()  # Make window modal
         
         # Create main frame
@@ -2641,7 +2844,7 @@ Si: 2.0"""
         pattern_frame.pack(fill=tk.X, pady=10)
         
         ttk.Label(pattern_frame, text="Pattern:").pack(side=tk.LEFT, padx=5)
-        pattern_var = tk.StringVar(value=r"Al(\d+\.\d+)Fe(\d+\.\d+)Si_np-T\.exp")
+        pattern_var = tk.StringVar(value=r"Al(\d+\.\d+)Mg(\d+\.\d+)Si_np-T\.exp")
         pattern_entry = ttk.Entry(pattern_frame, textvariable=pattern_var, width=50)
         pattern_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
@@ -2824,7 +3027,49 @@ Si: 2.0"""
                 if pattern and len(element_fractions) > 0:
                     # Determine column names based on pattern groups
                     num_groups = len(element_fractions)
-                    columns = [f"Element_{i+1}_fraction" for i in range(num_groups)]
+                    
+                    # Try to extract element names from pattern string
+                    element_names = []
+                    try:
+                        p_str = pattern_str
+                        ptr = 0
+                        while ptr < len(p_str):
+                            if p_str[ptr] == '(':
+                                # Check for escaped parenthesis
+                                if ptr > 0 and p_str[ptr-1] == '\\':
+                                    ptr += 1
+                                    continue
+                                # Check for non-capturing group
+                                if ptr + 2 < len(p_str) and p_str[ptr+1:ptr+3] == '?:':
+                                    ptr += 1
+                                    continue
+                                
+                                # Found a capturing group start, look backwards for element name
+                                back_ptr = ptr - 1
+                                # Skip non-alpha chars immediately preceding (e.g., =, space, _)
+                                while back_ptr >= 0 and not p_str[back_ptr].isalpha():
+                                    back_ptr -= 1
+                                
+                                # Collect alpha chars
+                                end_name = back_ptr
+                                while back_ptr >= 0 and p_str[back_ptr].isalpha():
+                                    back_ptr -= 1
+                                
+                                start_name = back_ptr + 1
+                                if start_name <= end_name:
+                                    name = p_str[start_name:end_name+1]
+                                    element_names.append(name)
+                                else:
+                                    element_names.append(f"Element_{len(element_names)+1}")
+                            ptr += 1
+                    except Exception:
+                        pass
+
+                    if len(element_names) >= num_groups:
+                         columns = [f"w({element_names[i]})" for i in range(num_groups)]
+                    else:
+                         columns = [f"w(Element_{i+1})" for i in range(num_groups)]
+                         
                     columns.extend(["Liquidus_Temperature", "Solidus_Temperature", "Melting_Range"])
                 else:
                     columns = ["Liquidus_Temperature", "Solidus_Temperature", "Melting_Range"]
@@ -3104,11 +3349,46 @@ Si: 2.0"""
         
         vector_window = tk.Toplevel(self.root)
         vector_window.title("Plot Liquidus Vectors")
-        vector_window.geometry("900x950")
+        vector_window.geometry("800x800")
         vector_window.grab_set()  # Make window modal
         
-        # Create main frame
-        main_frame = ttk.Frame(vector_window, padding="20")
+        # Create scrollable frame
+        canvas = tk.Canvas(vector_window)
+        scrollbar = ttk.Scrollbar(vector_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind mouse wheel to canvas (Windows and Mac)
+        def _on_mousewheel(event):
+            if platform.system() == 'Windows':
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            elif platform.system() == 'Darwin':  # Mac
+                canvas.yview_scroll(int(-1*event.delta), "units")
+            else:  # Linux
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
+        
+        # Bind mouse wheel events
+        if platform.system() == 'Linux':
+            canvas.bind_all("<Button-4>", _on_mousewheel)
+            canvas.bind_all("<Button-5>", _on_mousewheel)
+        else:
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Create main frame inside scrollable frame
+        main_frame = ttk.Frame(scrollable_frame, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Title
@@ -3438,9 +3718,11 @@ Si: 2.0"""
                             inv_x_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wx_vals == 1][col_inv_x].values
-                            val_2 = candidates[wx_vals == 2][col_inv_x].values
-                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wx = pd.to_numeric(candidates[col_wx], errors='coerce')
+                            val_1 = candidates[candidates_wx == 1][col_inv_x].values
+                            val_2 = candidates[candidates_wx == 2][col_inv_x].values
+                            val_3 = candidates[candidates_wx == 3][col_inv_x].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3458,9 +3740,11 @@ Si: 2.0"""
                             inv_y_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wy_vals == 1][col_inv_y].values
-                            val_2 = candidates[wy_vals == 2][col_inv_y].values
-                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wy = pd.to_numeric(candidates[col_wy], errors='coerce')
+                            val_1 = candidates[candidates_wy == 1][col_inv_y].values
+                            val_2 = candidates[candidates_wy == 2][col_inv_y].values
+                            val_3 = candidates[candidates_wy == 3][col_inv_y].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3477,9 +3761,11 @@ Si: 2.0"""
                             inv_x_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wx_vals == 1][col_inv_x].values
-                            val_2 = candidates[wx_vals == 2][col_inv_x].values
-                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wx = pd.to_numeric(candidates[col_wx], errors='coerce')
+                            val_1 = candidates[candidates_wx == 1][col_inv_x].values
+                            val_2 = candidates[candidates_wx == 2][col_inv_x].values
+                            val_3 = candidates[candidates_wx == 3][col_inv_x].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3493,9 +3779,11 @@ Si: 2.0"""
                             inv_y_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wy_vals == 1][col_inv_y].values
-                            val_2 = candidates[wy_vals == 2][col_inv_y].values
-                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wy = pd.to_numeric(candidates[col_wy], errors='coerce')
+                            val_1 = candidates[candidates_wy == 1][col_inv_y].values
+                            val_2 = candidates[candidates_wy == 2][col_inv_y].values
+                            val_3 = candidates[candidates_wy == 3][col_inv_y].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3539,6 +3827,161 @@ Si: 2.0"""
                 excel_export_frame.pack_forget()
         
         clean_fill_var.trace_add("write", lambda *args: toggle_excel_export())
+        
+        # Visualization options for Z vectors on liquidus surface
+        viz_frame = ttk.LabelFrame(main_frame, text="Visualization (Z Vectors on Liquidus Surface)", padding="15")
+        viz_frame.pack(fill=tk.X, pady=10)
+        
+        viz_var = tk.StringVar(value="2D Heatmap")
+        ttk.Radiobutton(viz_frame, text="2D Heatmap", variable=viz_var, value="2D Heatmap").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Static", variable=viz_var, value="3D Static").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="3D Rotation GIF", variable=viz_var, value="3D Rotation GIF").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(viz_frame, text="Plotly 3D", variable=viz_var, value="Plotly 3D").pack(side=tk.LEFT, padx=5)
+        
+        # Smoothness control for liquidus surface
+        smooth_frame = ttk.Frame(viz_frame)
+        smooth_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(smooth_frame, text="Smoothness:").pack(side=tk.LEFT, padx=5)
+        smoothness_var = tk.DoubleVar(value=100.0)
+        smoothness_value_label = ttk.Label(smooth_frame, text="100")
+        smoothness_value_label.pack(side=tk.RIGHT, padx=5)
+        
+        def _on_smoothness_change(val):
+            try:
+                smoothness_value_label.config(text=str(int(float(val))))
+            except Exception:
+                smoothness_value_label.config(text="100")
+        
+        smooth_scale = ttk.Scale(
+            smooth_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=smoothness_var,
+            command=_on_smoothness_change
+        )
+        smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Arrow settings (length & head size)
+        arrow_settings_frame = ttk.LabelFrame(viz_frame, text="Arrow Settings (3D)", padding="10")
+        arrow_settings_frame.pack(fill=tk.X, pady=5)
+        
+        # Matplotlib 3D (Static/GIF) settings
+        mpl_arrow_frame = ttk.LabelFrame(arrow_settings_frame, text="3D Static / 3D Rotation GIF (Matplotlib)", padding="8")
+        mpl_arrow_frame.pack(fill=tk.X, pady=5)
+        
+        mpl_arrow_len_scale_var = tk.DoubleVar(value=1.0)
+        mpl_arrow_head_scale_var = tk.DoubleVar(value=1.0)
+        
+        mpl_len_row = ttk.Frame(mpl_arrow_frame)
+        mpl_len_row.pack(fill=tk.X, pady=2)
+        ttk.Label(mpl_len_row, text="Arrow Length Scale:").pack(side=tk.LEFT, padx=5)
+        mpl_len_val = ttk.Label(mpl_len_row, text="1.00")
+        mpl_len_val.pack(side=tk.RIGHT, padx=5)
+        def _on_mpl_len_change(val):
+            try:
+                mpl_len_val.config(text=f"{float(val):.2f}")
+            except Exception:
+                mpl_len_val.config(text="1.00")
+        ttk.Scale(mpl_len_row, from_=0.1, to=5.0, orient="horizontal",
+                  variable=mpl_arrow_len_scale_var, command=_on_mpl_len_change).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        mpl_head_row = ttk.Frame(mpl_arrow_frame)
+        mpl_head_row.pack(fill=tk.X, pady=2)
+        ttk.Label(mpl_head_row, text="Arrow Head Size:").pack(side=tk.LEFT, padx=5)
+        mpl_head_val = ttk.Label(mpl_head_row, text="1.00")
+        mpl_head_val.pack(side=tk.RIGHT, padx=5)
+        def _on_mpl_head_change(val):
+            try:
+                mpl_head_val.config(text=f"{float(val):.2f}")
+            except Exception:
+                mpl_head_val.config(text="1.00")
+        ttk.Scale(mpl_head_row, from_=0.2, to=3.0, orient="horizontal",
+                  variable=mpl_arrow_head_scale_var, command=_on_mpl_head_change).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Plotly 3D settings
+        plotly_arrow_frame = ttk.LabelFrame(arrow_settings_frame, text="Plotly 3D (Interactive)", padding="8")
+        plotly_arrow_frame.pack(fill=tk.X, pady=5)
+        
+        plotly_arrow_len_scale_var = tk.DoubleVar(value=2.0)
+        plotly_arrow_head_scale_var = tk.DoubleVar(value=2.0)
+        
+        plotly_len_row = ttk.Frame(plotly_arrow_frame)
+        plotly_len_row.pack(fill=tk.X, pady=2)
+        ttk.Label(plotly_len_row, text="Arrow Length Scale:").pack(side=tk.LEFT, padx=5)
+        plotly_len_val = ttk.Label(plotly_len_row, text="2.00")
+        plotly_len_val.pack(side=tk.RIGHT, padx=5)
+        def _on_plotly_len_change(val):
+            try:
+                plotly_len_val.config(text=f"{float(val):.2f}")
+            except Exception:
+                plotly_len_val.config(text="2.00")
+        ttk.Scale(plotly_len_row, from_=0.05, to=5.0, orient="horizontal",
+                  variable=plotly_arrow_len_scale_var, command=_on_plotly_len_change).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        plotly_head_row = ttk.Frame(plotly_arrow_frame)
+        plotly_head_row.pack(fill=tk.X, pady=2)
+        ttk.Label(plotly_head_row, text="Arrow Head Size:").pack(side=tk.LEFT, padx=5)
+        plotly_head_val = ttk.Label(plotly_head_row, text="2.00")
+        plotly_head_val.pack(side=tk.RIGHT, padx=5)
+        def _on_plotly_head_change(val):
+            try:
+                plotly_head_val.config(text=f"{float(val):.2f}")
+            except Exception:
+                plotly_head_val.config(text="2.00")
+        ttk.Scale(plotly_head_row, from_=0.2, to=4.0, orient="horizontal",
+                  variable=plotly_arrow_head_scale_var, command=_on_plotly_head_change).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # 3D Static view (camera) settings for Liquidus Vector Plotter
+        lv_view_frame = ttk.LabelFrame(viz_frame, text="3D Static View (Rotation Angles)", padding="10")
+        lv_view_frame.pack(fill=tk.X, pady=5)
+        lv_elev_var = tk.DoubleVar(value=30.0)
+        lv_azim_var = tk.DoubleVar(value=-60.0)
+
+        lv_elev_row = ttk.Frame(lv_view_frame)
+        lv_elev_row.pack(fill=tk.X, pady=2)
+        ttk.Label(lv_elev_row, text="Elevation (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(lv_elev_row, textvariable=lv_elev_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(lv_elev_row, text="(0–90)").pack(side=tk.LEFT, padx=5)
+
+        lv_azim_row = ttk.Frame(lv_view_frame)
+        lv_azim_row.pack(fill=tk.X, pady=2)
+        ttk.Label(lv_azim_row, text="Azimuth (deg):").pack(side=tk.LEFT, padx=5)
+        ttk.Entry(lv_azim_row, textvariable=lv_azim_var, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Label(lv_azim_row, text="(-180–180)").pack(side=tk.LEFT, padx=5)
+        
+        # 3D Rotation GIF parameters (only shown when 3D Rotation GIF is selected)
+        gif_params_frame = ttk.LabelFrame(viz_frame, text="3D Rotation GIF Parameters", padding="10")
+        gif_params_frame.pack(fill=tk.X, pady=5)
+        
+        gif_speed_frame = ttk.Frame(gif_params_frame)
+        gif_speed_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_speed_frame, text="Rotation Speed (degrees/frame):").pack(side=tk.LEFT, padx=5)
+        gif_speed_var = tk.StringVar(value="5")
+        ttk.Entry(gif_speed_frame, textvariable=gif_speed_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_interval_frame = ttk.Frame(gif_params_frame)
+        gif_interval_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_interval_frame, text="Frame Interval (ms):").pack(side=tk.LEFT, padx=5)
+        gif_interval_var = tk.StringVar(value="50")
+        ttk.Entry(gif_interval_frame, textvariable=gif_interval_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        gif_fps_frame = ttk.Frame(gif_params_frame)
+        gif_fps_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(gif_fps_frame, text="FPS:").pack(side=tk.LEFT, padx=5)
+        gif_fps_var = tk.StringVar(value="20")
+        ttk.Entry(gif_fps_frame, textvariable=gif_fps_var, width=10).pack(side=tk.LEFT, padx=5)
+        
+        # Initially hide GIF parameters
+        gif_params_frame.pack_forget()
+        
+        def toggle_gif_params():
+            if viz_var.get() == "3D Rotation GIF":
+                gif_params_frame.pack(fill=tk.X, pady=5)
+            else:
+                gif_params_frame.pack_forget()
+        
+        viz_var.trace_add("write", lambda *args: toggle_gif_params())
         
         # Output settings
         output_frame = ttk.LabelFrame(main_frame, text="Output Settings", padding="15")
@@ -3757,9 +4200,11 @@ Si: 2.0"""
                         ]
                         if len(candidates) >= 3:
                             # Get values at w(X) = 1, 2, 3
-                            val_1 = candidates[wx_vals == 1][col_inv_x].values
-                            val_2 = candidates[wx_vals == 2][col_inv_x].values
-                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wx = pd.to_numeric(candidates[col_wx], errors='coerce')
+                            val_1 = candidates[candidates_wx == 1][col_inv_x].values
+                            val_2 = candidates[candidates_wx == 2][col_inv_x].values
+                            val_3 = candidates[candidates_wx == 3][col_inv_x].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3781,9 +4226,11 @@ Si: 2.0"""
                         ]
                         if len(candidates) >= 3:
                             # Get values at w(Y) = 1, 2, 3
-                            val_1 = candidates[wy_vals == 1][col_inv_y].values
-                            val_2 = candidates[wy_vals == 2][col_inv_y].values
-                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wy = pd.to_numeric(candidates[col_wy], errors='coerce')
+                            val_1 = candidates[candidates_wy == 1][col_inv_y].values
+                            val_2 = candidates[candidates_wy == 2][col_inv_y].values
+                            val_3 = candidates[candidates_wy == 3][col_inv_y].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3803,9 +4250,11 @@ Si: 2.0"""
                             inv_x_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wx_vals == 1][col_inv_x].values
-                            val_2 = candidates[wx_vals == 2][col_inv_x].values
-                            val_3 = candidates[wx_vals == 3][col_inv_x].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wx = pd.to_numeric(candidates[col_wx], errors='coerce')
+                            val_1 = candidates[candidates_wx == 1][col_inv_x].values
+                            val_2 = candidates[candidates_wx == 2][col_inv_x].values
+                            val_3 = candidates[candidates_wx == 3][col_inv_x].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3821,9 +4270,11 @@ Si: 2.0"""
                             inv_y_vals.notna()
                         ]
                         if len(candidates) >= 3:
-                            val_1 = candidates[wy_vals == 1][col_inv_y].values
-                            val_2 = candidates[wy_vals == 2][col_inv_y].values
-                            val_3 = candidates[wy_vals == 3][col_inv_y].values
+                            # Use candidates' columns directly to avoid reindexing warnings
+                            candidates_wy = pd.to_numeric(candidates[col_wy], errors='coerce')
+                            val_1 = candidates[candidates_wy == 1][col_inv_y].values
+                            val_2 = candidates[candidates_wy == 2][col_inv_y].values
+                            val_3 = candidates[candidates_wy == 3][col_inv_y].values
                             if len(val_1) > 0 and len(val_2) > 0 and len(val_3) > 0:
                                 interpolated = newton_forward_interpolation(val_1[0], val_2[0], val_3[0])
                                 if not pd.isna(interpolated):
@@ -3969,114 +4420,359 @@ Si: 2.0"""
                 plt.close(fig3)
                 self.open_file_and_offer_save_as(out3, vector_window)
                 
-                # Figure 4: 3D plot with Z vectors on liquidus surface
+                # Figure 4: Z vectors on liquidus surface (with visualization options)
+                out4 = None
                 if len(t_data) > 0 and not t_data.isna().all():
                     try:
                         # Create smooth liquidus surface
-                        status_label.config(text="Creating 3D surface plot...", foreground="orange")
+                        status_label.config(text="Creating smooth liquidus surface...", foreground="orange")
                         vector_window.update()
-                        
-                        # Use create_smooth_surface to get smooth T surface
-                        xi = np.linspace(x_min, x_max, 50)
-                        yi = np.linspace(y_min, y_max, 50)
-                        xi_grid, yi_grid = np.meshgrid(xi, yi)
                         
                         # Get smooth surface for temperature
                         t_smooth = self.create_smooth_surface(
                             wx.values, wy.values, t_data.values, 
-                            grid_resolution=50, smoothness=100
+                            grid_resolution=100,
+                            smoothness=smoothness_var.get()
                         )
                         
                         if t_smooth is not None:
                             xi_grid_smooth, yi_grid_smooth, zi_grid = t_smooth
-                            
-                            # Create 3D plot
-                            fig4 = plt.figure(figsize=(10, 8), dpi=140)
-                            ax4 = fig4.add_subplot(111, projection='3d')
-                            
-                            # Plot liquidus surface
-                            surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, 
-                                                   cmap='coolwarm', alpha=0.7, linewidth=0, antialiased=True)
-                            
-                            # Plot Z vectors on the surface
-                            # For each data point, find the corresponding Z value on the surface
-                            z_surface_values = []
+                        else:
+                            xi_grid_smooth, yi_grid_smooth, zi_grid = None, None, None
+                        
+                        # Get visualization type
+                        viz = viz_var.get()
+                        
+                        # Normalize arrow size by dividing by the maximum absolute component.
+                        # Then scale arrows to a fixed fraction of the x/y axis span so they don't become excessively long.
+                        z_dx_arr = np.asarray(z_dx, dtype=float)
+                        z_dy_arr = np.asarray(z_dy, dtype=float)
+                        max_abs = float(np.nanmax(np.abs(np.r_[z_dx_arr, z_dy_arr])))
+                        if (not np.isfinite(max_abs)) or max_abs == 0:
+                            max_abs = 1.0
+                        axis_span = max(float(x_max - x_min), float(y_max - y_min), 1e-9)
+                        arrow_scale_xy = 0.10 * axis_span
+                        z_dx_norm = (z_dx_arr / max_abs) * arrow_scale_xy
+                        z_dy_norm = (z_dy_arr / max_abs) * arrow_scale_xy
+                        
+                        # Calculate z_surface_values for vectors
+                        z_surface_values = []
+                        if xi_grid_smooth is not None:
                             for i in range(len(wx.values)):
-                                # Find closest grid point
                                 x_idx = np.argmin(np.abs(xi_grid_smooth[0, :] - wx.values[i]))
                                 y_idx = np.argmin(np.abs(yi_grid_smooth[:, 0] - wy.values[i]))
                                 z_surf = zi_grid[y_idx, x_idx]
                                 z_surface_values.append(z_surf)
+                        else:
+                            z_surface_values = t_data.values
+                        z_surface_values = np.array(z_surface_values)
+
+                        # Helper: sample surface Z at an arbitrary (x, y) so vector tails lie on the surface
+                        wx_arr = np.asarray(wx.values, dtype=float)
+                        wy_arr = np.asarray(wy.values, dtype=float)
+                        t_arr = np.asarray(t_data.values, dtype=float)
+
+                        def _surface_z_at(xp, yp):
+                            try:
+                                if xi_grid_smooth is not None and zi_grid is not None:
+                                    xi_1d = xi_grid_smooth[0, :]
+                                    yi_1d = yi_grid_smooth[:, 0]
+                                    x_idx = int(np.argmin(np.abs(xi_1d - xp)))
+                                    y_idx = int(np.argmin(np.abs(yi_1d - yp)))
+                                    return float(zi_grid[y_idx, x_idx])
+                            except Exception:
+                                pass
+                            # Fallback: nearest neighbor from available points
+                            try:
+                                j = int(np.argmin((wx_arr - xp) ** 2 + (wy_arr - yp) ** 2))
+                                return float(t_arr[j])
+                            except Exception:
+                                return float("nan")
+                        
+                        if viz == "2D Heatmap":
+                            if not MATPLOTLIB_AVAILABLE:
+                                messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 2D heatmap.")
+                                return
+                            plt.figure(figsize=(10, 8))
+                            plt.xlabel(f"{col_wx} (%)")
+                            plt.ylabel(f"{col_wy} (%)")
+                            if xi_grid_smooth is not None:
+                                # Use smooth surface
+                                contour = plt.contourf(xi_grid_smooth, yi_grid_smooth, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
+                                plt.colorbar(contour, label='T (Temperature)')
+                            else:
+                                # Fallback to scatter
+                                scatter = plt.scatter(wx.values, wy.values, c=t_data.values, cmap='coolwarm', s=40, alpha=0.9)
+                                plt.colorbar(scatter, label='T (Temperature)')
                             
-                            z_surface_values = np.array(z_surface_values)
+                            # Overlay Z vectors
+                            plt.quiver(wx.values, wy.values, z_dx_norm, z_dy_norm,
+                                     angles="xy", scale_units="xy", scale=1, width=0.003, color="green", alpha=0.7)
                             
-                            # Calculate 3D vector components
-                            # Scale vectors appropriately for 3D display
-                            scale_factor = 0.1 * (t_data.max() - t_data.min()) / max(np.abs(z_dx).max(), np.abs(z_dy).max())
+                            plt.grid(False)
+                            out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_Heatmap.{ext}")
+                            plt.savefig(out4, dpi=300, bbox_inches='tight')
+                            plt.close()
+                            status_label.config(text=f"Heatmap saved: {out4}", foreground="green")
+                            self.open_file_and_offer_save_as(out4, vector_window)
                             
-                            # Plot vectors on surface
-                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):  # Sample points for clarity
+                        elif viz == "3D Static":
+                            if not MATPLOTLIB_AVAILABLE:
+                                messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate 3D image.")
+                                return
+                            fig4 = plt.figure(figsize=(12, 10))
+                            ax4 = fig4.add_subplot(111, projection='3d')
+                            if xi_grid_smooth is not None:
+                                # Use smooth surface
+                                surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, cmap='coolwarm', alpha=0.98, 
+                                                      linewidth=0, antialiased=True, shade=True)
+                                fig4.colorbar(surf, shrink=0.5, aspect=5, label='T (Temperature)')
+                            else:
+                                # Fallback: use triangulated surface
+                                trisurf = ax4.plot_trisurf(wx.values, wy.values, t_data.values, cmap='coolwarm', 
+                                                          linewidth=0.0, antialiased=True, alpha=0.98)
+                                fig4.colorbar(trisurf, shrink=0.5, aspect=5, label='T (Temperature)')
+                            
+                            # Plot Z vectors on surface (tails on surface, arrows extend above)
+                            mpl_len_scale = float(mpl_arrow_len_scale_var.get())
+                            mpl_head_scale = float(mpl_arrow_head_scale_var.get())
+                            arrow_head_ratio = max(0.05, min(0.8, 0.30 * mpl_head_scale))
+                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):
                                 x_start = wx.values[i]
                                 y_start = wy.values[i]
-                                z_start = z_surface_values[i]
+                                z_start = z_surface_values[i] if len(z_surface_values) > i else t_data.values[i]
                                 
-                                dx_3d = z_dx[i] * scale_factor
-                                dy_3d = z_dy[i] * scale_factor
-                                # Estimate dz based on gradient (simplified)
-                                dz_3d = 0  # Vectors are primarily in x-y plane
+                                dx_3d = z_dx_norm[i] * mpl_len_scale
+                                dy_3d = z_dy_norm[i] * mpl_len_scale
+                                # Only ensure the tail lies on the liquidus surface; keep arrow pointing above surface
+                                dz_3d = 0.0
                                 
                                 ax4.quiver(x_start, y_start, z_start, 
                                           dx_3d, dy_3d, dz_3d,
-                                          color='green', arrow_length_ratio=0.3, linewidth=1.5)
+                                          color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5)
                             
-                            ax4.set_xlabel(col_wx)
-                            ax4.set_ylabel(col_wy)
+                            ax4.set_xlabel(f"{col_wx} (%)")
+                            ax4.set_ylabel(f"{col_wy} (%)")
                             ax4.set_zlabel('T (Temperature)')
-                            ax4.set_title(f'Z Vectors on Liquidus Surface')
+                            ax4.set_title('Z Vectors on Liquidus Surface')
+                            # Apply user-selected view angles for 3D Static
+                            try:
+                                ax4.view_init(elev=float(lv_elev_var.get()), azim=float(lv_azim_var.get()))
+                            except Exception:
+                                pass
                             
-                            fig4.tight_layout()
-                            out4 = os.path.join(base_path, f"{prefix}_Z_3D_surface.{ext}")
-                            fig4.savefig(out4, **save_kwargs)
-                            plt.close(fig4)
+                            out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d.{ext}")
+                            plt.savefig(out4, **save_kwargs)
+                            plt.close()
+                            status_label.config(text=f"3D plot saved: {out4}", foreground="green")
                             self.open_file_and_offer_save_as(out4, vector_window)
                             
-                            status_label.config(
-                                text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n{os.path.basename(out4)}",
-                                foreground="green"
-                            )
-                            messagebox.showinfo("Success", 
-                                f"Vector plots generated successfully!\n\n"
-                                f"U horizontal: {out1}\n"
-                                f"V vertical: {out2}\n"
-                                f"Z resultant: {out3}\n"
-                                f"Z 3D surface: {out4}")
-                        else:
-                            # Fallback: simple 3D scatter with vectors
-                            fig4 = plt.figure(figsize=(10, 8), dpi=140)
+                        elif viz == "3D Rotation GIF":
+                            if not MATPLOTLIB_AVAILABLE:
+                                messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate GIF.")
+                                return
+                            fig4 = plt.figure(figsize=(12, 10))
                             ax4 = fig4.add_subplot(111, projection='3d')
+                            if xi_grid_smooth is not None:
+                                # Use smooth surface
+                                surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, cmap='coolwarm', alpha=0.98, 
+                                                      linewidth=0, antialiased=True, shade=True)
+                                fig4.colorbar(surf, shrink=0.5, aspect=5, label='T (Temperature)')
+                            else:
+                                # Fallback: use triangulated surface
+                                trisurf = ax4.plot_trisurf(wx.values, wy.values, t_data.values, cmap='coolwarm', 
+                                                          linewidth=0.0, antialiased=True, alpha=0.98)
+                                fig4.colorbar(trisurf, shrink=0.5, aspect=5, label='T (Temperature)')
                             
-                            # Plot temperature as surface (scatter)
-                            ax4.scatter(wx.values, wy.values, t_data.values, 
-                                      c=t_data.values, cmap='coolwarm', alpha=0.6, s=20)
-                            
-                            # Plot vectors
-                            scale_factor = 0.1 * (t_data.max() - t_data.min()) / max(np.abs(z_dx).max(), np.abs(z_dy).max())
+                            # Plot Z vectors on surface (tails on surface, arrows extend above)
+                            mpl_len_scale = float(mpl_arrow_len_scale_var.get())
+                            mpl_head_scale = float(mpl_arrow_head_scale_var.get())
+                            arrow_head_ratio = max(0.05, min(0.8, 0.30 * mpl_head_scale))
                             for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):
-                                ax4.quiver(wx.values[i], wy.values[i], t_data.values[i],
-                                          z_dx[i] * scale_factor, z_dy[i] * scale_factor, 0,
-                                          color='green', arrow_length_ratio=0.3, linewidth=1.5)
+                                x_start = wx.values[i]
+                                y_start = wy.values[i]
+                                z_start = z_surface_values[i] if len(z_surface_values) > i else t_data.values[i]
+                                
+                                dx_3d = z_dx_norm[i] * mpl_len_scale
+                                dy_3d = z_dy_norm[i] * mpl_len_scale
+                                dz_3d = 0.0
+                                
+                                ax4.quiver(x_start, y_start, z_start, 
+                                          dx_3d, dy_3d, dz_3d,
+                                          color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5)
                             
-                            ax4.set_xlabel(col_wx)
-                            ax4.set_ylabel(col_wy)
+                            ax4.set_xlabel(f"{col_wx} (%)")
+                            ax4.set_ylabel(f"{col_wy} (%)")
                             ax4.set_zlabel('T (Temperature)')
-                            ax4.set_title(f'Z Vectors on Liquidus Surface')
+                            ax4.set_title('Z Vectors on Liquidus Surface')
                             
-                            fig4.tight_layout()
-                            out4 = os.path.join(base_path, f"{prefix}_Z_3D_surface.{ext}")
-                            fig4.savefig(out4, **save_kwargs)
-                            plt.close(fig4)
+                            def _rotate(angle):
+                                ax4.view_init(azim=angle)
+                                return [ax4]
+                            
+                            # Get GIF parameters
+                            try:
+                                rotation_step = int(float(gif_speed_var.get()))
+                            except:
+                                rotation_step = 5
+                            try:
+                                interval_ms = int(float(gif_interval_var.get()))
+                            except:
+                                interval_ms = 50
+                            try:
+                                fps_val = int(float(gif_fps_var.get()))
+                            except:
+                                fps_val = 20
+                            
+                            ani = animation.FuncAnimation(fig4, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
+                            out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_rotation.gif")
+                            ani.save(out4, writer='pillow', fps=fps_val, dpi=100)
+                            plt.close()
+                            status_label.config(text=f"GIF saved: {out4}", foreground="green")
                             self.open_file_and_offer_save_as(out4, vector_window)
                             
+                        else:  # Plotly 3D
+                            if PLOTLY_AVAILABLE:
+                                if xi_grid_smooth is not None:
+                                    # Use smooth surface
+                                    fig_plotly = go.Figure(data=[
+                                        go.Surface(x=xi_grid_smooth, y=yi_grid_smooth, z=zi_grid, 
+                                                  colorscale='RdBu', reversescale=True, opacity=0.98,
+                                                  colorbar=dict(title='T (Temperature)'))
+                                    ])
+                                else:
+                                    # Fallback to scatter
+                                    fig_plotly = go.Figure(data=[go.Scatter3d(
+                                        x=wx.values, y=wy.values, z=t_data.values,
+                                        mode='markers',
+                                        marker=dict(size=3, color=t_data.values, colorscale='RdBu', reversescale=True, opacity=0.85,
+                                                    colorbar=dict(title='T (Temperature)'))
+                                    )])
+                                
+                                # Add Z vectors as quiver (using cone markers)
+                                # Sample vectors for clarity
+                                sample_indices = list(range(0, len(wx.values), max(1, len(wx.values) // 50)))
+                                x_starts = wx.values[sample_indices]
+                                y_starts = wy.values[sample_indices]
+                                z_starts = z_surface_values[sample_indices] if len(z_surface_values) > 0 else t_data.values[sample_indices]
+                                
+                                # Plotly 3D: keep arrow HEAD size uniform/small; show differences mainly by arrow LENGTH.
+                                # Draw shafts with Scatter3d(lines), then draw only arrowheads with fixed-size cones.
+                                plotly_vec_scale = float(plotly_arrow_len_scale_var.get())  # length multiplier only
+                                u_vec = z_dx_arr[sample_indices] * plotly_vec_scale
+                                v_vec = z_dy_arr[sample_indices] * plotly_vec_scale
+                                w_vec = np.zeros_like(u_vec)
+                                
+                                x_ends = x_starts + u_vec
+                                y_ends = y_starts + v_vec
+                                z_ends = z_starts + w_vec
+                                
+                                # Shafts (no markers/dots)
+                                x_lines, y_lines, z_lines = [], [], []
+                                for xs, ys, zs, xe, ye, ze in zip(x_starts, y_starts, z_starts, x_ends, y_ends, z_ends):
+                                    x_lines.extend([xs, xe, None])
+                                    y_lines.extend([ys, ye, None])
+                                    z_lines.extend([zs, ze, None])
+                                
+                                fig_plotly.add_trace(go.Scatter3d(
+                                    x=x_lines, y=y_lines, z=z_lines,
+                                    mode="lines",
+                                    line=dict(color="green", width=4),
+                                    showlegend=False,
+                                    name="Z vector shafts"
+                                ))
+                                
+                                # Arrowheads: unit directions + fixed-size cones at tips
+                                mags = np.sqrt(u_vec**2 + v_vec**2 + w_vec**2)
+                                mags = np.where((~np.isfinite(mags)) | (mags == 0), 1.0, mags)
+                                u_dir = u_vec / mags
+                                v_dir = v_vec / mags
+                                w_dir = w_vec / mags
+                                
+                                fig_plotly.add_trace(go.Cone(
+                                    x=x_ends, y=y_ends, z=z_ends,
+                                    u=u_dir, v=v_dir, w=w_dir,
+                                    anchor="tip",
+                                    colorscale=[[0, "green"], [1, "green"]],
+                                    showscale=False,
+                                    sizemode="absolute",
+                                    sizeref=max(axis_span * 0.015 * float(plotly_arrow_head_scale_var.get()), 1e-6),
+                                    name="Z vector heads"
+                                ))
+                                
+                                fig_plotly.update_layout(
+                                    scene=dict(
+                                        xaxis_title=f"{col_wx} (%)",
+                                        yaxis_title=f"{col_wy} (%)",
+                                        zaxis_title='T (Temperature)',
+                                    ),
+                                    width=900, height=700,
+                                )
+                                out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
+                                fig_plotly.write_html(out4)
+                                status_label.config(text=f"Interactive 3D plot saved: {out4}", foreground="green")
+                                self.open_file_and_offer_save_as(out4, vector_window)
+                            else:
+                                # Fallback HTML without plotly
+                                out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
+                                with open(out4, 'w', encoding='utf-8') as f:
+                                    f.write('<html><head><title>Z Vectors on Liquidus Surface 3D Interactive Plot</title></head><body>\n')
+                                    f.write('<h2>Z Vectors on Liquidus Surface 3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
+                                    f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
+                                    f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
+                                    f.write('<script>\n')
+                                    if xi_grid_smooth is not None:
+                                        f.write('var surface = {\n')
+                                        f.write('  type: "surface",\n')
+                                        f.write('  x: ' + str(xi_grid_smooth.tolist()) + ',\n')
+                                        f.write('  y: ' + str(yi_grid_smooth.tolist()) + ',\n')
+                                        f.write('  z: ' + str(zi_grid.tolist()) + ',\n')
+                                        f.write('  colorscale: "RdBu",\n')
+                                        f.write('  reversescale: true,\n')
+                                        f.write('  opacity: 0.9,\n')
+                                        f.write('  colorbar: {title: "T (Temperature)"}\n')
+                                        f.write('};\n')
+                                    else:
+                                        f.write('var surface = {\n')
+                                        f.write('  type: "scatter3d",\n')
+                                        f.write('  mode: "markers",\n')
+                                        f.write('  x: ' + str(wx.values.tolist()) + ',\n')
+                                        f.write('  y: ' + str(wy.values.tolist()) + ',\n')
+                                        f.write('  z: ' + str(t_data.values.tolist()) + ',\n')
+                                        f.write('  marker: { size: 3, color: ' + str(t_data.values.tolist()) + ', colorscale: "RdBu", reversescale: true, opacity: 0.85, colorbar: {title: "T (Temperature)"} }\n')
+                                        f.write('};\n')
+                                    
+                                    # Add vectors
+                                    f.write('var vectors = [\n')
+                                    sample_indices = range(0, len(wx.values), max(1, len(wx.values) // 50))
+                                    # Plotly HTML fallback: DO NOT normalize by max_abs (use original arrow lengths),
+                                    # but apply the same visual multiplier as Plotly cones.
+                                    plotly_vec_scale = float(plotly_arrow_len_scale_var.get())
+                                    for i in sample_indices:
+                                        x_start = float(wx.values[i])
+                                        y_start = float(wy.values[i])
+                                        z_start = float(z_surface_values[i] if len(z_surface_values) > i else t_data.values[i])
+                                        dx_3d = float(z_dx_arr[i] * plotly_vec_scale)
+                                        dy_3d = float(z_dy_arr[i] * plotly_vec_scale)
+                                        f.write('  {type: "scatter3d", mode: "lines", x: [' + str(x_start) + ', ' + str(x_start + dx_3d) + '], y: [' + str(y_start) + ', ' + str(y_start + dy_3d) + '], z: [' + str(z_start) + ', ' + str(z_start) + '], line: {color: "green", width: 3}, showlegend: false},\n')
+                                    f.write('];\n')
+                                    
+                                    f.write('var data = [surface, ...vectors];\n')
+                                    f.write('var layout = {\n')
+                                    f.write('  scene: {\n')
+                                    f.write(f'    xaxis: {{title: "{col_wx} (%)"}},\n')
+                                    f.write(f'    yaxis: {{title: "{col_wy} (%)"}},\n')
+                                    f.write('    zaxis: {title: "T (Temperature)"}\n')
+                                    f.write('  }\n')
+                                    f.write('};\n')
+                                    f.write('Plotly.newPlot("plot", data, layout);\n')
+                                    f.write('</script>\n')
+                                    f.write('</body></html>')
+                                status_label.config(text=f"Interactive 3D plot saved: {out4}", foreground="green")
+                                self.open_file_and_offer_save_as(out4, vector_window)
+                        
+                        # Update success message
+                        if out4:
                             status_label.config(
                                 text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n{os.path.basename(out4)}",
                                 foreground="green"
@@ -4086,15 +4782,25 @@ Si: 2.0"""
                                 f"U horizontal: {out1}\n"
                                 f"V vertical: {out2}\n"
                                 f"Z resultant: {out3}\n"
-                                f"Z 3D surface: {out4}")
+                                f"Z on liquidus ({viz}): {out4}")
+                        else:
+                            status_label.config(
+                                text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}",
+                                foreground="green"
+                            )
+                            messagebox.showinfo("Success", 
+                                f"Vector plots generated successfully!\n\n"
+                                f"U horizontal: {out1}\n"
+                                f"V vertical: {out2}\n"
+                                f"Z resultant: {out3}")
                     except Exception as e:
-                        # If 3D plot fails, just show the 3 regular plots
+                        # If visualization plot fails, just show the 3 regular plots
                         status_label.config(
-                            text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n(3D plot failed: {str(e)})",
+                            text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}\n(Visualization plot failed: {str(e)})",
                             foreground="orange"
                         )
                         messagebox.showwarning("Partial Success", 
-                            f"Vector plots generated, but 3D surface plot failed:\n{str(e)}\n\n"
+                            f"Vector plots generated, but visualization plot failed:\n{str(e)}\n\n"
                             f"U horizontal: {out1}\n"
                             f"V vertical: {out2}\n"
                             f"Z resultant: {out3}")
@@ -4109,7 +4815,7 @@ Si: 2.0"""
                         f"U horizontal: {out1}\n"
                         f"V vertical: {out2}\n"
                         f"Z resultant: {out3}\n\n"
-                        f"Note: 3D surface plot skipped (no temperature data)")
+                        f"Note: Z vectors on liquidus surface plot skipped (no temperature data)")
                 
             except Exception as e:
                 status_label.config(text=f"Error: {str(e)}", foreground="red")

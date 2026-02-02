@@ -10,7 +10,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - **自动打开文件**：绘图完成后自动打开生成的图片或HTML文件，并提供另存为选项
   - **列名大小写不敏感**：支持各种大小写组合的列名（如w(MG)、w(Mg)、w(mg)）
   - Plot Phase Surfaces：绘制固相面、液相面（2D热图、3D静态图、3D旋转GIF、交互式3D图）
-  - Plot Q Values：绘制Q值图（使用w(MG)和w(SI)作为X和Y轴，-T//fw(@FCC_A1)作为Z轴）
+  - Plot Qtrue Values：绘制Qtrue值图（使用w(MG)和w(SI)作为X和Y轴，-T//fw(@FCC_A1)作为Z轴）
   - Plot Liquidus Vectors：绘制液相面矢量图（U水平、V垂直、Z合成矢量）
     - 窗口大小优化：从700x600增加到800x750，确保所有按钮可见
     - 元素自动识别：根据导入的Excel文件自动识别可用元素，无需手动选择
@@ -20,7 +20,9 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - Extract Thermo-calc Results：从.exp文件中提取液相线温度、固相线温度和熔程
   - Extract Pandat Results：从CSV/DAT文件中提取数据并生成P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx
 - **计算功能更新**：
-  - 新增Q值计算：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
+  - 新增Qtrue计算：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
+  - 新增Q值（分量）计算：基于w(*@FCC_A1)/w(*@LIQUID)比值和dwdT_L(*@LIQUID)计算Mg和Si的分量Q值
+  - 新增P值（分量）计算：基于Q值（分量）和w(*@FCC_A1)/w(*@LIQUID)比值计算Mg和Si的分量P值
   - 新增ΔT计算：P.xlsx的T值减去Ts.xlsx的T值（平衡凝固）
   - 新增ΔTs计算：P-S.xlsx的T值减去Ts-S.xlsx的T值（Scheil凝固）
   - 删除熔程计算模式
@@ -49,8 +51,9 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 - 支持从元素周期表中选择元素
 - 支持质量分数（wt%）成分输入
 - 实时成分总和检查（显示是否达到100 wt%）
-- 支持Q值、ΔT、ΔTs计算
-  - Q值：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
+- 支持Qtrue、Q值（分量）、P值（分量）、ΔT、ΔTs计算
+  - Qtrue：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
+  - Q值（分量）/ P值（分量）：针对Mg和Si元素的详细分量计算
   - ΔT：平衡凝固的液相线温度与固相线温度差值
   - ΔTs：Scheil凝固的液相线温度与固相线温度差值
 - 支持从Pandat软件导出的Excel文件导入元素成分
@@ -65,8 +68,8 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 支持2D热图、3D静态图、3D旋转GIF、交互式3D图（Plotly）
   - 支持平衡凝固和Scheil凝固数据
   - 可选择任意两个元素作为X和Y轴
-- **Plot Q Values**：绘制Q值图
-  - X轴：w(MG)，Y轴：w(SI)，Z轴：Q值（-T//fw(@FCC_A1)）
+- **Plot Qtrue Values**：绘制Qtrue值图
+  - X轴：w(MG)，Y轴：w(SI)，Z轴：Qtrue值（-T//fw(@FCC_A1)）
   - 支持平衡凝固（使用P.xlsx）和Scheil凝固（使用P-S.xlsx）数据
   - 支持2D热图、3D静态图、3D旋转GIF、交互式3D图（Plotly）
 - **Plot Liquidus Vectors**：绘制液相面矢量图
@@ -201,8 +204,8 @@ python main.py
 7. 点击"Plot"生成图表
 8. 图表生成后会自动打开，关闭时可选择另存为到其他位置
 
-#### Plot Q Values（绘制Q值图）
-1. 打开：`Plot` > `Plot Q Values`
+#### Plot Qtrue Values（绘制Qtrue值图）
+1. 打开：`Plot` > `Plot Qtrue Values`
 2. 选择数据集：Equilibrium/Lever 或 Scheil
    - Equilibrium/Lever：使用P.xlsx数据
    - Scheil：使用P-S.xlsx数据
@@ -367,7 +370,7 @@ ThermoQ/
 1. 需要先通过 `Import > Pandat to ThermoQ` 导入数据（至少需要P.xlsx和Ts.xlsx）
 2. 成分匹配基于整数部分（例如80.5%和80.8%会匹配为80%）
 3. 列名匹配不区分大小写（例如w(Al)会匹配w(AL)）
-4. Q值计算需要P.xlsx或P-S.xlsx中包含-T//fw(@FCC_A1)列
+4. Qtrue计算需要P.xlsx或P-S.xlsx中包含-T//fw(@FCC_A1)列
 5. ΔT计算需要P.xlsx和Ts.xlsx都包含T列
 6. ΔTs计算需要P-S.xlsx和Ts-S.xlsx都包含T列
 
@@ -381,11 +384,11 @@ ThermoQ/
 7. 交互式3D图（Plotly 3D）需要plotly库，或会自动生成HTML文件
 8. **自动打开和另存为**：绘图完成后自动打开文件，关闭时可选择另存为
 
-### Q值图绘制
+### Qtrue值图绘制
 1. 需要先通过 `Import > Pandat to ThermoQ` 导入P.xlsx（Equilibrium）或P-S.xlsx（Scheil）
 2. 数据文件必须包含w(MG)、w(SI)和-T//fw(@FCC_A1)列
 3. **列名匹配不区分大小写**：支持w(MG)、w(Mg)、w(mg)等各种大小写组合
-4. X轴固定为w(MG)，Y轴固定为w(SI)，Z轴为Q值（-T//fw(@FCC_A1)）
+4. X轴固定为w(MG)，Y轴固定为w(SI)，Z轴为Qtrue值（-T//fw(@FCC_A1)）
 5. **平滑曲面**：使用高斯过程回归生成平滑、连续的曲面（需要scikit-learn库）
 6. 需要matplotlib库（2D/3D图）或plotly库（交互式3D图）
 7. **自动打开和另存为**：绘图完成后自动打开文件，关闭时可选择另存为
