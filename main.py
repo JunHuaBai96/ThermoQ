@@ -328,55 +328,6 @@ class ThermoQGUI:
         # Create menu bar
         self.menu_bar = tk.Menu(root)
         self.root.config(menu=self.menu_bar)
-
-        # Language resources
-        self.language = 'en'
-        self.texts = {
-            'en': {
-                'menu_file': 'File',
-                'menu_import': 'Import',
-                'menu_plot': 'Plot',
-                'menu_tools': 'Tools',
-                'menu_help': 'Help',
-                'file_exit': 'Exit',
-                'import_pandat': 'Pandat to ThermoQ',
-                'plot_phase': 'Plot Phase Surfaces',
-                'plot_qtrue': 'Plot Qtrue Values',
-                'plot_liqvec': 'Plot Liquidus Vectors',
-                'tools_converter': 'Composition Converter (wt% ↔ at%)',
-                'tools_generate': 'Generate Thermo-calc Batch File',
-                'tools_extract_exp': 'Extract Thermo-calc Results',
-                'tools_extract_pandat': 'Extract Pandat Results',
-                'help_language': 'Language',
-                'help_english': 'English',
-                'help_chinese': '中文',
-                'help_example': 'Example',
-                'btn_calculate': 'Calculate',
-                'btn_show_results': 'Show Results',
-            },
-            'zh': {
-                'menu_file': '文件',
-                'menu_import': '导入',
-                'menu_plot': '绘图',
-                'menu_tools': '工具',
-                'menu_help': '帮助',
-                'file_exit': '退出',
-                'import_pandat': 'Pandat到ThermoQ',
-                'plot_phase': '绘制相面',
-                'plot_qtrue': '绘制Qtrue值',
-                'plot_liqvec': '绘制液相线向量',
-                'tools_converter': '成分换算（wt% ↔ at%）',
-                'tools_generate': '生成Thermo-calc批处理文件',
-                'tools_extract_exp': '提取Thermo-calc结果',
-                'tools_extract_pandat': '提取Pandat结果',
-                'help_language': '界面语言',
-                'help_english': 'English',
-                'help_chinese': '中文',
-                'help_example': '示例',
-                'btn_calculate': '计算',
-                'btn_show_results': '显示结果',
-            }
-        }
         
         # Create File menu
         self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -403,16 +354,6 @@ class ThermoQGUI:
         self.tools_menu.add_command(label="Extract Thermo-calc Results", command=self.open_exp_data_processor)
         self.tools_menu.add_separator()
         self.tools_menu.add_command(label="Extract Pandat Results", command=self.open_extract_pandat_results)
-
-        # Create Help menu
-        self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
-        self.lang_menu = tk.Menu(self.help_menu, tearoff=0)
-        self.help_menu.add_cascade(label="Language", menu=self.lang_menu)
-        self.lang_menu.add_command(label="English", command=lambda: self.set_language('en'))
-        self.lang_menu.add_command(label="中文", command=lambda: self.set_language('zh'))
-        self.help_menu.add_separator()
-        self.help_menu.add_command(label="Example", command=self.open_example_folder)
         
         # Set window icon
         try:
@@ -456,128 +397,13 @@ class ThermoQGUI:
         buttons_frame.grid(row=1, column=0, columnspan=2, pady=10)
         
         # Calculate and Results buttons
-        self.calculate_button = ttk.Button(buttons_frame, text="Calculate", command=self.calculate)
-        self.calculate_button.grid(row=0, column=0, padx=10)
-        self.show_results_button = ttk.Button(buttons_frame, text="Show Results", command=self.show_results)
-        self.show_results_button.grid(row=0, column=1, padx=10)
-
-        # Apply initial language
-        self.set_language(self.language)
+        ttk.Button(buttons_frame, text="Calculate", command=self.calculate).grid(row=0, column=0, padx=10)
+        ttk.Button(buttons_frame, text="Show Results", command=self.show_results).grid(row=0, column=1, padx=10)
 
     def show(self):
         # Center window on screen after splash
         self.center_window()
         self.root.deiconify()
-
-    def set_language(self, lang):
-        try:
-            if lang not in self.texts:
-                return
-            self.language = lang
-            t = self.texts[lang]
-
-            # Rebuild menubar cascades to avoid platform-specific label issues
-            try:
-                end_index = self.menu_bar.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.menu_bar.delete(i)
-            except Exception:
-                pass
-            # Re-add cascades with new labels
-            self.menu_bar.add_cascade(label=t['menu_file'], menu=self.file_menu)
-            self.menu_bar.add_cascade(label=t['menu_import'], menu=self.import_menu)
-            self.menu_bar.add_cascade(label=t['menu_plot'], menu=self.plot_menu)
-            self.menu_bar.add_cascade(label=t['menu_tools'], menu=self.tools_menu)
-            self.menu_bar.add_cascade(label=t['menu_help'], menu=self.help_menu)
-
-            # Rebuild File menu
-            try:
-                end_index = self.file_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.file_menu.delete(i)
-            except Exception:
-                pass
-            self.file_menu.add_command(label=t['file_exit'], command=self.root.quit)
-
-            # Rebuild Import menu
-            try:
-                end_index = self.import_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.import_menu.delete(i)
-            except Exception:
-                pass
-            self.import_menu.add_command(label=t['import_pandat'], command=self.open_pandat_import)
-
-            # Rebuild Plot menu
-            try:
-                end_index = self.plot_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.plot_menu.delete(i)
-            except Exception:
-                pass
-            self.plot_menu.add_command(label=t['plot_phase'], command=self.open_phase_surface_plotter)
-            self.plot_menu.add_command(label=t['plot_qtrue'], command=self.open_q_value_plotter)
-            self.plot_menu.add_command(label=t['plot_liqvec'], command=self.open_liquidus_vector_plotter)
-
-            # Rebuild Tools menu
-            try:
-                end_index = self.tools_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.tools_menu.delete(i)
-            except Exception:
-                pass
-            self.tools_menu.add_command(label=t['tools_converter'], command=self.open_composition_converter)
-            self.tools_menu.add_separator()
-            self.tools_menu.add_command(label=t['tools_generate'], command=self.open_therocalc_generator)
-            self.tools_menu.add_command(label=t['tools_extract_exp'], command=self.open_exp_data_processor)
-            self.tools_menu.add_separator()
-            self.tools_menu.add_command(label=t['tools_extract_pandat'], command=self.open_extract_pandat_results)
-
-            # Rebuild Help menu and Language submenu
-            try:
-                end_index = self.help_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.help_menu.delete(i)
-            except Exception:
-                pass
-            # Rebuild Language submenu
-            try:
-                end_index = self.lang_menu.index('end')
-                if end_index is not None:
-                    for i in reversed(range(end_index + 1)):
-                        self.lang_menu.delete(i)
-            except Exception:
-                pass
-            self.lang_menu.add_command(label=t['help_english'], command=lambda: self.set_language('en'))
-            self.lang_menu.add_command(label=t['help_chinese'], command=lambda: self.set_language('zh'))
-            self.help_menu.add_cascade(label=t['help_language'], menu=self.lang_menu)
-            self.help_menu.add_separator()
-            self.help_menu.add_command(label=t['help_example'], command=self.open_example_folder)
-
-            # Buttons
-            self.calculate_button.config(text=t['btn_calculate'])
-            self.show_results_button.config(text=t['btn_show_results'])
-        except Exception as e:
-            print(f"Language switch error: {e}")
-
-    def open_example_folder(self):
-        try:
-            path = r"c:\Users\17868\OneDrive\文档\GitHub\ThermoQ\Example"
-            if not os.path.exists(path):
-                messagebox.showerror("Error", "Example folder not found!")
-                return
-            if platform.system() == 'Windows':
-                os.startfile(path)
-            else:
-                webbrowser.open(path)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open Example folder:\n{str(e)}")
 
     def calculate(self):
         # Get the selected elements and their compositions
@@ -602,38 +428,12 @@ class ThermoQGUI:
             messagebox.showerror("Error", f"Total composition must equal 100%! Current total: {total_composition:.2f}%")
             return
         
-        # Perform calculations: Q, ΔT, ΔTs, Beta
+        # Perform calculations: Q, ΔT, ΔTs
         try:
             results = {}
             errors = []
             
-            # 1. Calculate ΔT = T(P.xlsx) - T(Ts.xlsx)
-            delta_t = None
-            try:
-                if self.pandat_p_data is not None and self.pandat_ts_data is not None:
-                    p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
-                    ts_idx = self.find_matching_row(wt_composition, self.pandat_ts_data)
-                    t_p = float(self.pandat_p_data.iloc[p_idx]['T'])
-                    t_ts = float(self.pandat_ts_data.iloc[ts_idx]['T'])
-                    delta_t = t_p - t_ts
-                    results['ΔT'] = delta_t
-            except Exception as e:
-                errors.append(f"ΔT calculation failed: {str(e)}")
-
-            # 2. Calculate ΔTs = T(P-S.xlsx) - T(Ts-S.xlsx)
-            delta_ts = None
-            try:
-                if self.pandat_p_s_data is not None and self.pandat_ts_s_data is not None:
-                    p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
-                    ts_s_idx = self.find_matching_row(wt_composition, self.pandat_ts_s_data)
-                    t_p_s = float(self.pandat_p_s_data.iloc[p_s_idx]['T'])
-                    t_ts_s = float(self.pandat_ts_s_data.iloc[ts_s_idx]['T'])
-                    delta_ts = t_p_s - t_ts_s
-                    results['ΔTs'] = delta_ts
-            except Exception as e:
-                errors.append(f"ΔTs calculation failed: {str(e)}")
-            
-            # 3. Calculate Qtrue and Components (from P.xlsx or P-S.xlsx)
+            # 1. Calculate Qtrue and Components (from P.xlsx or P-S.xlsx)
             q_lever = None
             q_scheil = None
             
@@ -670,11 +470,6 @@ class ThermoQGUI:
                             if ratio != 0:
                                 p_comp = q_comp / ratio
                                 results[f'P ({elem} Lever)'] = p_comp
-                                
-                            # Beta(*) = (Q(*) / ΔT) - ratio
-                            if delta_t is not None and delta_t != 0:
-                                beta_comp = (q_comp / delta_t) - ratio
-                                results[f'Beta ({elem} Lever)'] = beta_comp
             except Exception as e:
                 errors.append(f"Lever calculation failed: {str(e)}")
             
@@ -712,13 +507,31 @@ class ThermoQGUI:
                                 if ratio != 0:
                                     p_comp = q_comp / ratio
                                     results[f'P ({elem} Scheil)'] = p_comp
-                                
-                                # Beta(*) = (Q(*) / ΔTs) - ratio
-                                if delta_ts is not None and delta_ts != 0:
-                                    beta_comp = (q_comp / delta_ts) - ratio
-                                    results[f'Beta ({elem} Scheil)'] = beta_comp
                 except Exception as e:
                     errors.append(f"Scheil calculation failed: {str(e)}")
+            
+            # 2. Calculate ΔT = T(P.xlsx) - T(Ts.xlsx)
+            try:
+                p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
+                ts_idx = self.find_matching_row(wt_composition, self.pandat_ts_data)
+                t_p = float(self.pandat_p_data.iloc[p_idx]['T'])
+                t_ts = float(self.pandat_ts_data.iloc[ts_idx]['T'])
+                delta_t = t_p - t_ts
+                results['ΔT'] = delta_t
+            except Exception as e:
+                errors.append(f"ΔT calculation failed: {str(e)}")
+            
+            # 3. Calculate ΔTs = T(P-S.xlsx) - T(Ts-S.xlsx)
+            if self.pandat_p_s_data is not None and self.pandat_ts_s_data is not None:
+                try:
+                    p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
+                    ts_s_idx = self.find_matching_row(wt_composition, self.pandat_ts_s_data)
+                    t_p_s = float(self.pandat_p_s_data.iloc[p_s_idx]['T'])
+                    t_ts_s = float(self.pandat_ts_s_data.iloc[ts_s_idx]['T'])
+                    delta_ts = t_p_s - t_ts_s
+                    results['ΔTs'] = delta_ts
+                except Exception as e:
+                    errors.append(f"ΔTs calculation failed: {str(e)}")
             
             # Store result for display
             self.last_result = {
@@ -742,14 +555,10 @@ class ThermoQGUI:
                     result_msg += f"Q ({elem} Lever): {results[f'Q ({elem} Lever)']:.4f}\n"
                 if f'P ({elem} Lever)' in results:
                     result_msg += f"P ({elem} Lever): {results[f'P ({elem} Lever)']:.4f}\n"
-                if f'Beta ({elem} Lever)' in results:
-                    result_msg += f"Beta ({elem} Lever): {results[f'Beta ({elem} Lever)']:.4f}\n"
                 if f'Q ({elem} Scheil)' in results:
                     result_msg += f"Q ({elem} Scheil): {results[f'Q ({elem} Scheil)']:.4f}\n"
                 if f'P ({elem} Scheil)' in results:
                     result_msg += f"P ({elem} Scheil): {results[f'P ({elem} Scheil)']:.4f}\n"
-                if f'Beta ({elem} Scheil)' in results:
-                    result_msg += f"Beta ({elem} Scheil): {results[f'Beta ({elem} Scheil)']:.4f}\n"
             
             if 'ΔT' in results:
                 result_msg += f"ΔT: {results['ΔT']:.4f}\n"
@@ -833,14 +642,10 @@ class ThermoQGUI:
                     results_text.insert(tk.END, f"Q ({elem} Lever): {results[f'Q ({elem} Lever)']:.6f}\n")
                 if f'P ({elem} Lever)' in results:
                     results_text.insert(tk.END, f"P ({elem} Lever): {results[f'P ({elem} Lever)']:.6f}\n")
-                if f'Beta ({elem} Lever)' in results:
-                    results_text.insert(tk.END, f"Beta ({elem} Lever): {results[f'Beta ({elem} Lever)']:.6f}\n")
                 if f'Q ({elem} Scheil)' in results:
                     results_text.insert(tk.END, f"Q ({elem} Scheil): {results[f'Q ({elem} Scheil)']:.6f}\n")
                 if f'P ({elem} Scheil)' in results:
                     results_text.insert(tk.END, f"P ({elem} Scheil): {results[f'P ({elem} Scheil)']:.6f}\n")
-                if f'Beta ({elem} Scheil)' in results:
-                    results_text.insert(tk.END, f"Beta ({elem} Scheil): {results[f'Beta ({elem} Scheil)']:.6f}\n")
             results_text.insert(tk.END, "\n")
             
             if 'ΔT' in results:
