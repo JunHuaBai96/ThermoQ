@@ -324,6 +324,8 @@ class ThermoQGUI:
         self.pandat_p_s_data = None  # P-S.xlsx data (Scheil solidification)
         self.pandat_ts_s_data = None  # Ts-S.xlsx data (Scheil solidification)
         self.available_elements = []  # Elements available from Pandat data
+        self.pandat_solid_phase = None   # Detected solid phase from w(*@*) / -T//fw(@*), e.g. FCC_A1, BCC_A2
+        self.pandat_q_col = None         # Detected Q column, e.g. -T//fw(@FCC_A1)
         
         # Create menu bar
         self.menu_bar = tk.Menu(root)
@@ -641,40 +643,46 @@ class ThermoQGUI:
             try:
                 p_idx = self.find_matching_row(wt_composition, self.pandat_p_data)
                 row = self.pandat_p_data.iloc[p_idx]
+                cols = self.pandat_p_data.columns
+                q_col = self.pandat_q_col
+                solid_phase = self.pandat_solid_phase
+                if solid_phase is None:
+                    parsed = self._parse_pandat_phases_from_df(self.pandat_p_data)
+                    solid_phase = parsed['solid_phase']
+                    q_col = parsed['q_col']
                 
-                # Qtrue
-                if '-T//fw(@FCC_A1)' in self.pandat_p_data.columns:
-                    q_lever = row['-T//fw(@FCC_A1)']
+                # Qtrue: use detected -T//fw(@phase) column
+                if q_col and q_col in cols:
+                    q_lever = row[q_col]
                     results['Qtrue (Lever)'] = float(q_lever)
                 
-                # Components (Mg, Si)
-                for elem in ['MG', 'SI']:
-                    col_w = f'w({elem})'
-                    col_fcc = f'w({elem}@FCC_A1)'
-                    col_liq = f'w({elem}@LIQUID)'
-                    col_slope = f'dwdT_L({elem}@LIQUID)'
-                    
-                    if all(c in self.pandat_p_data.columns for c in [col_w, col_fcc, col_liq, col_slope]):
-                        w = float(row[col_w])
-                        w_fcc = float(row[col_fcc])
-                        w_liq = float(row[col_liq])
-                        slope = float(row[col_slope])
-                        
-                        if w_liq != 0 and slope != 0:
-                            ratio = w_fcc / w_liq
-                            # Q(*) = (ratio - 1) * (1/slope) * 0.01 * w
-                            q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
-                            results[f'Q ({elem} Lever)'] = q_comp
-                            
-                            # P(*) = Q(*) / ratio
-                            if ratio != 0:
-                                p_comp = q_comp / ratio
-                                results[f'P ({elem} Lever)'] = p_comp
-                                
-                            # Beta(*) = (Q(*) / ΔT) - ratio
-                            if delta_t is not None and delta_t != 0:
-                                beta_comp = (q_comp / delta_t) - ratio
-                                results[f'Beta ({elem} Lever)'] = beta_comp
+                # Components: for each element that has w(*), w(*@solid), w(*@LIQUID), dwdT_L(*@LIQUID)
+                elem_list = self.available_elements if self.available_elements else []
+                for elem in elem_list:
+                    elem_upper = elem.upper()
+                    col_w = f'w({elem_upper})'
+                    col_solid = f'w({elem_upper}@{solid_phase})' if solid_phase else None
+                    col_liq = f'w({elem_upper}@LIQUID)'
+                    col_slope = f'dwdT_L({elem_upper}@LIQUID)'
+                    if not col_solid:
+                        continue
+                    required = [col_w, col_solid, col_liq, col_slope]
+                    if not all(c in cols for c in required):
+                        continue
+                    w = float(row[col_w])
+                    w_solid = float(row[col_solid])
+                    w_liq = float(row[col_liq])
+                    slope = float(row[col_slope])
+                    if w_liq != 0 and slope != 0:
+                        ratio = w_solid / w_liq
+                        q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
+                        results[f'Q ({elem} Lever)'] = q_comp
+                        if ratio != 0:
+                            p_comp = q_comp / ratio
+                            results[f'P ({elem} Lever)'] = p_comp
+                        if delta_t is not None and delta_t != 0:
+                            beta_comp = (q_comp / delta_t) - ratio
+                            results[f'Beta ({elem} Lever)'] = beta_comp
             except Exception as e:
                 errors.append(f"Lever calculation failed: {str(e)}")
             
@@ -683,40 +691,44 @@ class ThermoQGUI:
                 try:
                     p_s_idx = self.find_matching_row(wt_composition, self.pandat_p_s_data)
                     row_s = self.pandat_p_s_data.iloc[p_s_idx]
+                    cols_s = self.pandat_p_s_data.columns
+                    q_col_s = self.pandat_q_col
+                    solid_phase_s = self.pandat_solid_phase
+                    if solid_phase_s is None:
+                        parsed_s = self._parse_pandat_phases_from_df(self.pandat_p_s_data)
+                        solid_phase_s = parsed_s['solid_phase']
+                        q_col_s = parsed_s['q_col']
                     
-                    # Qtrue
-                    if '-T//fw(@FCC_A1)' in self.pandat_p_s_data.columns:
-                        q_scheil = row_s['-T//fw(@FCC_A1)']
+                    if q_col_s and q_col_s in cols_s:
+                        q_scheil = row_s[q_col_s]
                         results['Qtrue (Scheil)'] = float(q_scheil)
                     
-                    # Components (Mg, Si)
-                    for elem in ['MG', 'SI']:
-                        col_w = f'w({elem})'
-                        col_fcc = f'w({elem}@FCC_A1)'
-                        col_liq = f'w({elem}@LIQUID)'
-                        col_slope = f'dwdT_L({elem}@LIQUID)'
-                        
-                        if all(c in self.pandat_p_s_data.columns for c in [col_w, col_fcc, col_liq, col_slope]):
-                            w = float(row_s[col_w])
-                            w_fcc = float(row_s[col_fcc])
-                            w_liq = float(row_s[col_liq])
-                            slope = float(row_s[col_slope])
-                            
-                            if w_liq != 0 and slope != 0:
-                                ratio = w_fcc / w_liq
-                                # Q(*) = (ratio - 1) * (1/slope) * 0.01 * w
-                                q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
-                                results[f'Q ({elem} Scheil)'] = q_comp
-                                
-                                # P(*) = Q(*) / ratio
-                                if ratio != 0:
-                                    p_comp = q_comp / ratio
-                                    results[f'P ({elem} Scheil)'] = p_comp
-                                
-                                # Beta(*) = (Q(*) / ΔTs) - ratio
-                                if delta_ts is not None and delta_ts != 0:
-                                    beta_comp = (q_comp / delta_ts) - ratio
-                                    results[f'Beta ({elem} Scheil)'] = beta_comp
+                    elem_list_s = self.available_elements if self.available_elements else []
+                    for elem in elem_list_s:
+                        elem_upper = elem.upper()
+                        col_w = f'w({elem_upper})'
+                        col_solid = f'w({elem_upper}@{solid_phase_s})' if solid_phase_s else None
+                        col_liq = f'w({elem_upper}@LIQUID)'
+                        col_slope = f'dwdT_L({elem_upper}@LIQUID)'
+                        if not col_solid:
+                            continue
+                        required = [col_w, col_solid, col_liq, col_slope]
+                        if not all(c in cols_s for c in required):
+                            continue
+                        w = float(row_s[col_w])
+                        w_solid = float(row_s[col_solid])
+                        w_liq = float(row_s[col_liq])
+                        slope = float(row_s[col_slope])
+                        if w_liq != 0 and slope != 0:
+                            ratio = w_solid / w_liq
+                            q_comp = (ratio - 1) * (1 / slope) * 0.01 * w
+                            results[f'Q ({elem} Scheil)'] = q_comp
+                            if ratio != 0:
+                                p_comp = q_comp / ratio
+                                results[f'P ({elem} Scheil)'] = p_comp
+                            if delta_ts is not None and delta_ts != 0:
+                                beta_comp = (q_comp / delta_ts) - ratio
+                                results[f'Beta ({elem} Scheil)'] = beta_comp
                 except Exception as e:
                     errors.append(f"Scheil calculation failed: {str(e)}")
             
@@ -983,6 +995,8 @@ class ThermoQGUI:
             self.pandat_p_s_data = None
             self.pandat_ts_s_data = None
             self.available_elements = []
+            self.pandat_solid_phase = None
+            self.pandat_q_col = None
             if hasattr(self, "last_result"):
                 self.last_result = None
 
@@ -1180,6 +1194,19 @@ class ThermoQGUI:
                                 continue
                 # Deduplicate and sort
                 self.available_elements = sorted(set(self.available_elements))
+                
+                # Detect solid phase and Q column from P (or P-S) so program works with any phase, not only FCC
+                self.pandat_solid_phase = None
+                self.pandat_q_col = None
+                for d in [self.pandat_p_data, self.pandat_p_s_data]:
+                    if d is not None:
+                        parsed = self._parse_pandat_phases_from_df(d)
+                        if parsed['solid_phase'] and parsed['q_col']:
+                            self.pandat_solid_phase = parsed['solid_phase']
+                            self.pandat_q_col = parsed['q_col']
+                            break
+                    if self.pandat_q_col:
+                        break
                 
                 # Update element selector to activate only available elements
                 self.update_element_availability()
@@ -1913,9 +1940,9 @@ class ThermoQGUI:
         info_label = ttk.Label(
             main_frame,
             text=(
-                "Plot Qtrue values (-T//fw(@FCC_A1)) using imported Pandat data.\n"
-                "Select X and Y elements to plot Qtrue values.\n"
-                "Equilibrium/Lever: Use P.xlsx; Scheil: Use P-S.xlsx."
+                "Plot Qtrue values (-T//fw(@phase)) using imported Pandat data.\n"
+                "Phase and Q column are detected from w(*@*) and -T//fw(@*) in the data.\n"
+                "Select X and Y elements. Equilibrium/Lever: P.xlsx; Scheil: P-S.xlsx."
             ),
             wraplength=700,
             justify='left'
@@ -2073,32 +2100,37 @@ class ThermoQGUI:
                     messagebox.showerror("Element Selection", "Please select X and Y elements first.")
                     return
                 
-                # Dynamic columns: X = w(selected X element), Y = w(selected Y element), Z = -T//fw(@FCC_A1)
+                # Dynamic columns: X = w(X element), Y = w(Y element), Z = -T//fw(@phase) (detected from data)
                 col_x_pattern = f"w({ex})"
                 col_y_pattern = f"w({ey})"
-                col_q = "-T//fw(@FCC_A1)"
+                col_q_found = None
+                # Prefer instance Q column, else detect from current dataframe
+                if self.pandat_q_col and self.pandat_q_col in df.columns:
+                    col_q_found = self.pandat_q_col
+                else:
+                    parsed = self._parse_pandat_phases_from_df(df)
+                    col_q_found = parsed['q_col']
+                if col_q_found is None:
+                    for col in df.columns:
+                        if isinstance(col, str) and re.match(r'^-T//fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', col, re.IGNORECASE):
+                            col_q_found = col
+                            break
                 
-                # Try case-insensitive column matching
                 col_x_found = None
                 col_y_found = None
-                col_q_found = None
-                
                 for col in df.columns:
                     if isinstance(col, str):
                         col_upper = col.upper()
-                        # Match w(ELEMENT) columns
                         if col_upper == col_x_pattern.upper():
                             col_x_found = col
                         elif col_upper == col_y_pattern.upper():
                             col_y_found = col
-                        elif col_upper == "-T//FW(@FCC_A1)":
-                            col_q_found = col
                 
                 if col_x_found is None or col_y_found is None or col_q_found is None:
                     available_cols = [str(c) for c in df.columns[:20]]
                     messagebox.showerror("Column Not Found", 
                         f"Required columns not found in dataset.\n"
-                        f"Looking for: {col_x_pattern}, {col_y_pattern}, {col_q}\n"
+                        f"Need: w({ex}), w({ey}), and a -T//fw(@phase) column.\n"
                         f"Available columns (first 20): {', '.join(available_cols)}")
                     return
 
@@ -2125,7 +2157,7 @@ class ThermoQGUI:
                     base_path = "."
                 
                 base = os.path.join(base_path, f"{prefix}_{ds}")
-                label_z = "Q Value (-T//fw(@FCC_A1))"
+                label_z = f"Q Value ({col_q_found})"
 
                 # Create smooth surface using Gaussian Process
                 status_label.config(text="Creating smooth surface...", foreground="orange")
@@ -2345,6 +2377,62 @@ class ThermoQGUI:
             x = (screen_width - 900) // 2
             y = (screen_height - 600) // 2
             self.root.geometry(f"900x600+{x}+{y}")
+    
+    def _parse_pandat_phases_from_df(self, df):
+        """Parse DataFrame columns to detect phases and Q column from w(*@*) and -T//fw(@*) patterns.
+        Returns dict: phases (list), solid_phase (str|None), q_col (str|None), fw_col (str|None),
+                     all_fw_cols (list), all_q_cols (list). First * = element, second * = phase.
+        """
+        if df is None or not hasattr(df, 'columns'):
+            return {'phases': [], 'solid_phase': None, 'q_col': None, 'fw_col': None,
+                    'all_fw_cols': [], 'all_q_cols': []}
+        phases_set = set()
+        q_col = None
+        solid_phase = None
+        fw_col = None
+        all_fw_cols = []
+        all_q_cols = []
+        # w(ELEMENT@PHASE): element 1-3 letters, phase alphanumeric + underscore
+        re_w_at = re.compile(r'^w\s*\(\s*([A-Za-z]{1,3})\s*@\s*([A-Za-z0-9_]+)\s*\)$', re.IGNORECASE)
+        re_q = re.compile(r'^-T//fw\s*\(\s*@\s*([A-Za-z0-9_]+)\s*\)$', re.IGNORECASE)
+        re_fw = re.compile(r'^fw\s*\(\s*@\s*([A-Za-z0-9_]+)\s*\)$', re.IGNORECASE)
+        for col in df.columns:
+            if not isinstance(col, str):
+                continue
+            col_str = col.strip()
+            m = re_w_at.match(col_str)
+            if m:
+                phases_set.add(m.group(2))
+                continue
+            m = re_q.match(col_str)
+            if m:
+                phase = m.group(2)
+                all_q_cols.append((phase, col))
+                if q_col is None:
+                    q_col = col
+                    solid_phase = phase
+                continue
+            m = re_fw.match(col_str)
+            if m:
+                phase = m.group(2)
+                all_fw_cols.append((phase, col))
+                if solid_phase and phase.upper() == solid_phase.upper():
+                    fw_col = col
+                continue
+        phases = sorted(phases_set)
+        if solid_phase is None and phases:
+            # No -T//fw(@*) found: use first non-LIQUID phase as solid
+            for p in phases:
+                if p.upper() != 'LIQUID':
+                    solid_phase = p
+                    break
+            if solid_phase and all_fw_cols:
+                for p, c in all_fw_cols:
+                    if p.upper() == solid_phase.upper():
+                        fw_col = c
+                        break
+        return {'phases': phases, 'solid_phase': solid_phase, 'q_col': q_col, 'fw_col': fw_col,
+                'all_fw_cols': all_fw_cols, 'all_q_cols': all_q_cols}
     
     def find_matching_row(self, composition, data_df):
         """Find the row in the given Pandat data DataFrame that matches the given composition
@@ -3366,6 +3454,12 @@ Si: 2.0"""
                 status_label.config(text="Processing files...", foreground="orange")
                 extractor_window.update()
                 
+                # Initialize data lists
+                p_data_list = []
+                ts_data_list = []
+                p_s_data_list = []
+                ts_s_data_list = []
+                
                 # Process Lever files
                 lever_csv_files = sorted([f for f in os.listdir(lever_folder) if f.endswith('.csv')])
                 if not lever_csv_files:
@@ -3373,7 +3467,6 @@ Si: 2.0"""
                     return
                 
                 # Process each Lever CSV file for P.xlsx
-                p_data_list = []
                 for csv_file in lever_csv_files:
                     csv_path = os.path.join(lever_folder, csv_file)
                     df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])  # Skip unit row
@@ -3387,19 +3480,20 @@ Si: 2.0"""
                         max_t_row = filtered.loc[filtered['T_num'].idxmax()]
                         p_data_list.append(max_t_row)
                 
-                # Extract columns for P.xlsx: T, w(*), w(*@*), fs, fw(@FCC_A1), dwdT_L(*@LIQUID), -T//fw(@FCC_A1)
+                # Extract columns for P.xlsx: T, fs, w(*), w(*@*), fw(@*), -T//fw(@*), dwdT_L(*@LIQUID)
+                # Phases and elements are detected from column names (w(ELEMENT@PHASE)); first * = element, second * = phase
                 if p_data_list:
                     p_df = pd.DataFrame(p_data_list)
-                    # Select required columns
-                    p_cols = ['T', 'fs', 'fw(@FCC_A1)', '-T//fw(@FCC_A1)']
-                    # Add w(*) columns (e.g., w(AL), w(MG), w(SI))
-                    p_cols.extend([c for c in p_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
-                    # Add w(*@*) columns (LIQUID and FCC_A1) - e.g., w(AL@LIQUID), w(AL@FCC_A1)
-                    p_cols.extend([c for c in p_df.columns if re.match(r'^w\([A-Z]+@(LIQUID|FCC_A1)\)$', c, re.IGNORECASE)])
-                    # Add dwdT_L(*@LIQUID) columns (e.g., dwdT_L(AL@LIQUID))
-                    p_cols.extend([c for c in p_df.columns if re.search(r'dwdT_L\([A-Z]+@LIQUID\)', c, re.IGNORECASE)])
-                    
-                    # Remove duplicates and keep only existing columns
+                    p_cols = ['T', 'fs']
+                    # fw(@PHASE) and -T//fw(@PHASE) for any phase present in data
+                    p_cols.extend([c for c in p_df.columns if isinstance(c, str) and re.match(r'^fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                    p_cols.extend([c for c in p_df.columns if isinstance(c, str) and re.match(r'^-T//fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                    # w(*) overall composition
+                    p_cols.extend([c for c in p_df.columns if re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE)])
+                    # w(*@*) element-in-phase (any phase)
+                    p_cols.extend([c for c in p_df.columns if isinstance(c, str) and re.match(r'^w\([A-Za-z]{1,3}\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                    # dwdT_L(*@LIQUID)
+                    p_cols.extend([c for c in p_df.columns if re.search(r'dwdT_L\([A-Za-z]{1,3}@LIQUID\)', c, re.IGNORECASE)])
                     p_cols = list(dict.fromkeys([c for c in p_cols if c in p_df.columns]))
                     p_output = p_df[p_cols].copy()
                     
@@ -3408,7 +3502,6 @@ Si: 2.0"""
                     status_label.config(text=f"P.xlsx saved: {len(p_output)} rows", foreground="green")
                 
                 # Process each Lever CSV file for Ts.xlsx
-                ts_data_list = []
                 for csv_file in lever_csv_files:
                     csv_path = os.path.join(lever_folder, csv_file)
                     df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])
@@ -3447,7 +3540,6 @@ Si: 2.0"""
                 scheil_dat_files = sorted([f for f in os.listdir(scheil_folder) if f.endswith('.dat')])
                 if scheil_dat_files:
                     # Process for P-S.xlsx
-                    p_s_data_list = []
                     for dat_file in scheil_dat_files:
                         dat_path = os.path.join(scheil_folder, dat_file)
                         df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
@@ -3462,14 +3554,12 @@ Si: 2.0"""
                     
                     if p_s_data_list:
                         p_s_df = pd.DataFrame(p_s_data_list)
-                        p_s_cols = ['T', 'fs', 'fw(@FCC_A1)', '-T//fw(@FCC_A1)']
-                        # Add w(*) columns
-                        p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
-                        # Add w(*@*) columns
-                        p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Z]+@(LIQUID|FCC_A1)\)$', c, re.IGNORECASE)])
-                        # Add dwdT_L(*@LIQUID) columns
-                        p_s_cols.extend([c for c in p_s_df.columns if re.search(r'dwdT_L\([A-Z]+@LIQUID\)', c, re.IGNORECASE)])
-                        # Remove duplicates and keep only existing columns
+                        p_s_cols = ['T', 'fs']
+                        p_s_cols.extend([c for c in p_s_df.columns if isinstance(c, str) and re.match(r'^fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                        p_s_cols.extend([c for c in p_s_df.columns if isinstance(c, str) and re.match(r'^-T//fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                        p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE)])
+                        p_s_cols.extend([c for c in p_s_df.columns if isinstance(c, str) and re.match(r'^w\([A-Za-z]{1,3}\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
+                        p_s_cols.extend([c for c in p_s_df.columns if re.search(r'dwdT_L\([A-Za-z]{1,3}@LIQUID\)', c, re.IGNORECASE)])
                         p_s_cols = list(dict.fromkeys([c for c in p_s_cols if c in p_s_df.columns]))
                         p_s_output = p_s_df[p_s_cols].copy()
                         
@@ -3477,7 +3567,6 @@ Si: 2.0"""
                         p_s_output.to_excel(p_s_output_path, index=False)
                     
                     # Process for Ts-S.xlsx
-                    ts_s_data_list = []
                     for dat_file in scheil_dat_files:
                         dat_path = os.path.join(scheil_folder, dat_file)
                         df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
