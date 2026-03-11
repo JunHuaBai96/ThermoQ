@@ -3436,6 +3436,17 @@ Si: 2.0"""
         status_label = ttk.Label(main_frame, text="Ready to extract", foreground="blue")
         status_label.pack(pady=10)
         
+        def _find_col(df, names):
+            """Find column in df by case-insensitive match. names: list of candidates e.g. ['fs','f_s']"""
+            if df is None or not hasattr(df, 'columns'):
+                return None
+            cols_upper = {str(c).strip().upper(): c for c in df.columns if isinstance(c, str)}
+            for n in names:
+                nu = str(n).strip().upper()
+                if nu in cols_upper:
+                    return cols_upper[nu]
+            return None
+        
         def extract_results():
             """Extract results from CSV/DAT files"""
             try:
@@ -3471,9 +3482,14 @@ Si: 2.0"""
                     csv_path = os.path.join(lever_folder, csv_file)
                     df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])  # Skip unit row
                     
+                    fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
+                    t_col = _find_col(df, ['T', 't', 'Temperature'])
+                    if fs_col is None or t_col is None:
+                        status_label.config(text=f"Skipped {csv_file}: missing 'fs' or 'T' column. Available: {list(df.columns)[:10]}...", foreground="orange")
+                        continue
                     # Filter: fs < 0.000001, get row with max T
-                    df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
-                    df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                    df['fs_num'] = pd.to_numeric(df[fs_col], errors='coerce')
+                    df['T_num'] = pd.to_numeric(df[t_col], errors='coerce')
                     filtered = df[df['fs_num'] < 0.000001].copy()
                     
                     if not filtered.empty:
@@ -3484,7 +3500,13 @@ Si: 2.0"""
                 # Phases and elements are detected from column names (w(ELEMENT@PHASE)); first * = element, second * = phase
                 if p_data_list:
                     p_df = pd.DataFrame(p_data_list)
-                    p_cols = ['T', 'fs']
+                    t_col_p = _find_col(p_df, ['T', 't', 'Temperature'])
+                    fs_col_p = _find_col(p_df, ['fs', 'f_s', 'Fs'])
+                    p_cols = []
+                    if t_col_p:
+                        p_cols.append(t_col_p)
+                    if fs_col_p:
+                        p_cols.append(fs_col_p)
                     # fw(@PHASE) and -T//fw(@PHASE) for any phase present in data
                     p_cols.extend([c for c in p_df.columns if isinstance(c, str) and re.match(r'^fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
                     p_cols.extend([c for c in p_df.columns if isinstance(c, str) and re.match(r'^-T//fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
@@ -3505,9 +3527,12 @@ Si: 2.0"""
                 for csv_file in lever_csv_files:
                     csv_path = os.path.join(lever_folder, csv_file)
                     df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])
-                    
-                    df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
-                    df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                    fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
+                    t_col = _find_col(df, ['T', 't', 'Temperature'])
+                    if fs_col is None or t_col is None:
+                        continue
+                    df['fs_num'] = pd.to_numeric(df[fs_col], errors='coerce')
+                    df['T_num'] = pd.to_numeric(df[t_col], errors='coerce')
                     
                     # Find fs max or fs=1 with max T
                     fs_max = df['fs_num'].max()
@@ -3522,13 +3547,14 @@ Si: 2.0"""
                     
                     ts_data_list.append(max_t_row)
                 
-                # Extract columns for Ts.xlsx: T, w(*), fs
+                # Extract columns for Ts.xlsx: T, fs, w(*)
                 if ts_data_list:
                     ts_df = pd.DataFrame(ts_data_list)
-                    ts_cols = ['T', 'fs']
+                    t_c = _find_col(ts_df, ['T', 't', 'Temperature'])
+                    fs_c = _find_col(ts_df, ['fs', 'f_s', 'Fs'])
+                    ts_cols = [c for c in (t_c, fs_c) if c is not None]
                     # Add w(*) columns (e.g., w(AL), w(MG), w(SI))
-                    ts_cols.extend([c for c in ts_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
-                    # Remove duplicates and keep only existing columns
+                    ts_cols.extend([c for c in ts_df.columns if re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE)])
                     ts_cols = list(dict.fromkeys([c for c in ts_cols if c in ts_df.columns]))
                     ts_output = ts_df[ts_cols].copy()
                     
@@ -3543,9 +3569,12 @@ Si: 2.0"""
                     for dat_file in scheil_dat_files:
                         dat_path = os.path.join(scheil_folder, dat_file)
                         df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
-                        
-                        df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
-                        df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                        fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
+                        t_col = _find_col(df, ['T', 't', 'Temperature'])
+                        if fs_col is None or t_col is None:
+                            continue
+                        df['fs_num'] = pd.to_numeric(df[fs_col], errors='coerce')
+                        df['T_num'] = pd.to_numeric(df[t_col], errors='coerce')
                         filtered = df[df['fs_num'] < 0.000001].copy()
                         
                         if not filtered.empty:
@@ -3554,7 +3583,9 @@ Si: 2.0"""
                     
                     if p_s_data_list:
                         p_s_df = pd.DataFrame(p_s_data_list)
-                        p_s_cols = ['T', 'fs']
+                        t_c = _find_col(p_s_df, ['T', 't', 'Temperature'])
+                        fs_c = _find_col(p_s_df, ['fs', 'f_s', 'Fs'])
+                        p_s_cols = [c for c in (t_c, fs_c) if c is not None]
                         p_s_cols.extend([c for c in p_s_df.columns if isinstance(c, str) and re.match(r'^fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
                         p_s_cols.extend([c for c in p_s_df.columns if isinstance(c, str) and re.match(r'^-T//fw\s*\(\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE)])
                         p_s_cols.extend([c for c in p_s_df.columns if re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE)])
@@ -3570,9 +3601,12 @@ Si: 2.0"""
                     for dat_file in scheil_dat_files:
                         dat_path = os.path.join(scheil_folder, dat_file)
                         df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
-                        
-                        df['fs_num'] = pd.to_numeric(df['fs'], errors='coerce')
-                        df['T_num'] = pd.to_numeric(df['T'], errors='coerce')
+                        fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
+                        t_col = _find_col(df, ['T', 't', 'Temperature'])
+                        if fs_col is None or t_col is None:
+                            continue
+                        df['fs_num'] = pd.to_numeric(df[fs_col], errors='coerce')
+                        df['T_num'] = pd.to_numeric(df[t_col], errors='coerce')
                         
                         fs_max = df['fs_num'].max()
                         if abs(fs_max - 1.0) < 0.000001:
@@ -3586,7 +3620,9 @@ Si: 2.0"""
                     
                     if ts_s_data_list:
                         ts_s_df = pd.DataFrame(ts_s_data_list)
-                        ts_s_cols = ['T', 'fs']
+                        t_c = _find_col(ts_s_df, ['T', 't', 'Temperature'])
+                        fs_c = _find_col(ts_s_df, ['fs', 'f_s', 'Fs'])
+                        ts_s_cols = [c for c in (t_c, fs_c) if c is not None]
                         # Add w(*) columns
                         ts_s_cols.extend([c for c in ts_s_df.columns if re.match(r'^w\([A-Z]+\)$', c, re.IGNORECASE)])
                         # Remove duplicates and keep only existing columns
