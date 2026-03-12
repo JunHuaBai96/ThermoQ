@@ -1,0 +1,4 @@
+T	w(AL)	w(CU)	w(LI)	fs	fw(@FCC_A1)	w(AL@FCC_A1)	w(CU@FCC_A1)	w(LI@FCC_A1)	w(AL@LIQUID)	w(CU@LIQUID)	w(LI@LIQUID)	dwdT_L(AL@LIQUID)	dwdT_L(CU@LIQUID)	dwdT_L(LI@LIQUID)	-T	fw(@FCC_A1)_1	-T//fw(@FCC_A1)	
+C	%	%	%	mole/mole	kg/kg	%	%	%	%	%	%	SI	SI	SI				
+660.323	100	0	0	0	0	100	0	0	100	0	0	0			-933.473	0	0	
+660.3027259	100	0	0	1	1	100	0	0							-933.4527259	1	0	

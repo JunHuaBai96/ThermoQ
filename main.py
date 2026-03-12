@@ -3388,12 +3388,34 @@ Si: 2.0"""
         """Open Pandat results extractor tool"""
         extractor_window = tk.Toplevel(self.root)
         extractor_window.title("Extract Pandat Results")
-        extractor_window.geometry("700x550")
+        extractor_window.geometry("720x680")
+        extractor_window.minsize(600, 520)
         extractor_window.grab_set()  # Make window modal
-        
-        # Create main frame
-        main_frame = ttk.Frame(extractor_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Bottom bar: always visible at bottom of window
+        bottom_bar = ttk.Frame(extractor_window, padding="10")
+        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Scrollable content above the buttons
+        canvas = tk.Canvas(extractor_window, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(extractor_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, padding="20")
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        main_frame = scrollable_frame
         
         # Title
         title_label = ttk.Label(main_frame, text="Extract Pandat Results", font=('Arial', 14, 'bold'))
@@ -3432,9 +3454,11 @@ Si: 2.0"""
         ttk.Button(output_frame, text="Browse", 
                   command=lambda: output_dir_var.set(filedialog.askdirectory(title="Select Output Directory"))).pack(side=tk.RIGHT, padx=5)
         
-        # Status label
-        status_label = ttk.Label(main_frame, text="Ready to extract", foreground="blue")
-        status_label.pack(pady=10)
+        # Status area
+        status_frame = ttk.LabelFrame(main_frame, text="Status", padding="8")
+        status_frame.pack(fill=tk.X, pady=10)
+        status_label = ttk.Label(status_frame, text="Ready to extract", foreground="blue", wraplength=620)
+        status_label.pack(anchor="w")
         
         def _find_col(df, names):
             """Find column in df by case-insensitive match. names: list of candidates e.g. ['fs','f_s']"""
@@ -3471,21 +3495,21 @@ Si: 2.0"""
                 p_s_data_list = []
                 ts_s_data_list = []
                 
-                # Process Lever files
-                lever_csv_files = sorted([f for f in os.listdir(lever_folder) if f.endswith('.csv')])
-                if not lever_csv_files:
-                    messagebox.showerror("Error", "No CSV files found in Lever folder!")
+                # Process Lever files (.csv and .dat)
+                lever_files = sorted([f for f in os.listdir(lever_folder) if f.lower().endswith(('.csv', '.dat'))])
+                if not lever_files:
+                    messagebox.showerror("Error", "No CSV or DAT files found in Lever folder!")
                     return
                 
-                # Process each Lever CSV file for P.xlsx
-                for csv_file in lever_csv_files:
-                    csv_path = os.path.join(lever_folder, csv_file)
-                    df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])  # Skip unit row
+                # Process each Lever file for P.xlsx
+                for lev_file in lever_files:
+                    lev_path = os.path.join(lever_folder, lev_file)
+                    df = pd.read_csv(lev_path, sep='\t', header=0, skiprows=[1])  # Skip unit row
                     
                     fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
                     t_col = _find_col(df, ['T', 't', 'Temperature'])
                     if fs_col is None or t_col is None:
-                        status_label.config(text=f"Skipped {csv_file}: missing 'fs' or 'T' column. Available: {list(df.columns)[:10]}...", foreground="orange")
+                        status_label.config(text=f"Skipped {lev_file}: missing 'fs' or 'T' column. Available: {list(df.columns)[:10]}...", foreground="orange")
                         continue
                     # Filter: fs < 0.000001, get row with max T
                     df['fs_num'] = pd.to_numeric(df[fs_col], errors='coerce')
@@ -3520,13 +3544,17 @@ Si: 2.0"""
                     p_output = p_df[p_cols].copy()
                     
                     p_output_path = os.path.join(output_dir, 'P.xlsx')
-                    p_output.to_excel(p_output_path, index=False)
-                    status_label.config(text=f"P.xlsx saved: {len(p_output)} rows", foreground="green")
+                    try:
+                        p_output.to_excel(p_output_path, index=False)
+                        status_label.config(text=f"P.xlsx saved: {len(p_output)} rows", foreground="green")
+                    except PermissionError:
+                        messagebox.showerror("Permission Denied", f"Cannot write {p_output_path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.")
+                        return
                 
-                # Process each Lever CSV file for Ts.xlsx
-                for csv_file in lever_csv_files:
-                    csv_path = os.path.join(lever_folder, csv_file)
-                    df = pd.read_csv(csv_path, sep='\t', header=0, skiprows=[1])
+                # Process each Lever file for Ts.xlsx
+                for lev_file in lever_files:
+                    lev_path = os.path.join(lever_folder, lev_file)
+                    df = pd.read_csv(lev_path, sep='\t', header=0, skiprows=[1])
                     fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
                     t_col = _find_col(df, ['T', 't', 'Temperature'])
                     if fs_col is None or t_col is None:
@@ -3559,16 +3587,87 @@ Si: 2.0"""
                     ts_output = ts_df[ts_cols].copy()
                     
                     ts_output_path = os.path.join(output_dir, 'Ts.xlsx')
-                    ts_output.to_excel(ts_output_path, index=False)
-                    status_label.config(text=f"Ts.xlsx saved: {len(ts_output)} rows", foreground="green")
+                    try:
+                        ts_output.to_excel(ts_output_path, index=False)
+                        status_label.config(text=f"Ts.xlsx saved: {len(ts_output)} rows", foreground="green")
+                    except PermissionError:
+                        messagebox.showerror("Permission Denied", f"Cannot write {ts_output_path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.")
+                        return
                 
-                # Process Scheil files (same logic as Lever)
-                scheil_dat_files = sorted([f for f in os.listdir(scheil_folder) if f.endswith('.dat')])
-                if scheil_dat_files:
+                # Process Scheil files (same logic as Lever); accept both .csv and .dat (e.g. All table_Scheil CSV)
+                scheil_files = sorted([f for f in os.listdir(scheil_folder) if f.lower().endswith(('.csv', '.dat'))])
+                fcc_split_message_shown = False  # Show "FCC分离" prompt only once
+                if scheil_files:
                     # Process for P-S.xlsx
-                    for dat_file in scheil_dat_files:
-                        dat_path = os.path.join(scheil_folder, dat_file)
-                        df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
+                    for sch_file in scheil_files:
+                        sch_path = os.path.join(scheil_folder, sch_file)
+                        df = pd.read_csv(sch_path, sep='\t', header=0, skiprows=[1])
+
+                        # Detect split FCC phases: fw(@FCC_A1#1), fw(@FCC_A1#2) or any fw(@*#digit)
+                        fcc_split_cols = [
+                            c for c in df.columns
+                            if isinstance(c, str) and re.search(r'^fw\s*\(\s*@\s*[A-Za-z0-9_]+#\d+\s*\)$', c, re.IGNORECASE)
+                        ]
+                        if fcc_split_cols:
+                            if not fcc_split_message_shown:
+                                fcc_split_message_shown = True
+                                if self.language == 'zh':
+                                    _title = "FCC 相分离"
+                                    _msg = (
+                                        "检测到 FCC 分离成两个成分不同的 FCC 相（存在 fw(@FCC_A1#1)、fw(@FCC_A1#2) 等列）。\n\n"
+                                        "将使用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 并补充到 P-S.xlsx；若已有 -T//fw(@FCC_A1) 数值则保留。"
+                                    )
+                                else:
+                                    _title = "FCC phase split"
+                                    _msg = (
+                                        "Detected FCC split into two compositionally different FCC phases "
+                                        "(columns such as fw(@FCC_A1#1), fw(@FCC_A1#2) are present).\n\n"
+                                        "-T//fw(@FCC_A1) will be computed from d(T)/d(fw(@FCC_A1#1)) and filled in P-S.xlsx; "
+                                        "existing -T//fw(@FCC_A1) values are kept."
+                                    )
+                                messagebox.showinfo(_title, _msg, parent=extractor_window)
+                            if self.language == 'zh':
+                                status_label.config(
+                                    text=f"FCC 分离已检测（如 {sch_file}）。正在用 fw(@FCC_A1#1) 计算 -T//fw(@FCC_A1)...",
+                                    foreground="orange"
+                                )
+                            else:
+                                status_label.config(
+                                    text=f"FCC split detected (e.g. {sch_file}). Computing -T//fw(@FCC_A1) from fw(@FCC_A1#1)...",
+                                    foreground="orange"
+                                )
+                            extractor_window.update()
+                            base_fw_col = fcc_split_cols[0]
+                            # Find or create -T//fw(@FCC_A1) column
+                            q_col = None
+                            for c in df.columns:
+                                if isinstance(c, str) and c.strip().upper() == '-T//FW(@FCC_A1)':
+                                    q_col = c
+                                    break
+                            if q_col is None:
+                                q_col = '-T//fw(@FCC_A1)'
+                            t_col_full = _find_col(df, ['T', 't', 'Temperature'])
+                            if t_col_full and base_fw_col in df.columns:
+                                t_vals = pd.to_numeric(df[t_col_full], errors='coerce')
+                                fw_vals = pd.to_numeric(df[base_fw_col], errors='coerce')
+                                mask = t_vals.notna() & fw_vals.notna()
+                                if mask.sum() >= 3:
+                                    # Sort by T for a stable numerical derivative
+                                    idx_mask = df.index[mask]
+                                    t_sorted = t_vals.loc[idx_mask].to_numpy()
+                                    fw_sorted = fw_vals.loc[idx_mask].to_numpy()
+                                    order = np.argsort(t_sorted)
+                                    t_sorted = t_sorted[order]
+                                    fw_sorted = fw_sorted[order]
+                                    d_fw_dT = np.gradient(fw_sorted, t_sorted)
+                                    q_sorted = -t_sorted * d_fw_dT
+                                    q_series = pd.Series(index=idx_mask[order], data=q_sorted, dtype=float)
+                                    if q_col not in df.columns:
+                                        df[q_col] = np.nan
+                                    existing_q = pd.to_numeric(df[q_col], errors='coerce')
+                                    need_fill = existing_q.isna()
+                                    df.loc[need_fill & q_series.notna(), q_col] = q_series[need_fill & q_series.notna()]
+
                         fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
                         t_col = _find_col(df, ['T', 't', 'Temperature'])
                         if fs_col is None or t_col is None:
@@ -3593,14 +3692,26 @@ Si: 2.0"""
                         p_s_cols.extend([c for c in p_s_df.columns if re.search(r'dwdT_L\([A-Za-z]{1,3}@LIQUID\)', c, re.IGNORECASE)])
                         p_s_cols = list(dict.fromkeys([c for c in p_s_cols if c in p_s_df.columns]))
                         p_s_output = p_s_df[p_s_cols].copy()
+                        # P-S.xlsx must include fw(@FCC_A1) and -T//fw(@FCC_A1); add with 0 if missing from source
+                        for fixed in ['fw(@FCC_A1)', '-T//fw(@FCC_A1)']:
+                            if fixed not in p_s_output.columns:
+                                p_s_output[fixed] = 0
+                        # Fill missing w(*) and w(*@*) with 0
+                        w_cols_ps = [c for c in p_s_output.columns if isinstance(c, str) and (re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE) or re.match(r'^w\([A-Za-z]{1,3}\s*@\s*[A-Za-z0-9_]+\s*\)$', c, re.IGNORECASE))]
+                        if w_cols_ps:
+                            p_s_output[w_cols_ps] = p_s_output[w_cols_ps].apply(pd.to_numeric, errors='coerce').fillna(0)
                         
                         p_s_output_path = os.path.join(output_dir, 'P-S.xlsx')
-                        p_s_output.to_excel(p_s_output_path, index=False)
+                        try:
+                            p_s_output.to_excel(p_s_output_path, index=False)
+                        except PermissionError:
+                            messagebox.showerror("Permission Denied", f"Cannot write {p_s_output_path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.")
+                            return
                     
                     # Process for Ts-S.xlsx
-                    for dat_file in scheil_dat_files:
-                        dat_path = os.path.join(scheil_folder, dat_file)
-                        df = pd.read_csv(dat_path, sep='\t', header=0, skiprows=[1])
+                    for sch_file in scheil_files:
+                        sch_path = os.path.join(scheil_folder, sch_file)
+                        df = pd.read_csv(sch_path, sep='\t', header=0, skiprows=[1])
                         fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
                         t_col = _find_col(df, ['T', 't', 'Temperature'])
                         if fs_col is None or t_col is None:
@@ -3628,9 +3739,17 @@ Si: 2.0"""
                         # Remove duplicates and keep only existing columns
                         ts_s_cols = list(dict.fromkeys([c for c in ts_s_cols if c in ts_s_df.columns]))
                         ts_s_output = ts_s_df[ts_s_cols].copy()
+                        # Fill missing w(*) with 0
+                        w_cols_tss = [c for c in ts_s_output.columns if isinstance(c, str) and re.match(r'^w\([A-Za-z]{1,3}\)$', c, re.IGNORECASE)]
+                        if w_cols_tss:
+                            ts_s_output[w_cols_tss] = ts_s_output[w_cols_tss].apply(pd.to_numeric, errors='coerce').fillna(0)
                         
                         ts_s_output_path = os.path.join(output_dir, 'Ts-S.xlsx')
-                        ts_s_output.to_excel(ts_s_output_path, index=False)
+                        try:
+                            ts_s_output.to_excel(ts_s_output_path, index=False)
+                        except PermissionError:
+                            messagebox.showerror("Permission Denied", f"Cannot write {ts_s_output_path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.")
+                            return
                 
                 status_label.config(
                     text=f"Success! Files saved to: {output_dir}\n"
@@ -3654,12 +3773,11 @@ Si: 2.0"""
                 import traceback
                 traceback.print_exc()
         
-        # Buttons
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(pady=20)
-        
-        ttk.Button(buttons_frame, text="Extract Results", command=extract_results).pack(side=tk.LEFT, padx=10)
-        ttk.Button(buttons_frame, text="Close", command=extractor_window.destroy).pack(side=tk.LEFT, padx=10)
+        # Buttons in bottom bar (always visible) - after extract_results is defined
+        btn_inner = ttk.Frame(bottom_bar)
+        btn_inner.pack(expand=True)
+        ttk.Button(btn_inner, text="Extract Results", command=extract_results).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_inner, text="Close", command=extractor_window.destroy).pack(side=tk.LEFT, padx=10)
     
     def open_liquidus_vector_plotter(self):
         """Open liquidus vector plotter tool"""

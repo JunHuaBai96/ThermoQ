@@ -5,41 +5,30 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 ## 更新摘要
 
 ### 最新版本
+- **相/元素自动识别（普适性增强）**：
+  - 程序不再固定为 FCC 固相，而是根据 **Extract Pandat Results** 或 **Pandat to ThermoQ** 导入的 Excel 中列名 **w(*@*)**（第一个 * 为元素，第二个 * 为相）自动识别相与元素
+  - 主计算、Plot Q Values、Extract Pandat Results 等均使用检测到的固相与 Q 列（如 -T//fw(@FCC_A1)、-T//fw(@BCC_A2)）
+  - 组分 Q/P/Beta 针对所有在数据中具备 w(*)、w(*@固相)、w(*@LIQUID)、dwdT_L(*@LIQUID) 的元素计算，不再限于 Mg、Si
+- **Extract Pandat Results 增强**：
+  - **Lever 与 Scheil 文件夹**：同时支持 `.csv` 和 `.dat`（如 All table_Lever、All table_Scheil 的 CSV 均可）
+  - **列名容错**：对 `fs`、`T` 列做大小写不敏感匹配（支持 fs、f_s、Fs；T、t、Temperature），缺失时跳过该文件并提示，避免 KeyError
+  - **P-S.xlsx / Ts-S.xlsx**：生成文件中空缺的 **w(*)**（及 P-S 中的 w(*@*)）自动用 **0** 填充
+  - **P-S.xlsx**：始终包含 **fw(@FCC_A1)** 和 **-T//fw(@FCC_A1)** 列；若源数据无这两列则自动添加并填 0
+  - **FCC 相分离**：若 Scheil 的 CSV 中存在 **fw(@FCC_A1#1)、fw(@FCC_A1#2)** 等列，表示 FCC 分离成两个成分不同的 FCC 相；程序会弹窗提示（英文默认，Help→Language→中文 时显示中文），并用 T 对 fw(@FCC_A1#1) 求导计算 **-T//fw(@FCC_A1)** 补充到 P-S.xlsx；若已有 -T//fw(@FCC_A1) 数值则保留
+  - **写入权限**：保存 P/Ts/P-S/Ts-S 时若遇 PermissionError（如文件被 Excel 打开），会提示关闭文件或更换输出目录
+  - **窗口与布局**：窗口增高并带滚动区域，底部固定 **Extract Results** 与 **Close** 按钮（左右居中），长状态提示不再遮挡按钮
+- **Plot Q Values**：Z 轴 Q 列与标签根据数据中的 **-T//fw(@phase)** 自动识别，支持任意相名（如 BCC_A2）
+- **计算功能**：Qtrue 与分量计算使用检测到的固相列（如 w(*@FCC_A1) 或 w(*@BCC_A2)）与 Q 列，支持多体系（Al-Cu-Li、Al-Mg-Si、Ti-Fe-Cu 等）
+
+### 历史更新（Plot 与 Tools 等）
 - **Plot工具增强**：
-  - **高斯过程平滑**：所有绘图功能现在使用高斯过程回归（GPR）生成平滑、连续的曲面，替代散点图
-  - **自动打开文件**：绘图完成后自动打开生成的图片或HTML文件，并提供另存为选项
-  - **列名大小写不敏感**：支持各种大小写组合的列名（如w(MG)、w(Mg)、w(mg)）
-  - Plot Phase Surfaces：绘制固相面、液相面（2D热图、3D静态图、3D旋转GIF、交互式3D图）
-  - Plot Qtrue Values：绘制Qtrue值图（使用w(MG)和w(SI)作为X和Y轴，-T//fw(@FCC_A1)作为Z轴）
-  - Plot Liquidus Vectors：绘制液相面矢量图（U水平、V垂直、Z合成矢量）
-    - 窗口大小优化：从700x600增加到800x750，确保所有按钮可见
-    - 元素自动识别：根据导入的Excel文件自动识别可用元素，无需手动选择
-- **Tools菜单新增功能**：
-  - Composition Converter：质量分数与原子分数转换工具
-  - Generate Thermo-calc Batch File：生成Thermo-calc批处理文件（.tcm）
-  - Extract Thermo-calc Results：从.exp文件中提取液相线温度、固相线温度和熔程
-  - Extract Pandat Results：从CSV/DAT文件中提取数据并生成P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx
-- **计算功能更新**：
-  - 新增Qtrue计算：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
-  - 新增Q值（分量）计算：基于w(*@FCC_A1)/w(*@LIQUID)比值和dwdT_L(*@LIQUID)计算Mg和Si的分量Q值
-  - 新增P值（分量）计算：基于Q值（分量）和w(*@FCC_A1)/w(*@LIQUID)比值计算Mg和Si的分量P值
-  - 新增ΔT计算：P.xlsx的T值减去Ts.xlsx的T值（平衡凝固）
-  - 新增ΔTs计算：P-S.xlsx的T值减去Ts-S.xlsx的T值（Scheil凝固）
-  - 删除熔程计算模式
-- **Pandat导入增强**：
-  - 支持四文件导入：`P.xls`、`Ts.xlsx`（平衡凝固）和 `P-S.xlsx`、`Ts-S.xlsx`（Scheil凝固）
-  - 修复数据行数丢失问题，正确处理所有数据行
-  - 修复FutureWarning警告
-- **界面优化**：
-  - 主窗口大小优化：默认尺寸从1200x800调整为900x600，更紧凑实用
-  - 简化元素选择界面，仅支持wt%输入
-  - 添加成分总和检查功能（自动显示是否达到100 wt%）
-  - 修复Total composition显示不全问题
-  - 优化各组件间距，减少空白区域
+  - 高斯过程平滑：所有绘图功能使用高斯过程回归（GPR）生成平滑、连续曲面
+  - 自动打开文件、列名大小写不敏感；Plot Phase Surfaces / Plot Qtrue Values / Plot Liquidus Vectors 等
+- **Tools 与计算、Pandat 导入、界面优化**：见上文各条
 
 ### 历史版本
 - 新增计算模式：`ΔT（熔程）`，计算 `P.xls` 的 `T` 减去 `Ts.xlsx` 的 `T`
-- Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`
+- Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`：`P.xls` 与 `Ts.xlsx`
 - 导入时自动删除空白行，并将所有 `1/dwdT_L(*@LIQUID)` 列数值除以 100
 - 从 `w(*)` 列提取可用元素（如 Al、Mg、Mn），仅激活这些元素供选择
 - 启动画面后主窗口自动居中，默认尺寸增至 `1200x800`，并设定最小尺寸以避免界面拥挤
@@ -52,8 +41,8 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 - 支持质量分数（wt%）成分输入
 - 实时成分总和检查（显示是否达到100 wt%）
 - 支持Qtrue、Q值（分量）、P值（分量）、ΔT、ΔTs计算
-  - Qtrue：从P.xlsx或P-S.xlsx中提取-T//fw(@FCC_A1)值
-  - Q值（分量）/ P值（分量）：针对Mg和Si元素的详细分量计算
+  - Qtrue：从 P.xlsx 或 P-S.xlsx 中提取 -T//fw(@phase) 值（phase 由数据列名自动识别，如 FCC_A1、BCC_A2）
+  - Q值（分量）/ P值（分量）：针对数据中具备 w(*)、w(*@固相)、w(*@LIQUID)、dwdT_L(*@LIQUID) 的**所有元素**计算，不限于 Mg、Si
   - ΔT：平衡凝固的液相线温度与固相线温度差值
   - ΔTs：Scheil凝固的液相线温度与固相线温度差值
 - 支持从Pandat软件导出的Excel文件导入元素成分
@@ -68,10 +57,9 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 支持2D热图、3D静态图、3D旋转GIF、交互式3D图（Plotly）
   - 支持平衡凝固和Scheil凝固数据
   - 可选择任意两个元素作为X和Y轴
-- **Plot Qtrue Values**：绘制Qtrue值图
-  - X轴：w(MG)，Y轴：w(SI)，Z轴：Qtrue值（-T//fw(@FCC_A1)）
-  - 支持平衡凝固（使用P.xlsx）和Scheil凝固（使用P-S.xlsx）数据
-  - 支持2D热图、3D静态图、3D旋转GIF、交互式3D图（Plotly）
+- **Plot Qtrue Values**：绘制 Qtrue 值图
+  - X/Y 轴：可选两元素 w(X)、w(Y)；Z/颜色：Q 值（-T//fw(@phase)，phase 由数据列名自动识别）
+  - 支持平衡凝固（P.xlsx）与 Scheil（P-S.xlsx）；2D热图、3D静态、3D旋转GIF、Plotly 3D
 - **Plot Liquidus Vectors**：绘制液相面矢量图
   - 生成U水平矢量图、V垂直矢量图、Z合成矢量图
   - 支持任意两个元素组合
@@ -88,11 +76,12 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 提取液相线温度、固相线温度和熔程
   - 支持批量处理.exp文件
   - 自动保存为Excel格式
-- **Extract Pandat Results**：从Pandat计算结果中提取数据
-  - 处理平衡凝固CSV文件，生成P.xlsx和Ts.xlsx
-  - 处理Scheil凝固DAT文件，生成P-S.xlsx和Ts-S.xlsx
-  - 自动筛选和提取关键数据行
-  - 支持批量处理多个文件
+- **Extract Pandat Results**：从 Pandat 计算结果中提取数据
+  - Lever 与 Scheil 文件夹均支持 **.csv** 和 **.dat**（如 All table_Lever、All table_Scheil 的 CSV）
+  - 生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx；列名 w(*@*)、fw(@*)、-T//fw(@*) 按数据自动识别
+  - 生成文件中空缺的 w(*) 用 0 填充；P-S.xlsx 始终含 fw(@FCC_A1)、-T//fw(@FCC_A1)（缺失则补 0）
+  - **FCC 相分离**：若存在 fw(@FCC_A1#1)、fw(@FCC_A1#2) 等列，会提示“FCC 分离成两个成分不同的 FCC 相”，并用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 补充到 P-S（提示语言随 Help→Language 中/英切换）
+  - 保存时若文件被占用会提示关闭或更换输出目录；窗口底部固定 Extract Results / Close 按钮并居中
 
 ## 界面主题
 
@@ -273,15 +262,15 @@ python main.py
 
 #### Extract Pandat Results（提取Pandat计算结果）
 1. 打开：`Tools` > `Extract Pandat Results`
-2. 选择Lever文件夹：包含平衡凝固CSV文件的文件夹（All table_Lever）
-3. 选择Scheil文件夹：包含Scheil凝固DAT文件的文件夹（All table_Scheil）
-4. 选择输出目录：指定生成Excel文件的目录
-5. 点击"Extract Results"开始处理
-6. 处理完成后会生成4个Excel文件：
-   - **P.xlsx**：从每个CSV文件中筛选fs<0.000001中T最大的行，包含T、w(*)、w(*@*)、fs、fw(@FCC_A1)、dwdT_L(*@LIQUID)、-T//fw(@FCC_A1)
-   - **Ts.xlsx**：从每个CSV文件中筛选fs最大值或fs=1中T最大的行，包含T、w(*)、fs
-   - **P-S.xlsx**：从每个DAT文件中筛选fs<0.000001中T最大的行，包含T、w(*)、w(*@*)、fs、fw(@FCC_A1)、dwdT_L(*@LIQUID)、-T//fw(@FCC_A1)
-   - **Ts-S.xlsx**：从每个DAT文件中筛选fs最大值或fs=1中T最大的行，包含T、w(*)、fs
+2. 选择 **Lever 文件夹**：包含平衡凝固文件的文件夹（All table_Lever），支持 **.csv 和 .dat**
+3. 选择 **Scheil 文件夹**：包含 Scheil 凝固文件的文件夹（All table_Scheil），支持 **.csv 和 .dat**
+4. 选择输出目录
+5. 点击 **Extract Results** 开始处理（底部按钮固定、居中，可滚动查看上方状态）
+6. 生成 4 个 Excel：**P.xlsx**、**Ts.xlsx**、**P-S.xlsx**、**Ts-S.xlsx**
+   - 列 T、fs 支持大小写不敏感（如 fs/f_s/Fs，T/t/Temperature）；缺失 fs 或 T 的文件会被跳过
+   - 空缺的 w(*)（及 P-S 中 w(*@*)）会填 0；P-S 始终含 fw(@FCC_A1)、-T//fw(@FCC_A1)（无则补 0）
+   - 若 Scheil 文件中存在 **fw(@FCC_A1#1)、fw(@FCC_A1#2)** 等列，会弹窗提示“FCC 分离成两个成分不同的 FCC 相”，并自动用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 补充到 P-S（语言随 Help→Language 中/英）
+7. 若保存时提示权限错误，请关闭已打开的 Excel 或更换输出目录
 
 
 ## 项目结构
@@ -355,24 +344,17 @@ ThermoQ/
 4. 处理大量文件时可能需要较长时间，请耐心等待
 
 ### Pandat结果提取
-1. CSV文件格式：制表符分隔，第一行为列名，第二行为单位行（会被自动跳过）
-2. DAT文件格式：与CSV文件格式相同
-3. 必需列：T、fs、w(MG)、w(SI)等元素列
-4. P.xlsx提取条件：fs < 0.000001中T最大的行
-5. Ts.xlsx提取条件：fs最大值对应的行，或fs=1中T最大的行
-6. 输出文件列名说明：
-   - w(*)：元素质量分数（如w(AL)、w(MG)、w(SI)）
-   - w(*@*)：相中元素质量分数（如w(AL@LIQUID)、w(MG@FCC_A1)）
-   - dwdT_L(*@LIQUID)：液相中元素的温度导数
-   - -T//fw(@FCC_A1)：Q值
+1. Lever/Scheil 文件夹支持 **.csv 和 .dat**；CSV/DAT 格式：制表符分隔，第一行为列名，第二行为单位行（自动跳过）
+2. 列名容错：T、fs 支持大小写及 f_s 等变体；缺失则跳过该文件
+3. 生成文件中空缺的 w(*)（及 P-S 的 w(*@*)）用 0 填充；P-S 始终含 fw(@FCC_A1)、-T//fw(@FCC_A1)
+4. **FCC 相分离**：若存在 fw(@FCC_A1#1)、fw(@FCC_A1#2) 等列，会提示并用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 补充
+5. 输出列名说明：w(*)、w(*@*)、fw(@*)、-T//fw(@*)、dwdT_L(*@LIQUID) 等
 
 ### 计算功能
-1. 需要先通过 `Import > Pandat to ThermoQ` 导入数据（至少需要P.xlsx和Ts.xlsx）
-2. 成分匹配基于整数部分（例如80.5%和80.8%会匹配为80%）
-3. 列名匹配不区分大小写（例如w(Al)会匹配w(AL)）
-4. Qtrue计算需要P.xlsx或P-S.xlsx中包含-T//fw(@FCC_A1)列
-5. ΔT计算需要P.xlsx和Ts.xlsx都包含T列
-6. ΔTs计算需要P-S.xlsx和Ts-S.xlsx都包含T列
+1. 需要先通过 `Import > Pandat to ThermoQ` 导入数据（至少 P.xlsx 和 Ts.xlsx）
+2. **相与 Q 列自动识别**：程序根据数据中的 w(*@*)、-T//fw(@*) 列自动识别固相与 Q 列（如 FCC_A1、BCC_A2），不再固定为 FCC
+3. 成分匹配基于整数部分；列名匹配不区分大小写
+4. Qtrue 与分量计算针对数据中具备完整列的所有元素，不限于 Mg、Si
 
 ### 相面绘制
 1. 需要先通过 `Import > Pandat to ThermoQ` 导入数据
@@ -385,13 +367,10 @@ ThermoQ/
 8. **自动打开和另存为**：绘图完成后自动打开文件，关闭时可选择另存为
 
 ### Qtrue值图绘制
-1. 需要先通过 `Import > Pandat to ThermoQ` 导入P.xlsx（Equilibrium）或P-S.xlsx（Scheil）
-2. 数据文件必须包含w(MG)、w(SI)和-T//fw(@FCC_A1)列
-3. **列名匹配不区分大小写**：支持w(MG)、w(Mg)、w(mg)等各种大小写组合
-4. X轴固定为w(MG)，Y轴固定为w(SI)，Z轴为Qtrue值（-T//fw(@FCC_A1)）
-5. **平滑曲面**：使用高斯过程回归生成平滑、连续的曲面（需要scikit-learn库）
-6. 需要matplotlib库（2D/3D图）或plotly库（交互式3D图）
-7. **自动打开和另存为**：绘图完成后自动打开文件，关闭时可选择另存为
+1. 需先通过 `Import > Pandat to ThermoQ` 导入 P.xlsx（Equilibrium）或 P-S.xlsx（Scheil）
+2. 数据需含 w(X)、w(Y) 及 -T//fw(@phase) 列（phase 自动识别）
+3. 列名匹配不区分大小写；X/Y 可选任意已识别元素
+4. 平滑曲面需 scikit-learn；2D/3D 需 matplotlib，交互式 3D 需 plotly；绘图后自动打开文件
 
 ### 液相面矢量图绘制
 1. Excel文件必须包含以下列：
