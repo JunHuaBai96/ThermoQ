@@ -46,7 +46,7 @@ class ElementSelector:
         self.selected_elements = {}  # Dictionary to store selected elements and their compositions (always in wt%)
         self.main_element = None  # The first added element will be considered main element
         
-        # Create main frame with yellow background
+        # Create main frame; label text can be localized later by ThermoQGUI
         self.frame = ttk.LabelFrame(parent, text="Element Selection", padding="10")
         self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
         
@@ -62,34 +62,42 @@ class ElementSelector:
         selection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=3, pady=3)
         
         # Create element dropdown
-        ttk.Label(selection_frame, text="Element:").grid(row=0, column=0, padx=3, pady=3)
+        self.label_element = ttk.Label(selection_frame, text="Element:")
+        self.label_element.grid(row=0, column=0, padx=3, pady=3)
         self.element_var = tk.StringVar()
         self.element_dropdown = ttk.Combobox(selection_frame, textvariable=self.element_var, 
                                            values=sorted(PERIODIC_TABLE.keys()), width=10)
         self.element_dropdown.grid(row=0, column=1, padx=3, pady=3)
         
         # Create composition entry (always in wt%)
-        ttk.Label(selection_frame, text="Composition (wt%):").grid(row=0, column=2, padx=3, pady=3)
+        self.label_composition = ttk.Label(selection_frame, text="Composition (wt%):")
+        self.label_composition.grid(row=0, column=2, padx=3, pady=3)
         self.composition_var = tk.StringVar()
         self.composition_entry = ttk.Entry(selection_frame, textvariable=self.composition_var, width=10)
         self.composition_entry.grid(row=0, column=3, padx=3, pady=3)
         
         # Add button
-        ttk.Button(selection_frame, text="Add Element", 
-                  command=self.add_element).grid(row=0, column=4, padx=3, pady=3)
+        self.button_add = ttk.Button(selection_frame, text="Add Element", 
+                                     command=self.add_element)
+        self.button_add.grid(row=0, column=4, padx=3, pady=3)
 
         # Hint: first added element is the main element
-        self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray", wraplength=400)
+        self.main_hint_label = ttk.Label(
+            self.frame,
+            text="Hint: The first added element will be the main element",
+            foreground="gray",
+            wraplength=400
+        )
         self.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
         
     
     def create_selected_elements_display(self):
         # Create a frame for displaying selected elements
-        display_frame = ttk.LabelFrame(self.frame, text="Selected Elements", padding="5")
-        display_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=3, pady=3)
+        self.display_frame = ttk.LabelFrame(self.frame, text="Selected Elements", padding="5")
+        self.display_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=3, pady=3)
         
         # Create treeview for displaying elements
-        self.tree = ttk.Treeview(display_frame, columns=("Element", "Name", "Composition"), 
+        self.tree = ttk.Treeview(self.display_frame, columns=("Element", "Name", "Composition"), 
                                 show="headings", height=5)
         self.tree.heading("Element", text="Element")
         self.tree.heading("Name", text="Name")
@@ -102,13 +110,14 @@ class ElementSelector:
         self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Add scrollbar
-        scrollbar = ttk.Scrollbar(display_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(self.display_frame, orient=tk.VERTICAL, command=self.tree.yview)
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         # Add remove button
-        ttk.Button(display_frame, text="Remove Selected", 
-                  command=self.remove_element).grid(row=1, column=0, pady=3)
+        self.button_remove = ttk.Button(self.display_frame, text="Remove Selected", 
+                                        command=self.remove_element)
+        self.button_remove.grid(row=1, column=0, pady=3)
     
     def convert_at_to_wt(self, at_composition):
         """Convert atomic percent to weight percent"""
@@ -345,6 +354,7 @@ class ThermoQGUI:
                 'plot_phase': 'Plot Phase Surfaces',
                 'plot_qtrue': 'Plot Qtrue Values',
                 'plot_liqvec': 'Plot Liquidus Vectors',
+                'plot_kvec': 'Plot Solid-Liquid Partition Coefficients',
                 'tools_converter': 'Composition Converter (wt% ↔ at%)',
                 'tools_generate': 'Generate Thermo-calc Batch File',
                 'tools_extract_exp': 'Extract Thermo-calc Results',
@@ -355,6 +365,17 @@ class ThermoQGUI:
                 'help_example': 'Example',
                 'btn_calculate': 'Calculate',
                 'btn_show_results': 'Show Results',
+                # Main window / element selector
+                'el_frame_title': 'Element Selection',
+                'el_label_element': 'Element:',
+                'el_label_composition': 'Composition (wt%):',
+                'el_add_button': 'Add Element',
+                'el_selected_frame': 'Selected Elements',
+                'el_tree_col_element': 'Element',
+                'el_tree_col_name': 'Name',
+                'el_tree_col_comp': 'Composition (wt%)',
+                'el_remove_button': 'Remove Selected',
+                'el_hint_main': 'Hint: The first added element will be the main element',
             },
             'zh': {
                 'menu_file': '文件',
@@ -367,6 +388,7 @@ class ThermoQGUI:
                 'plot_phase': '绘制相面',
                 'plot_qtrue': '绘制Qtrue值',
                 'plot_liqvec': '绘制液相线向量',
+                'plot_kvec': '绘制定-液分配系数向量',
                 'tools_converter': '成分换算（wt% ↔ at%）',
                 'tools_generate': '生成Thermo-calc批处理文件',
                 'tools_extract_exp': '提取Thermo-calc结果',
@@ -377,6 +399,17 @@ class ThermoQGUI:
                 'help_example': '示例',
                 'btn_calculate': '计算',
                 'btn_show_results': '显示结果',
+                # Main window / element selector
+                'el_frame_title': '元素选择',
+                'el_label_element': '元素：',
+                'el_label_composition': '成分 (wt%)：',
+                'el_add_button': '添加元素',
+                'el_selected_frame': '已选元素',
+                'el_tree_col_element': '元素',
+                'el_tree_col_name': '名称',
+                'el_tree_col_comp': '成分 (wt%)',
+                'el_remove_button': '删除选中',
+                'el_hint_main': '提示：第一个添加的元素将作为主元素',
             }
         }
         
@@ -396,6 +429,7 @@ class ThermoQGUI:
         self.plot_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
         self.plot_menu.add_command(label="Plot Qtrue Values", command=self.open_q_value_plotter)
         self.plot_menu.add_command(label="Plot Liquidus Vectors", command=self.open_liquidus_vector_plotter)
+        self.plot_menu.add_command(label="Plot Solid-Liquid Partition Coefficients", command=self.open_partition_vector_plotter)
         
         self.tools_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Tools", menu=self.tools_menu)
@@ -524,6 +558,7 @@ class ThermoQGUI:
             self.plot_menu.add_command(label=t['plot_phase'], command=self.open_phase_surface_plotter)
             self.plot_menu.add_command(label=t['plot_qtrue'], command=self.open_q_value_plotter)
             self.plot_menu.add_command(label=t['plot_liqvec'], command=self.open_liquidus_vector_plotter)
+            self.plot_menu.add_command(label=t['plot_kvec'], command=self.open_partition_vector_plotter)
 
             # Rebuild Tools menu
             try:
@@ -562,11 +597,19 @@ class ThermoQGUI:
             self.help_menu.add_separator()
             self.help_menu.add_command(label=t['help_example'], command=self.open_example_folder)
 
-            # Buttons
+            # Main window buttons
             self.calculate_button.config(text=t['btn_calculate'])
             self.show_results_button.config(text=t['btn_show_results'])
         except Exception as e:
             print(f"Language switch error: {e}")
+
+    def tr(self, key, default):
+        """Translate a UI string based on current language, fallback to default."""
+        try:
+            lang_dict = self.texts.get(self.language, {})
+            return lang_dict.get(key, default)
+        except Exception:
+            return default
 
     def open_example_folder(self):
         try:
@@ -3596,7 +3639,8 @@ Si: 2.0"""
                 
                 # Process Scheil files (same logic as Lever); accept both .csv and .dat (e.g. All table_Scheil CSV)
                 scheil_files = sorted([f for f in os.listdir(scheil_folder) if f.lower().endswith(('.csv', '.dat'))])
-                fcc_split_message_shown = False  # Show "FCC分离" prompt only once
+                fcc_split_message_shown = False
+                liquid_split_message_shown = False
                 if scheil_files:
                     # Process for P-S.xlsx
                     for sch_file in scheil_files:
@@ -3667,6 +3711,97 @@ Si: 2.0"""
                                     existing_q = pd.to_numeric(df[q_col], errors='coerce')
                                     need_fill = existing_q.isna()
                                     df.loc[need_fill & q_series.notna(), q_col] = q_series[need_fill & q_series.notna()]
+
+                        # Detect split Liquid phases: dwdT_L(*@LIQUID#1), dwdT_L(*@LIQUID#2) etc.
+                        liquid_split_cols = [
+                            c for c in df.columns
+                            if isinstance(c, str) and re.match(r'^dwdT_L\s*\(\s*[A-Za-z]{1,3}\s*@\s*LIQUID#1\s*\)$', c, re.IGNORECASE)
+                        ]
+                        if liquid_split_cols:
+                            if not liquid_split_message_shown:
+                                liquid_split_message_shown = True
+                                if self.language == 'zh':
+                                    _ltitle = "Liquid 相分离"
+                                    _lmsg = (
+                                        "检测到 Liquid 分离成两个成分不同的 Liquid 相（存在 dwdT_L(*@LIQUID#1)、dwdT_L(*@LIQUID#2) 等列）。\n\n"
+                                        "将使用对应的 dwdT_L(*@LIQUID#1) 补充到 dwdT_L(*@LIQUID) 并写入 P-S.xlsx；若 dwdT_L(*@LIQUID) 已有数值则保留。"
+                                    )
+                                else:
+                                    _ltitle = "Liquid phase split"
+                                    _lmsg = (
+                                        "Detected Liquid split into two compositionally different Liquid phases "
+                                        "(columns such as dwdT_L(*@LIQUID#1), dwdT_L(*@LIQUID#2) are present).\n\n"
+                                        "dwdT_L(*@LIQUID) will be filled from the corresponding dwdT_L(*@LIQUID#1) in P-S.xlsx; "
+                                        "existing dwdT_L(*@LIQUID) values are kept."
+                                    )
+                                messagebox.showinfo(_ltitle, _lmsg, parent=extractor_window)
+                            if self.language == 'zh':
+                                status_label.config(
+                                    text=f"Liquid 分离已检测（如 {sch_file}）。正在用 dwdT_L(*@LIQUID#1) 补充 dwdT_L(*@LIQUID)...",
+                                    foreground="orange"
+                                )
+                            else:
+                                status_label.config(
+                                    text=f"Liquid split detected (e.g. {sch_file}). Filling dwdT_L(*@LIQUID) from dwdT_L(*@LIQUID#1)...",
+                                    foreground="orange"
+                                )
+                            extractor_window.update()
+                            for col_hash1 in liquid_split_cols:
+                                m = re.match(r'^dwdT_L\s*\(\s*([A-Za-z]{1,3})\s*@\s*LIQUID#1\s*\)$', col_hash1, re.IGNORECASE)
+                                if not m:
+                                    continue
+                                elem = m.group(1)
+                                target_col = f"dwdT_L({elem}@LIQUID)"
+                                if target_col not in df.columns:
+                                    df[target_col] = np.nan
+                                src_vals = pd.to_numeric(df[col_hash1], errors='coerce')
+                                existing = pd.to_numeric(df[target_col], errors='coerce')
+                                need = existing.isna() & src_vals.notna()
+                                df.loc[need, target_col] = src_vals[need]
+
+                        # If phase-split compositions/phase-fractions exist (w(*@*#1), fw(@*#1)),
+                        # use the #1 columns to back-fill base w(*@*) and fw(@*) columns before extracting rows.
+                        # This is per-element and per-phase, and only fills missing values.
+                        # 1) w(ELEM@PHASE#1) -> w(ELEM@PHASE)
+                        for col_w_hash1 in df.columns:
+                            if not isinstance(col_w_hash1, str):
+                                continue
+                            m_w = re.match(
+                                r'^w\s*\(\s*([A-Za-z]{1,3})\s*@\s*([A-Za-z0-9_]+)#1\s*\)$',
+                                col_w_hash1,
+                                re.IGNORECASE
+                            )
+                            if not m_w:
+                                continue
+                            elem = m_w.group(1)
+                            phase = m_w.group(2)
+                            target_w = f"w({elem}@{phase})"
+                            if target_w not in df.columns:
+                                df[target_w] = np.nan
+                            src_vals_w = pd.to_numeric(df[col_w_hash1], errors='coerce')
+                            existing_w = pd.to_numeric(df[target_w], errors='coerce')
+                            need_w = existing_w.isna() & src_vals_w.notna()
+                            df.loc[need_w, target_w] = src_vals_w[need_w]
+
+                        # 2) fw(@PHASE#1) -> fw(@PHASE)
+                        for col_fw_hash1 in df.columns:
+                            if not isinstance(col_fw_hash1, str):
+                                continue
+                            m_fw = re.match(
+                                r'^fw\s*\(\s*@\s*([A-Za-z0-9_]+)#1\s*\)$',
+                                col_fw_hash1,
+                                re.IGNORECASE
+                            )
+                            if not m_fw:
+                                continue
+                            phase = m_fw.group(1)
+                            target_fw = f"fw(@{phase})"
+                            if target_fw not in df.columns:
+                                df[target_fw] = np.nan
+                            src_vals_fw = pd.to_numeric(df[col_fw_hash1], errors='coerce')
+                            existing_fw = pd.to_numeric(df[target_fw], errors='coerce')
+                            need_fw = existing_fw.isna() & src_vals_fw.notna()
+                            df.loc[need_fw, target_fw] = src_vals_fw[need_fw]
 
                         fs_col = _find_col(df, ['fs', 'f_s', 'Fs'])
                         t_col = _find_col(df, ['T', 't', 'Temperature'])
@@ -3778,7 +3913,219 @@ Si: 2.0"""
         btn_inner.pack(expand=True)
         ttk.Button(btn_inner, text="Extract Results", command=extract_results).pack(side=tk.LEFT, padx=10)
         ttk.Button(btn_inner, text="Close", command=extractor_window.destroy).pack(side=tk.LEFT, padx=10)
-    
+
+    def open_partition_vector_plotter(self):
+        """Open solid-liquid partition coefficient vector plotter tool"""
+        if not MATPLOTLIB_AVAILABLE:
+            messagebox.showerror("Dependency Missing", "Matplotlib is not installed. Cannot generate partition coefficient vectors.")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Solid-Liquid Partition Coefficient Vector Plotter")
+        win.geometry("800x700")
+        win.grab_set()
+
+        main_frame = ttk.Frame(win, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        title_label = ttk.Label(main_frame, text="Solid-Liquid Partition Coefficient Vector Plotter", font=('Arial', 14, 'bold'))
+        title_label.pack(pady=(0, 10))
+
+        info_label = ttk.Label(
+            main_frame,
+            text=("Plot 2D vector fields of partition coefficients k = w(*@FCC_A1)/w(*@LIQUID) "
+                  "from imported Pandat P or P-S data."),
+            wraplength=700,
+            justify="left"
+        )
+        info_label.pack(pady=(0, 10))
+
+        # Dataset selection
+        dataset_frame = ttk.LabelFrame(main_frame, text="Solidification Mode", padding="10")
+        dataset_frame.pack(fill=tk.X, pady=5)
+        dataset_var = tk.StringVar(value="Equilibrium")
+        ttk.Radiobutton(dataset_frame, text="Equilibrium/Lever (P file)", variable=dataset_var, value="Equilibrium").pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(dataset_frame, text="Scheil (P-S file)", variable=dataset_var, value="Scheil").pack(side=tk.LEFT, padx=10)
+
+        # Element selection
+        elem_frame = ttk.LabelFrame(main_frame, text="Element Selection", padding="10")
+        elem_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(elem_frame, text="X Element:").pack(side=tk.LEFT, padx=5)
+        elem_x_var = tk.StringVar()
+        elem_y_var = tk.StringVar()
+        elements = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+        elem_x_combo = ttk.Combobox(elem_frame, textvariable=elem_x_var, values=elements, width=10, state="readonly")
+        elem_x_combo.pack(side=tk.LEFT, padx=5)
+        ttk.Label(elem_frame, text="Y Element:").pack(side=tk.LEFT, padx=15)
+        elem_y_combo = ttk.Combobox(elem_frame, textvariable=elem_y_var, values=elements, width=10, state="readonly")
+        elem_y_combo.pack(side=tk.LEFT, padx=5)
+        if elements:
+            elem_x_var.set(elements[0])
+        if len(elements) > 1:
+            elem_y_var.set(elements[1])
+
+        # Output name
+        output_frame = ttk.LabelFrame(main_frame, text="Output", padding="10")
+        output_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(output_frame, text="Filename prefix:").pack(side=tk.LEFT, padx=5)
+        prefix_var = tk.StringVar(value="k_vectors")
+        ttk.Entry(output_frame, textvariable=prefix_var, width=20).pack(side=tk.LEFT, padx=5)
+
+        status_label = ttk.Label(main_frame, text="Ready", foreground="blue")
+        status_label.pack(pady=10)
+
+        def find_k_columns(df, ex, ey):
+            """Find w(X), w(Y), w(X@FCC_A1), w(Y@FCC_A1), w(X@LIQUID), w(Y@LIQUID)."""
+            cols = list(df.columns)
+
+            def find(patterns):
+                for c in cols:
+                    if not isinstance(c, str):
+                        continue
+                    s = c.strip().upper()
+                    if all(p in s for p in patterns):
+                        return c
+                return None
+
+            ex_u = ex.upper()
+            ey_u = ey.upper()
+
+            wx = find([f"W({ex_u})"])
+            wy = find([f"W({ey_u})"])
+            wxfcc = find([f"W({ex_u}@FCC_A1)"])
+            wyfcc = find([f"W({ey_u}@FCC_A1)"])
+            wxliq = find([f"W({ex_u}@LIQUID)"])
+            wyliq = find([f"W({ey_u}@LIQUID)"])
+
+            if not all([wx, wy, wxfcc, wyfcc, wxliq, wyliq]):
+                raise ValueError(
+                    f"Missing required columns for partition coefficients.\n"
+                    f"Need w({ex}), w({ey}), w({ex}@FCC_A1), w({ey}@FCC_A1), "
+                    f"w({ex}@LIQUID), w({ey}@LIQUID).\n"
+                    f"Found: {cols}"
+                )
+            return wx, wy, wxfcc, wyfcc, wxliq, wyliq
+
+        def plot_k_vectors():
+            try:
+                ds = dataset_var.get()
+                if ds == "Equilibrium":
+                    df_src = self.pandat_p_data
+                    if df_src is None or len(df_src) == 0:
+                        messagebox.showerror("Error", "No P file data found. Please import P file via Import → Pandat to ThermoQ first.")
+                        return
+                else:
+                    df_src = self.pandat_p_s_data
+                    if df_src is None or len(df_src) == 0:
+                        messagebox.showerror("Error", "No P-S file data found. Please import P-S file via Import → Pandat to ThermoQ first.")
+                        return
+
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    messagebox.showerror("Error", "Please select X and Y elements!")
+                    return
+
+                status_label.config(text="Processing data...", foreground="orange")
+                win.update()
+
+                df = df_src.copy()
+                df = df.rename(columns={c: c.strip() if isinstance(c, str) else c for c in df.columns})
+
+                wx_col, wy_col, wxfcc_col, wyfcc_col, wxliq_col, wyliq_col = find_k_columns(df, ex, ey)
+
+                wx = pd.to_numeric(df[wx_col], errors="coerce")
+                wy = pd.to_numeric(df[wy_col], errors="coerce")
+                wxfcc = pd.to_numeric(df[wxfcc_col], errors="coerce")
+                wyfcc = pd.to_numeric(df[wyfcc_col], errors="coerce")
+                wxliq = pd.to_numeric(df[wxliq_col], errors="coerce")
+                wyliq = pd.to_numeric(df[wyliq_col], errors="coerce")
+
+                mask = (
+                    wx.notna() & wy.notna() &
+                    wxfcc.notna() & wyfcc.notna() &
+                    wxliq.notna() & wyliq.notna() &
+                    (wxliq != 0) & (wyliq != 0)
+                )
+                if mask.sum() < 2:
+                    messagebox.showerror("Error", "Not enough valid data points to plot partition coefficient vectors.")
+                    return
+
+                wx = wx[mask]
+                wy = wy[mask]
+                kx = (wxfcc[mask] / wxliq[mask]).astype(float)
+                ky = (wyfcc[mask] / wyliq[mask]).astype(float)
+
+                # Use deviations from k=1 as vector components
+                dx = kx - 1.0
+                dy = ky - 1.0
+
+                x_min, x_max = float(wx.min()), float(wx.max())
+                y_min, y_max = float(wy.min()), float(wy.max())
+
+                prefix = prefix_var.get().strip() or "k_vectors"
+                base_path = "."
+
+                # Simple scaling using axis span to avoid too long arrows
+                axis_span = max(x_max - x_min, y_max - y_min, 1e-9)
+                max_abs = float(np.nanmax(np.abs(np.r_[dx.values, dy.values])))
+                if not np.isfinite(max_abs) or max_abs == 0:
+                    max_abs = 1.0
+                scale_factor = 0.15 * axis_span / max_abs
+                dx_plot = dx.values * scale_factor
+                dy_plot = dy.values * scale_factor
+
+                # U: horizontal (X element)
+                fig1, ax1 = plt.subplots(figsize=(7, 6), dpi=140)
+                ax1.quiver(wx.values, wy.values, dx_plot, np.zeros_like(dx_plot),
+                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:blue")
+                ax1.set_xlabel(f"w({ex})")
+                ax1.set_ylabel(f"w({ey})")
+                ax1.set_title(f"U arrows: k({ex}) = w({ex}@FCC_A1)/w({ex}@LIQUID)")
+                ax1.grid(False)
+                ax1.set_aspect("equal", adjustable="box")
+                fig1.tight_layout()
+                out1 = os.path.join(base_path, f"{prefix}_{ex}_U.png")
+                fig1.savefig(out1, dpi=300, bbox_inches="tight")
+                plt.close(fig1)
+                self.open_file_and_offer_save_as(out1, win)
+
+                # V: vertical (Y element)
+                fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
+                ax2.quiver(wx.values, wy.values, np.zeros_like(dy_plot), dy_plot,
+                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:orange")
+                ax2.set_xlabel(f"w({ex})")
+                ax2.set_ylabel(f"w({ey})")
+                ax2.set_title(f"V arrows: k({ey}) = w({ey}@FCC_A1)/w({ey}@LIQUID)")
+                ax2.grid(False)
+                ax2.set_aspect("equal", adjustable="box")
+                fig2.tight_layout()
+                out2 = os.path.join(base_path, f"{prefix}_{ey}_V.png")
+                fig2.savefig(out2, dpi=300, bbox_inches="tight")
+                plt.close(fig2)
+                self.open_file_and_offer_save_as(out2, win)
+
+                # Z: resultant
+                fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
+                ax3.quiver(wx.values, wy.values, dx_plot, dy_plot,
+                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:green")
+                ax3.set_xlabel(f"w({ex})")
+                ax3.set_ylabel(f"w({ey})")
+                ax3.set_title("Resultant Z: deviation of partition coefficients (k-1)")
+                ax3.grid(False)
+                ax3.set_aspect("equal", adjustable="box")
+                fig3.tight_layout()
+                out3 = os.path.join(base_path, f"{prefix}_Z.png")
+                fig3.savefig(out3, dpi=300, bbox_inches="tight")
+                plt.close(fig3)
+                self.open_file_and_offer_save_as(out3, win)
+
+                status_label.config(text="Done.", foreground="green")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to plot partition coefficient vectors:\n{str(e)}")
+
+        ttk.Button(main_frame, text="Plot Vectors", command=plot_k_vectors).pack(pady=10)
+
     def open_liquidus_vector_plotter(self):
         """Open liquidus vector plotter tool"""
         if not MATPLOTLIB_AVAILABLE:

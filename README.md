@@ -5,6 +5,12 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 ## 更新摘要
 
 ### 最新版本
+- **Solid-Liquid Partition Coefficient Vector Plotter（固-液分配系数向量绘图）**：
+  - 新增 **Plot → Plot Solid-Liquid Partition Coefficients**（中文：绘制定-液分配系数向量）
+  - 仿照 Liquidus Vector Plotter 界面，数据来自 P 或 P-S 文件；**不包含** “Clean and fill data before plotting”
+  - 使用 **w(*@FCC_A1)** 与 **w(*@LIQUID)** 计算分配系数 k = w(*@FCC_A1)/w(*@LIQUID)，绘制 2D 矢量图：U（水平，k_X）、V（垂直，k_Y）、Z（合成，k−1 偏差）
+  - 输出三张 PNG：`<前缀>_<X>_U.png`、`<前缀>_<Y>_V.png`、`<前缀>_Z.png`，并自动打开
+- **多语言**：Plot 菜单新增项随 Help→Language（English/中文）切换；主窗口 Calculate/Show Results 及菜单栏已接入语言包
 - **相/元素自动识别（普适性增强）**：
   - 程序不再固定为 FCC 固相，而是根据 **Extract Pandat Results** 或 **Pandat to ThermoQ** 导入的 Excel 中列名 **w(*@*)**（第一个 * 为元素，第二个 * 为相）自动识别相与元素
   - 主计算、Plot Q Values、Extract Pandat Results 等均使用检测到的固相与 Q 列（如 -T//fw(@FCC_A1)、-T//fw(@BCC_A2)）
@@ -28,7 +34,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ### 历史版本
 - 新增计算模式：`ΔT（熔程）`，计算 `P.xls` 的 `T` 减去 `Ts.xlsx` 的 `T`
-- Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`：`P.xls` 与 `Ts.xlsx`
+- Pandat 导入支持两文件：`P.xls` 与 `Ts.xlsx`
 - 导入时自动删除空白行，并将所有 `1/dwdT_L(*@LIQUID)` 列数值除以 100
 - 从 `w(*)` 列提取可用元素（如 Al、Mg、Mn），仅激活这些元素供选择
 - 启动画面后主窗口自动居中，默认尺寸增至 `1200x800`，并设定最小尺寸以避免界面拥挤
@@ -65,6 +71,10 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 支持任意两个元素组合
   - 自动识别列名格式
   - 可选数据清理和填充功能
+- **Plot Solid-Liquid Partition Coefficients**：绘制固-液分配系数向量图
+  - 数据来自 P 或 P-S 文件（与 Liquidus Vector Plotter 相同）；无 “Clean and fill” 选项
+  - 使用 **w(*@FCC_A1)**、**w(*@LIQUID)** 计算 k = w(*@FCC_A1)/w(*@LIQUID)，绘制 U（k_X）、V（k_Y）、Z（合成）三张 2D 矢量图
+  - 输出 PNG 并自动打开
 
 ### Tools工具集
 - **Composition Converter**：质量分数（wt%）与原子分数（at%）双向转换工具
@@ -220,6 +230,17 @@ python main.py
    - V垂直矢量图（橙色）：显示Y元素的垂直矢量
    - Z合成矢量图（绿色）：显示U和V的合成矢量
 8. 图表生成后会自动打开，关闭时可选择另存为到其他位置
+
+#### Plot Solid-Liquid Partition Coefficients（绘制固-液分配系数向量图）
+1. 打开：`Plot` > `Plot Solid-Liquid Partition Coefficients`（中文菜单：绘制定-液分配系数向量）
+2. 选择凝固模式：Equilibrium/Lever（P 文件）或 Scheil（P-S 文件）；需已通过 Import → Pandat to ThermoQ 导入对应数据
+3. 选择 X、Y 元素（从可用元素列表）
+4. 设置输出文件名前缀（默认：k_vectors）
+5. 点击 “Plot Vectors” 生成三张 2D 矢量图：
+   - **U**（蓝色）：水平分量，k(X) = w(X@FCC_A1)/w(X@LIQUID)
+   - **V**（橙色）：垂直分量，k(Y) = w(Y@FCC_A1)/w(Y@LIQUID)
+   - **Z**（绿色）：合成矢量（k−1 偏差）
+6. 数据需含 w(X)、w(Y)、w(X@FCC_A1)、w(Y@FCC_A1)、w(X@LIQUID)、w(Y@LIQUID)；无 “Clean and fill” 选项，直接使用原始数据。图片自动打开并可另存
 
 ### Tools工具使用
 
