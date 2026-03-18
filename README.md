@@ -10,6 +10,17 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 仿照 Liquidus Vector Plotter 界面，数据来自 P 或 P-S 文件；**不包含** “Clean and fill data before plotting”
   - 使用 **w(*@FCC_A1)** 与 **w(*@LIQUID)** 计算分配系数 k = w(*@FCC_A1)/w(*@LIQUID)，绘制 2D 矢量图：U（水平，k_X）、V（垂直，k_Y）、Z（合成，k−1 偏差）
   - 输出三张 PNG：`<前缀>_<X>_U.png`、`<前缀>_<Y>_V.png`、`<前缀>_Z.png`，并自动打开
+- **Thermo-calc 结果全流程支持（Melting Range / T-zero / 表面绘图）**：
+  - **Extract Thermo-calc Results** 现在包含两个子页签：**Melting Range（熔程）** 与 **T-zero**
+    - Melting Range：从 `.exp` 文件自动解析所有 `$ PLOTTED ... BLOCKEND` 数据块，提取液相线/固相线温度并计算熔程；从文件名中自动识别任意体系的 w(*)（如 `Al0.04Mg0.09Si_np-T.exp` → w(Mg)=0.04, w(Si)=0.09），并将极小数值（~1e-7）视为 0，避免 `3.9E-08` 之类噪声
+    - T-zero：批量读取 `_T0.exp` 文件，解析文件名中的参数成分 w(*) 和数据区的 `XTEXT W(*)` 与 T，输出 `w(param)`、`w(XTEXT 元素)` 与 `T0 (K)`，同时对极小质量分数去噪并去除重复行
+  - **Plot → Plot Phase Surfaces** 新增 **Thermo-calc** 页签，可直接加载 Melting Range 导出的 `output.xlsx`，用 `Liquidus_Temperature` / `Solidus_Temperature` 绘制液相面/固相面，轴标签统一为 `w(X)` / `w(Y)`（不带 %）
+  - 新增 **Plot → Plot T-zero Surface**，从 T-zero 导出的 `t_zero.xlsx` 读取所有 `w(*)` 列与 `T0 (K)`，支持 2D Heatmap、3D 静态、3D 旋转 GIF 与 Plotly 3D 的 T-zero 曲面绘制
+- **Generate Thermo-calc Batch File 改进**：
+  - 模板占位符替换对大小写不敏感（`%Li%`、`%LI%` 均可），自动从周期表元素符号匹配
+  - 元素步长使用 float64 且根据 step 自动确定小数位数（例如 step=0.005 时写入三位小数），避免 0.005 被格式化为 0.01 以及浮点噪声
+- **窗口与交互优化**：
+  - Import / Plot / Tools 中的大部分子窗口不再使用 `grab_set()` 强制模态，支持正常最小化与在主窗口之间切换
 - **多语言**：Plot 菜单新增项随 Help→Language（English/中文）切换；主窗口 Calculate/Show Results 及菜单栏已接入语言包
 - **相/元素自动识别（普适性增强）**：
   - 程序不再固定为 FCC 固相，而是根据 **Extract Pandat Results** 或 **Pandat to ThermoQ** 导入的 Excel 中列名 **w(*@*)**（第一个 * 为元素，第二个 * 为相）自动识别相与元素
@@ -75,6 +86,12 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 数据来自 P 或 P-S 文件（与 Liquidus Vector Plotter 相同）；无 “Clean and fill” 选项
   - 使用 **w(*@FCC_A1)**、**w(*@LIQUID)** 计算 k = w(*@FCC_A1)/w(*@LIQUID)，绘制 U（k_X）、V（k_Y）、Z（合成）三张 2D 矢量图
   - 输出 PNG 并自动打开
+- **Plot Phase Surfaces – Thermo-calc 模式**：
+  - 可直接加载 **Extract Thermo-calc Results → Melting Range** 导出的 `output.xlsx`，基于 `Liquidus_Temperature` / `Solidus_Temperature` 绘制液相面/固相面
+  - X/Y 轴从 Excel 中所有 `w(*)` 列自动识别，坐标轴名称为 `w(X)` / `w(Y)`（无 % 符号）
+- **Plot T-zero Surface**：
+  - 从 **Extract Thermo-calc Results → T-zero** 导出的 `t_zero.xlsx` 读取 `w(*)` 与 `T0 (K)`，绘制 T-zero 曲面
+  - 支持 2D Heatmap、3D Static、3D Rotation GIF 与 Plotly 3D，平滑方式与 Phase Surfaces 相同
 
 ### Tools工具集
 - **Composition Converter**：质量分数（wt%）与原子分数（at%）双向转换工具
@@ -83,9 +100,12 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 可配置元素范围和步长
   - 支持约束条件设置
 - **Extract Thermo-calc Results**：从Thermo-calc计算结果中提取数据
-  - 提取液相线温度、固相线温度和熔程
-  - 支持批量处理.exp文件
-  - 自动保存为Excel格式
+  - **Melting Range 页签**：批量扫描 `.exp` 文件中所有 `$ PLOTTED ... BLOCKEND` 数据块，提取液相线温度、固相线温度与熔程
+    - 自动从文件名解析任意体系的 w(*)（如 `Al0.04Mg0.09Si_np-T.exp`），无需为每个体系单独配置正则
+    - 输出 Excel 中的 w(*) 与 Melting_Range 会将接近 0 的浮点噪声（如 `3.9E-08`）视为 0
+  - **T-zero 页签**：从 `_T0.exp` 文件提取参数元素 w(*)（来自文件名）、横轴元素 w(*)（来自 `XTEXT W(*)`）与对应 `T0 (K)`，生成长表 `File, w(param), w(XTEXT 元素), T0 (K)`
+    - 自动合并同一文件的多个数据块并去除重复点，同时对极小质量分数做近零归零
+  - 结果自动保存为 Excel，可直接被 Phase Surface Plotter（Thermo-calc）与 Plot T-zero Surface 使用
 - **Extract Pandat Results**：从 Pandat 计算结果中提取数据
   - Lever 与 Scheil 文件夹均支持 **.csv** 和 **.dat**（如 All table_Lever、All table_Scheil 的 CSV）
   - 生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx；列名 w(*@*)、fw(@*)、-T//fw(@*) 按数据自动识别
