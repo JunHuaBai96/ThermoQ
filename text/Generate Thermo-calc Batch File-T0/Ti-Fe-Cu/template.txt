@@ -1,0 +1,21 @@
+back
+
+s-c w(CU)=%Cu%
+l-c
+
+c-e
+
+S-A-V 1
+w(FE)
+0
+0.15
+0.005
+save TiFe-%Cu%Cu_T0.POL y
+step
+t-z
+BCC_A2
+liquid
+po
+s-d-a x w(FE) 
+s-d-a y t-k
+make file TiFe-%Cu%Cu_T0.exp

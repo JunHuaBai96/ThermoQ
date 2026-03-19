@@ -1,0 +1,21 @@
+back
+
+s-c w(SI)=%SI%
+l-c
+
+c-e
+
+S-A-V 1
+w(Mg)
+0
+0.07
+0.005
+save AlMg-%SI%Si_T0.POL y
+step
+t-z
+FCC_A1
+liquid
+po
+s-d-a x w(Mg) 
+s-d-a y t-k
+make file AlMg-%SI%Si_T0.exp
