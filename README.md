@@ -4,7 +4,35 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ## 更新摘要
 
-### 最新版本
+### 最新版本（近期工作汇总）
+
+#### 主界面 — **Calculate → Composition space (batch)（成分空间·批量）**
+- **批量数据来源（Batch source）**  
+  - **Equilibrium/Lever**：按 P 液相线表逐行成分计算（与单点 Calculate 相同物理）。  
+  - **Scheil**：按 P-S 表逐行成分计算。  
+  - **All**：先取 P 表至多「最大行数」行，再取 P-S 表至多同样行数，**上下拼接**；需已导入 P、Ts、P-S、Ts-S。  
+  - 每行带内部索引 `__batch_row__`，便于与源表行对齐。
+- **导出**  
+  - **Save CSV…**、**Save Excel (interpolated batch)…**：在导出前对**三元体系**（恰好三个 `w_*` 列）中缺失的 **Q / P / Beta** 做 **Newton 前向差分**角点填充（w(X)、w(Y)≈0 时利用 w=1,2,3 等网格；Z 角点两方向可算则取平均）；并按所选数据来源**自动筛选列**：  
+    - 仅 Scheil：**ΔTs**、Qtrue/Q/P/Beta（Scheil）等；  
+    - 仅 Lever：**ΔT**、Qtrue/Q/P/Beta（Lever）等；  
+    - **All**：上述全部。  
+  - **已移除**「Save Excel (cleaned + batch)」：批量页**不再**与液相线表 dwdT_L、1/dwdT_L 清洗结果合并导出；液相线清洗仍仅在 **Plot → Plot Liquidus Vectors** 等路径使用。
+- **X / Y / Z 组元（用于 Q/P/Beta 填充）**  
+  - 由批量表中各元素 **平均含量**排序认定：**X 最低、Y 次之、Z 为主组元**（含量通常最高）。
+- **Quantity (Z) —「全部 / All」**  
+  - 在 X、Y 组元选定后，若 Z 选 **全部**，点击 **Generate plot** 将对**每个数值列**（含 `w_*`、Q/P/Beta、Qtrue、ΔT、ΔTs 等）依次输出 **四种可视化**：2D Heatmap、3D Static、3D Rotation GIF、Plotly 3D，文件写入当前 **Output Directory**；批量模式下平滑失败提示仅首次弹出，避免刷屏。  
+  - 选单个 Z 时行为与原先一致，仅生成当前所选 **Visualization** 类型。
+- **多语言**：上述按钮、说明与 **batch** 页简介均通过 **Help → Language（English / 中文）** 切换文案。
+
+#### **Plot Liquidus Vectors — 绘图前「清洗并填充」逻辑（`_liquidus_clean_fill_dataframe`）**
+- **角点 Newton**：在 w≈0 附近使用**均匀间距三点**外推（不再仅限 w=1,2,3 的硬编码），并限制近角范围，避免用远离角点的高含量点外推到 0。  
+- **1/dwdT_L 填充**：对每个组元，在**其余成分固定**时沿该组元的 `w` 排序分组，做**线性插值**及组内 **bfill/ffill**，减轻 Pandat 表**行顺序**对结果的影响。  
+- **液相线窗口**：导出清洗 Excel、勾选「绘图前清洗并填充」绘图时与上述逻辑一致；支持源表中已有 `1/dwdT_L(*@LIQUID)` 列时直接参与清洗。
+
+---
+
+### 历史：上一版功能摘要
 - **Solid-Liquid Partition Coefficient Vector Plotter（固-液分配系数向量绘图）**：
   - 新增 **Plot → Plot Solid-Liquid Partition Coefficients**（中文：绘制定-液分配系数向量）
   - 仿照 Liquidus Vector Plotter 界面，数据来自 P 或 P-S 文件；**不包含** “Clean and fill data before plotting”
@@ -36,6 +64,9 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - **窗口与布局**：窗口增高并带滚动区域，底部固定 **Extract Results** 与 **Close** 按钮（左右居中），长状态提示不再遮挡按钮
 - **Plot Q Values**：Z 轴 Q 列与标签根据数据中的 **-T//fw(@phase)** 自动识别，支持任意相名（如 BCC_A2）
 - **计算功能**：Qtrue 与分量计算使用检测到的固相列（如 w(*@FCC_A1) 或 w(*@BCC_A2)）与 Q 列，支持多体系（Al-Cu-Li、Al-Mg-Si、Ti-Fe-Cu 等）
+- **主窗口 Calculate（Pandat）**：
+  - 若所选 wt% 在任一已导入表（P、Ts、P-S、Ts-S）的对应 **w(元素)** 列 **最小值～最大值** 之外，会弹窗提示 **成分超出数据范围** 并中止计算
+  - 若在范围内但表中无几乎完全相同的成分行，则对 **Qtrue、各组元 Q/P/Beta、ΔT、ΔTs** 等标量：在成分空间中取邻近点，沿「最近表点 → 目标成分」方向投影，用 **Newton 差商二次插值**（有效独立投影点不足 3 个时退化为线性）得到数值，不再用「最近一行」直接代替；结果弹窗与 Show Results 会标注 **【插值】**
 
 ### 历史更新（Plot 与 Tools 等）
 - **Plot工具增强**：
@@ -57,11 +88,15 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 - 支持从元素周期表中选择元素
 - 支持质量分数（wt%）成分输入
 - 实时成分总和检查（显示是否达到100 wt%）
+- **Calculate** 含两个页签：**单点成分** 与 **Composition space (batch)**；后者支持 Lever/Scheil/All 批量表、筛选导出、三元 Q/P/Beta 角点填充，以及 Z=**全部** 时批量生成多图（详见「更新摘要 → 最新版本」）
 - 支持Qtrue、Q值（分量）、P值（分量）、ΔT、ΔTs计算
   - Qtrue：从 P.xlsx 或 P-S.xlsx 中提取 -T//fw(@phase) 值（phase 由数据列名自动识别，如 FCC_A1、BCC_A2）
   - Q值（分量）/ P值（分量）：针对数据中具备 w(*)、w(*@固相)、w(*@LIQUID)、dwdT_L(*@LIQUID) 的**所有元素**计算，不限于 Mg、Si
   - ΔT：平衡凝固的液相线温度与固相线温度差值
   - ΔTs：Scheil凝固的液相线温度与固相线温度差值
+  - **成分范围与插值（Pandat 导入后 Calculate）**：各元素 wt% 须落在每张已导入表对应 w(元素) 列的 tabulated 范围内，否则提示并中止；在范围内时对标量列用邻近行的 **Newton 二次差分插值**（不足三点时为线性），不再用单行最近点代替
+  - **界面语言**：Help→Language→中文 后，上述成分超出范围、插值说明等提示为中文；English 模式下为英文
+  - **显示结果**：Show Results 窗口可 **保存结果** 为 **Excel (.xlsx)、CSV、TXT、DAT**（表格类为 Quantity/Value/Unit 列，文本类为与窗口一致的全文报告）
 - 支持从Pandat软件导出的Excel文件导入元素成分
   - 平衡凝固数据：P.xls 和 Ts.xlsx
   - Scheil凝固数据：P-S.xlsx 和 Ts-S.xlsx（可选）
@@ -206,6 +241,14 @@ python main.py
      - ΔT：平衡凝固的液相线温度与固相线温度差值
      - ΔTs：Scheil凝固的液相线温度与固相线温度差值
    - 点击"Show Results"查看详细计算结果
+
+#### Composition space (batch)（成分空间·批量）
+1. 在主窗口 **Calculate** 笔记本页切换到 **Composition space (batch)**。  
+2. 选择 **Batch source**（Lever / Scheil / All），可选填 **最大行数**（留空表示该表全部行；All 模式下 P 与 P-S **各自**至多取该行数）。  
+3. 点击 **Compute batch**；状态栏显示完成行数与跳过行数。  
+4. **Save CSV…** 或 **Save Excel (interpolated batch)…**：含三元 Newton 填充（若为三组元）并按来源筛选列（见上文「更新摘要」）。  
+5. **Plot**：选择 X、Y 元素；**Quantity (Z)** 可选某一数值列或 **全部/All**（一次生成所有数值列 × 四种图到输出目录）。设置 **Output Directory**、前缀与可视化参数后点击 **Generate plot**。  
+6. 界面语言由 **Help → Language** 切换。
 
 ### Plot工具使用
 
