@@ -43,6 +43,68 @@ def _composition_range_float64(lo, hi, step):
             break
     return np.array(out, dtype=np.float64)
 
+
+def _pbfx_ordered_element_placeholders(content):
+    """Element symbols (e.g. 'Li') in first-occurrence order from %[A-Za-z]%+ tokens."""
+    order = []
+    seen = set()
+    for m in re.finditer(r'%([A-Za-z]+)%', content):
+        el = m.group(1).title()
+        if el in PERIODIC_TABLE and el not in seen:
+            seen.add(el)
+            order.append(el)
+    return order
+
+
+def _pbfx_default_output_name_pattern(stem_no_ext, ordered_elements):
+    """
+    Build default output basename (no .pbfx): e.g. T0-AlCuLi + %LI% only -> T0-AlCu%LI%li.
+    For several placeholders, if the stem ends with the first element in template order, use that
+    sweep-style pattern (balance the others via row removal or checkbox).
+    """
+    if not ordered_elements:
+        return stem_no_ext
+    if len(ordered_elements) == 1:
+        sym = ordered_elements[0]
+        if len(stem_no_ext) >= len(sym) and stem_no_ext.lower().endswith(sym.lower()):
+            return stem_no_ext[: -len(sym)] + '%' + sym.upper() + '%' + sym.lower()
+        return stem_no_ext + '_%' + sym.upper() + '%'
+    fe = ordered_elements[0]
+    if len(stem_no_ext) >= len(fe) and stem_no_ext.lower().endswith(fe.lower()):
+        return stem_no_ext[: -len(fe)] + '%' + fe.upper() + '%' + fe.lower()
+    return stem_no_ext + '_' + '_'.join('%' + e.upper() + '%' for e in ordered_elements)
+
+
+def _pbfx_parse_composition_unit_base(content):
+    """
+    Read <unit name="n" value="..."/> from .pbfx content.
+    Returns (balance_total, raw_token): w%/x% -> 100, w/x -> 1; unknown -> (100, raw or None).
+    """
+    m = re.search(
+        r'<unit\s+[^>]*name\s*=\s*["\']n["\'][^>]*value\s*=\s*["\']([^"\']*)["\']',
+        content,
+        re.I,
+    )
+    if not m:
+        m = re.search(
+            r'<unit\s+[^>]*value\s*=\s*["\']([^"\']*)["\'][^>]*name\s*=\s*["\']n["\']',
+            content,
+            re.I,
+        )
+    if not m:
+        return 100.0, None
+    raw = (m.group(1) or '').strip()
+    key = raw.lower()
+    if key in ('w%',):
+        return 100.0, raw
+    if key in ('x%',):
+        return 100.0, raw
+    if key in ('w',):
+        return 1.0, raw
+    if key in ('x',):
+        return 1.0, raw
+    return 100.0, raw
+
 # Optional imports for plotting
 try:
     import matplotlib
@@ -473,6 +535,7 @@ class ThermoQGUI:
                 'tools_converter': 'Composition Converter (wt% ↔ at%)',
                 'tools_generate': 'Generate Thermo-calc Batch File',
                 'tools_extract_exp': 'Extract Thermo-calc Results',
+                'tools_generate_pandat': 'Generate Pandat Batch File',
                 'tools_extract_pandat': 'Extract Pandat Results',
                 'help_language': 'Language',
                 'help_english': 'English',
@@ -602,6 +665,9 @@ class ThermoQGUI:
                 'extp_status': 'Status',
                 'extp_ready': 'Ready to extract',
                 'extp_extract_btn': 'Extract Results',
+                'extp_import_btn': 'Import to ThermoQ',
+                'extp_import_status': 'Importing to ThermoQ...',
+                'extp_import_missing': 'Generated Excel files not found in {dir}. Please run Extract Results first.',
                 'extp_fd_lever': 'Select Lever folder',
                 'extp_fd_scheil': 'Select Scheil folder',
                 'extp_fd_output': 'Select output directory',
@@ -611,6 +677,51 @@ class ThermoQGUI:
                 'tbatch_fd_tpl': 'Select Template File',
                 'tbatch_fd_tpl1': 'Select Template1 File',
                 'tbatch_fd_save_out': 'Save Output File',
+                'pbatch_win_title': 'Pandat Batch File Generator',
+                'pbatch_subtitle': (
+                    'Placeholders %X% identify elements (X = symbol). Composition scale is read from '
+                    '<unit name="n" value="…"/>: w% / x% use balance total 100 (mass / mole percent); '
+                    'w / x use total 1 (mass / mole fraction). '
+                    'Either configure every element (full grid), remove exactly one row so that element is '
+                    'balance = total − Σ(swept), or keep all rows and check “balance last in list”. '
+                    'One .pbfx per valid combination. Filename pattern may include placeholders (e.g. T0-AlCu%LI%li).'
+                ),
+                'pbatch_tpl': 'Template (.pbfx)',
+                'pbatch_output_dir': 'Output folder',
+                'pbatch_name_pattern': 'Output filename pattern',
+                'pbatch_name_pattern_hint': 'No extension needed; .pbfx is added automatically.',
+                'pbatch_generate': 'Generate .pbfx files',
+                'pbatch_ready': 'Ready to generate',
+                'pbatch_fd_tpl': 'Select Pandat .pbfx template',
+                'pbatch_fd_out_dir': 'Select output folder',
+                'pbatch_need_tpl': 'Please select a valid template .pbfx file.',
+                'pbatch_need_out': 'Please select an output folder.',
+                'pbatch_invalid_range': 'Invalid range: require Min ≤ Max and Step > 0.',
+                'pbatch_gen_ok': 'Successfully generated {n} file(s).\n\nOutput folder:\n{dir}',
+                'pbatch_gen_fail': 'Failed to generate Pandat batch files:\n{e}',
+                'pbatch_processing': 'Writing file {i}/{n}…',
+                'pbatch_many_files': 'This will create {n} files. Continue?',
+                'pbatch_need_pattern': 'Please enter an output filename pattern.',
+                'pbatch_need_each_tpl_el': 'Every template placeholder element needs a row with Min/Max/Step: {els}',
+                'pbatch_unit_line_w_pct': 'Composition unit: w% (mass %). Balance = 100 − Σ(swept values).',
+                'pbatch_unit_line_x_pct': 'Composition unit: x% (mole %). Balance = 100 − Σ(swept values).',
+                'pbatch_unit_line_w': 'Composition unit: w (mass fraction). Balance = 1 − Σ(swept values).',
+                'pbatch_unit_line_x': 'Composition unit: x (mole fraction). Balance = 1 − Σ(swept values).',
+                'pbatch_unit_line_unknown': 'Composition unit: "{raw}" (unrecognised); using balance total 100.',
+                'pbatch_unit_no_tag': 'No <unit name="n" …/> found; using balance total 100 (mass %).',
+                'pbatch_remove_need_one': 'Keep at least one element row with Min/Max/Step.',
+                'pbatch_remove_too_many': 'Too many rows removed. Leave at most one template element without a row (that one becomes the balance).',
+                'pbatch_need_full_or_balance': 'Either add rows for all placeholders (full grid) or remove exactly one row for balance mode.',
+                'pbatch_remainder_last': 'Balance last in list (total − Σ of others)',
+                'pbatch_remainder_hint': (
+                    'If all placeholder elements have rows: check this to sweep only the first n−1 in template order '
+                    'and set the last to (balance total) − Σ(swept). '
+                    'Or remove one row: the missing element is balanced automatically. Total comes from w%/x% → 100, w/x → 1.'
+                ),
+                'pbatch_remainder_need_two': 'Need at least two placeholders for “balance last in list”.',
+                'pbatch_remainder_none_valid': 'No valid combinations: balance outside [0, {base}] for every grid point.',
+                'pbatch_remainder_skipped': 'Skipped {k} combinations (balance outside [0, {base}]).',
+                'filetype_pbfx': 'Pandat batch (*.pbfx)',
                 'filetype_text': 'Text files',
                 'filetype_tcm': 'TCM files',
                 'filetype_all': 'All files',
@@ -637,7 +748,7 @@ class ThermoQGUI:
                 'batch_mode_lever': 'Equilibrium/Lever (rows from P file)',
                 'batch_mode_scheil': 'Scheil (rows from P-S file)',
                 'batch_mode_all': 'All (rows from P file and P-S file)',
-                'batch_save_excel_filled': 'Save Excel (interpolated batch)…',
+                'batch_save_excel_filled': 'Save Excel',
                 'batch_need_all_pandat': '“All” requires P, Ts, P-S, and Ts-S data. Import via Pandat to ThermoQ.',
                 'batch_need_three_el_fill': 'Q/P/Beta Newton fill needs exactly three elements (three w_* columns).',
                 'batch_max_rows_invalid': 'Invalid integer for max rows.',
@@ -646,7 +757,7 @@ class ThermoQGUI:
                 'batch_plot_all_errors': 'Some plots failed:\n{detail}',
                 'batch_max_rows': 'Max rows (blank = all):',
                 'batch_compute': 'Compute batch',
-                'batch_save_csv': 'Save CSV…',
+                'batch_save_csv': 'Save CSV',
                 'batch_plot_group': 'Plot (2D / 3D)',
                 'batch_plot_intro': 'Uses the last computed batch table. Choose composition axes and Z quantity.',
                 'batch_z_quantity': 'Quantity (Z):',
@@ -669,9 +780,14 @@ class ThermoQGUI:
                 'batch_gif_fps': 'FPS:',
                 'batch_plot_btn': 'Generate plot',
                 'batch_status_ready': 'Run “Compute batch” first.',
+                'batch_status_progress': 'Processing {tag}: {i}/{n}…',
                 'batch_need_compute': 'Please run “Compute batch” first.',
                 'batch_done': 'Batch done: {n} rows ({skipped} skipped).',
                 'batch_saved': 'Saved: {path}',
+                'batch_export_cols_label': 'Export columns:',
+                'batch_export_cols_hint': 'Select columns for Save CSV/Save Excel. This is independent of Quantity (Z).',
+                'batch_export_cols_select_all': 'Select all',
+                'batch_export_cols_clear': 'Clear',
                 'batch_no_numeric_z': 'No numeric Z column selected.',
                 'batch_missing_wxy': 'Missing composition columns in batch table (expected "{wx}" and "{wy}").',
                 'batch_no_rows': 'No valid rows computed. Check that compositions sum to ~100 wt% and lie within tabulated ranges.',
@@ -720,6 +836,7 @@ class ThermoQGUI:
                 'dlg_success': 'Success',
                 'dlg_partial': 'Partial Success',
                 'dlg_info': 'Information',
+                'dlg_confirm_title': 'Confirm',
                 # Example / main calculate
                 'example_not_found': 'Example folder not found!',
                 'example_open_fail': 'Failed to open Example folder:\n{e}',
@@ -984,6 +1101,7 @@ class ThermoQGUI:
                 'tools_converter': '成分换算（wt% ↔ at%）',
                 'tools_generate': '生成Thermo-calc批处理文件',
                 'tools_extract_exp': '提取Thermo-calc结果',
+                'tools_generate_pandat': '生成Pandat批处理文件',
                 'tools_extract_pandat': '提取Pandat结果',
                 'help_language': '界面语言',
                 'help_english': 'English',
@@ -1112,6 +1230,9 @@ class ThermoQGUI:
                 'extp_status': '状态',
                 'extp_ready': '就绪，可提取',
                 'extp_extract_btn': '提取结果',
+                'extp_import_btn': '导入到 ThermoQ',
+                'extp_import_status': '正在导入到 ThermoQ…',
+                'extp_import_missing': '在 {dir} 中未找到生成的 Excel 文件。请先运行“提取结果”。',
                 'extp_fd_lever': '选择 Lever 文件夹',
                 'extp_fd_scheil': '选择 Scheil 文件夹',
                 'extp_fd_output': '选择输出目录',
@@ -1121,6 +1242,50 @@ class ThermoQGUI:
                 'tbatch_fd_tpl': '选择 Template 文件',
                 'tbatch_fd_tpl1': '选择 Template1 文件',
                 'tbatch_fd_save_out': '保存输出文件',
+                'pbatch_win_title': 'Pandat 批处理文件生成器',
+                'pbatch_subtitle': (
+                    '占位符 %X% 标识元素（X 为符号）。成分刻度从 <unit name="n" value="…"/> 读取：'
+                    'w%%、x%% 对应质量百分数、摩尔（原子）百分数，平衡总量为 100；'
+                    'w、x 对应质量分数、摩尔（原子）分数，平衡总量为 1。'
+                    '可为每个占位符配置网格；或删除恰好一行，使缺省的那一个元素取「总量 − 已扫元素之和」；'
+                    '或在保留全部行时勾选「按列表平衡最后一个」。'
+                    '每个有效组合输出一个 .pbfx；文件名模式可含占位符（如 T0-AlCu%%LI%%li）。'
+                ),
+                'pbatch_tpl': '模板（.pbfx）',
+                'pbatch_output_dir': '输出文件夹',
+                'pbatch_name_pattern': '输出文件名模式',
+                'pbatch_name_pattern_hint': '无需写扩展名；将自动添加 .pbfx。',
+                'pbatch_generate': '生成 .pbfx 文件',
+                'pbatch_ready': '就绪，可生成',
+                'pbatch_fd_tpl': '选择 Pandat .pbfx 模板',
+                'pbatch_fd_out_dir': '选择输出文件夹',
+                'pbatch_need_tpl': '请选择有效的 .pbfx 模板文件。',
+                'pbatch_need_out': '请选择输出文件夹。',
+                'pbatch_invalid_range': '范围无效：需要 最小值 ≤ 最大值，且 步长 > 0。',
+                'pbatch_gen_ok': '已成功生成 {n} 个文件。\n\n输出文件夹：\n{dir}',
+                'pbatch_gen_fail': '生成 Pandat 批处理失败：\n{e}',
+                'pbatch_processing': '正在写入 {i}/{n}…',
+                'pbatch_many_files': '将生成 {n} 个文件，是否继续？',
+                'pbatch_need_pattern': '请填写输出文件名模式。',
+                'pbatch_need_each_tpl_el': '请为模板中每个占位元素保留一行并设置最小/最大/步长：{els}',
+                'pbatch_unit_line_w_pct': '成分单位：w%%（质量百分数）。平衡量 = 100 − Σ（扫描元素）。',
+                'pbatch_unit_line_x_pct': '成分单位：x%%（摩尔/原子百分数）。平衡量 = 100 − Σ（扫描元素）。',
+                'pbatch_unit_line_w': '成分单位：w（质量分数）。平衡量 = 1 − Σ（扫描元素）。',
+                'pbatch_unit_line_x': '成分单位：x（摩尔/原子分数）。平衡量 = 1 − Σ（扫描元素）。',
+                'pbatch_unit_line_unknown': '成分单位：「{raw}」（未识别）；按平衡总量 100 处理。',
+                'pbatch_unit_no_tag': '未找到 <unit name="n" …/>，按质量百分数处理（平衡总量 100）。',
+                'pbatch_remove_need_one': '请至少保留一行元素及其最小/最大/步长。',
+                'pbatch_remove_too_many': '删除行过多。最多只能缺少一个模板占位元素（该元素作为平衡项）。',
+                'pbatch_need_full_or_balance': '请要么为所有占位符保留行（完整网格），要么恰好删去一行进入平衡模式。',
+                'pbatch_remainder_last': '按列表平衡最后一个（总量 − 其余之和）',
+                'pbatch_remainder_hint': (
+                    '若全部占位符都有行：勾选后仅按模板顺序前 n−1 个做网格，最后一个取（平衡总量）− Σ（扫描值）。'
+                    '或删除一行：缺省元素自动平衡。w%%/x%% 总量为 100，w/x 总量为 1。'
+                ),
+                'pbatch_remainder_need_two': '「按列表平衡最后一个」至少需要两个占位符。',
+                'pbatch_remainder_none_valid': '没有有效组合：所有网格点上平衡量都不在 [0, {base}] 内。',
+                'pbatch_remainder_skipped': '已跳过 {k} 个组合（平衡量不在 [0, {base}]）。',
+                'filetype_pbfx': 'Pandat 批处理 (*.pbfx)',
                 'filetype_text': '文本文件',
                 'filetype_tcm': 'TCM 文件',
                 'filetype_all': '所有文件',
@@ -1146,7 +1311,7 @@ class ThermoQGUI:
                 'batch_mode_lever': '平衡/Lever（P 文件各行）',
                 'batch_mode_scheil': 'Scheil（P-S 文件各行）',
                 'batch_mode_all': '全部（P 与 P-S 文件各行）',
-                'batch_save_excel_filled': '保存 Excel（插值填充后）…',
+                'batch_save_excel_filled': '保存 Excel',
                 'batch_need_all_pandat': '「全部」需要已导入 P、Ts、P-S、Ts-S。请通过「导入 → Pandat to ThermoQ」加载。',
                 'batch_need_three_el_fill': '对 Q/P/Beta 进行角点 Newton 填充需要恰好三个组元（三个 w_* 列）。',
                 'batch_z_all': '全部',
@@ -1154,7 +1319,7 @@ class ThermoQGUI:
                 'batch_plot_all_errors': '部分图形生成失败：\n{detail}',
                 'batch_max_rows': '最大行数（留空=全部）：',
                 'batch_compute': '计算批量',
-                'batch_save_csv': '保存 CSV…',
+                'batch_save_csv': '保存 CSV',
                 'batch_plot_group': '绘图（2D / 3D）',
                 'batch_plot_intro': '使用最近一次批量计算结果。选择成分坐标轴与 Z 向物理量。',
                 'batch_z_quantity': '物理量（Z）：',
@@ -1177,9 +1342,14 @@ class ThermoQGUI:
                 'batch_gif_fps': '帧率：',
                 'batch_plot_btn': '生成图像',
                 'batch_status_ready': '请先点击「计算批量」。',
+                'batch_status_progress': '正在处理 {tag}：{i}/{n}…',
                 'batch_need_compute': '请先执行「计算批量」。',
                 'batch_done': '批量完成：{n} 行（跳过 {skipped} 行）。',
                 'batch_saved': '已保存：{path}',
+                'batch_export_cols_label': '导出列：',
+                'batch_export_cols_hint': '选择要用于 Save CSV/Save Excel 的导出列（与 Quantity(Z) 无关）。',
+                'batch_export_cols_select_all': '全选',
+                'batch_export_cols_clear': '清空',
                 'batch_no_numeric_z': '所选 Z 列不是有效数值列。',
                 'batch_missing_wxy': '批量结果表中缺少成分列（需要 "{wx}" 与 "{wy}"）。',
                 'batch_no_rows': '没有有效行。请确认各行成分总和约 100 wt% 且在表格范围内。',
@@ -1228,6 +1398,7 @@ class ThermoQGUI:
                 'dlg_success': '成功',
                 'dlg_partial': '部分成功',
                 'dlg_info': '提示',
+                'dlg_confirm_title': '确认',
                 'example_not_found': '未找到示例文件夹！',
                 'example_open_fail': '无法打开示例文件夹：\n{e}',
                 'calc_need_element': '请至少选择一个元素！',
@@ -1494,6 +1665,7 @@ class ThermoQGUI:
         self.tools_menu.add_command(label="Generate Thermo-calc Batch File", command=self.open_therocalc_generator)
         self.tools_menu.add_command(label="Extract Thermo-calc Results", command=self.open_exp_data_processor)
         self.tools_menu.add_separator()
+        self.tools_menu.add_command(label="Generate Pandat Batch File", command=self.open_pandat_batch_generator)
         self.tools_menu.add_command(label="Extract Pandat Results", command=self.open_extract_pandat_results)
 
         # Create Help menu
@@ -1729,16 +1901,6 @@ class ThermoQGUI:
         self.batch_compute_btn = ttk.Button(btn_fr, text=self.tr('batch_compute', 'Compute batch'), command=self.run_batch_compute_for_space)
         self.batch_compute_btn.pack(side=tk.LEFT, padx=4)
         self._batch_lang_widgets.append((self.batch_compute_btn, 'batch_compute'))
-        self.batch_save_btn = ttk.Button(btn_fr, text=self.tr('batch_save_csv', 'Save CSV…'), command=self.run_batch_save_csv)
-        self.batch_save_btn.pack(side=tk.LEFT, padx=4)
-        self._batch_lang_widgets.append((self.batch_save_btn, 'batch_save_csv'))
-        self.batch_save_excel_filled_btn = ttk.Button(
-            btn_fr,
-            text=self.tr('batch_save_excel_filled', 'Save Excel (interpolated batch)…'),
-            command=self.run_batch_save_excel_interpolated,
-        )
-        self.batch_save_excel_filled_btn.pack(side=tk.LEFT, padx=4)
-        self._batch_lang_widgets.append((self.batch_save_excel_filled_btn, 'batch_save_excel_filled'))
 
         self.batch_compute_status_label = ttk.Label(
             scrollable_frame,
@@ -1914,6 +2076,113 @@ class ThermoQGUI:
         self.batch_plot_btn.pack(pady=10)
         self._batch_lang_widgets.append((self.batch_plot_btn, 'batch_plot_btn'))
 
+        export_fr = ttk.Frame(scrollable_frame)
+        export_fr.pack(fill=tk.X, pady=(0, 10))
+
+        # Center the export panel under the plot section.
+        left_sp = ttk.Frame(export_fr)
+        left_sp.pack(side=tk.LEFT, expand=True, fill=tk.X)
+
+        export_center = ttk.Frame(export_fr)
+        export_center.pack(side=tk.LEFT, padx=10)
+
+        right_sp = ttk.Frame(export_fr)
+        right_sp.pack(side=tk.LEFT, expand=True, fill=tk.X)
+
+        lbl_export_cols = ttk.Label(export_center, text=self.tr('batch_export_cols_label', 'Export columns:'))
+        lbl_export_cols.pack(anchor='w')
+        self._batch_lang_widgets.append((lbl_export_cols, 'batch_export_cols_label'))
+
+        hint_export_cols = ttk.Label(
+            export_center,
+            text=self.tr(
+                'batch_export_cols_hint',
+                'Select columns for Save CSV/Save Excel. This is independent of Quantity (Z).',
+            ),
+            foreground='gray',
+            font=("Arial", 8),
+            wraplength=650,
+            justify='left',
+        )
+        hint_export_cols.pack(anchor='w', pady=(0, 6))
+        self._batch_lang_widgets.append((hint_export_cols, 'batch_export_cols_hint'))
+
+        list_frame = ttk.Frame(export_center)
+        list_frame.pack(fill=tk.X, pady=(0, 8))
+
+        self.batch_export_cols_listbox = tk.Listbox(
+            list_frame,
+            selectmode=tk.EXTENDED,
+            height=8,
+            exportselection=False,
+        )
+        self.batch_export_cols_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        list_scroll = ttk.Scrollbar(list_frame, orient='vertical', command=self.batch_export_cols_listbox.yview)
+        list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.batch_export_cols_listbox.configure(yscrollcommand=list_scroll.set)
+
+        sel_btn_outer = ttk.Frame(export_center)
+        sel_btn_outer.pack(fill=tk.X)
+        sel_btn_left = ttk.Frame(sel_btn_outer)
+        sel_btn_left.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        sel_btn_fr = ttk.Frame(sel_btn_outer)
+        sel_btn_fr.pack(side=tk.LEFT, padx=6)
+        sel_btn_right = ttk.Frame(sel_btn_outer)
+        sel_btn_right.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+
+        def _select_all_export_cols():
+            try:
+                self.batch_export_cols_listbox.selection_set(0, tk.END)
+            except tk.TclError:
+                pass
+
+        def _clear_export_cols():
+            try:
+                self.batch_export_cols_listbox.selection_clear(0, tk.END)
+            except tk.TclError:
+                pass
+
+        btn_sel_all = ttk.Button(
+            sel_btn_fr,
+            text=self.tr('batch_export_cols_select_all', 'Select all'),
+            command=_select_all_export_cols,
+        )
+        btn_sel_all.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((btn_sel_all, 'batch_export_cols_select_all'))
+
+        btn_sel_clear = ttk.Button(
+            sel_btn_fr,
+            text=self.tr('batch_export_cols_clear', 'Clear'),
+            command=_clear_export_cols,
+        )
+        btn_sel_clear.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((btn_sel_clear, 'batch_export_cols_clear'))
+
+        save_btn_fr = ttk.Frame(export_center)
+        save_btn_fr.pack(fill=tk.X, pady=(8, 0))
+
+        sp1 = ttk.Frame(save_btn_fr)
+        sp1.pack(side=tk.LEFT, expand=True, fill=tk.X)
+
+        btn_box = ttk.Frame(save_btn_fr)
+        btn_box.pack(side=tk.LEFT, padx=6)
+
+        self.batch_save_btn = ttk.Button(btn_box, text=self.tr('batch_save_csv', 'Save CSV'), command=self.run_batch_save_csv)
+        self.batch_save_btn.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((self.batch_save_btn, 'batch_save_csv'))
+
+        self.batch_save_excel_filled_btn = ttk.Button(
+            btn_box,
+            text=self.tr('batch_save_excel_filled', 'Save Excel'),
+            command=self.run_batch_save_excel_interpolated,
+        )
+        self.batch_save_excel_filled_btn.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((self.batch_save_excel_filled_btn, 'batch_save_excel_filled'))
+
+        sp2 = ttk.Frame(save_btn_fr)
+        sp2.pack(side=tk.LEFT, expand=True, fill=tk.X)
+
     @staticmethod
     def _infer_batch_xyz_elements(df):
         """
@@ -1951,6 +2220,63 @@ class ThermoQGUI:
             else:
                 out.append(c)
         return out
+
+    def _batch_export_column_names_by_quantity(self, df, mode, zraw):
+        """
+        Filter export columns according to Quantity (Z) selection.
+        - Always export w_* columns (if present).
+        - If Z is All/全部: export everything allowed by batch source mode.
+        - If Z is one of Q/P/Beta (X Lever/Scheil): export Q/P/Beta for that X+mode.
+        - If Z is Qtrue (Lever/Scheil): export only that Qtrue column.
+        - If Z is ΔT/ΔTs: export only that.
+        - If Z is a w_* column: export only w_*.
+        """
+        if df is None or len(df) == 0:
+            return []
+
+        cols = list(df.columns)
+        if self._batch_is_z_all(zraw):
+            return self._batch_export_column_names(cols, mode)
+
+        z = str(zraw or '').strip()
+        keep = [c for c in cols if (not str(c).startswith('__')) and str(c).startswith('w_')]
+
+        def _is_allowed_which(which):
+            if mode == "All":
+                return True
+            return which == mode
+
+        if z.startswith('Qtrue (') and z in df.columns:
+            which = 'Lever' if '(Lever)' in z else ('Scheil' if '(Scheil)' in z else '')
+            if which and not _is_allowed_which(which):
+                return keep
+            keep.append(z)
+            return keep
+        if z == 'ΔT' and z in df.columns:
+            if mode == "Scheil":
+                return keep
+            keep.append(z)
+            return keep
+        if z == 'ΔTs' and z in df.columns:
+            if mode == "Lever":
+                return keep
+            keep.append(z)
+            return keep
+
+        m = re.match(r'^(Q|P|Beta) \((.+?) (Lever|Scheil)\)$', z)
+        if m:
+            elem = m.group(2)
+            which = m.group(3)
+            if not _is_allowed_which(which):
+                return keep
+            for metric in ('Q', 'P', 'Beta'):
+                col = f"{metric} ({elem} {which})"
+                if col in df.columns:
+                    keep.append(col)
+            return keep
+
+        # w_* or unknown: only compositions
+        return keep
 
     def _batch_fill_qpb_newton(self, df, x_el, y_el, z_el, do_lever, do_scheil):
         """
@@ -2084,18 +2410,34 @@ class ThermoQGUI:
             return None
         mode = self.last_batch_mode or self.batch_source_var.get()
         df = self.last_batch_results_df.copy()
-        if apply_newton_fill:
+
+        # Determine selected export columns (independent of Quantity(Z)).
+        export_options = self._batch_export_columns_options(df, mode)
+        selected = []
+        try:
+            if hasattr(self, 'batch_export_cols_listbox') and self.batch_export_cols_listbox is not None:
+                sel_idx = list(self.batch_export_cols_listbox.curselection())
+                selected = [self.batch_export_cols_listbox.get(i) for i in sel_idx]
+        except Exception:
+            selected = []
+
+        if not selected:
+            # Default: export all available options.
+            selected = export_options
+
+        # Only run Newton fill when user selected any Q/P/Beta columns.
+        needs_qpb_fill = apply_newton_fill and any(
+            str(c).startswith(('Q (', 'P (', 'Beta (')) for c in selected
+        )
+        if needs_qpb_fill:
             xyz = self._infer_batch_xyz_elements(df)
-            if xyz is None:
-                # Ternary Newton fill only; still export filtered columns without fill
-                pass
-            else:
+            if xyz is not None:
                 x_el, y_el, z_el = xyz
                 do_lev = mode in ("Lever", "All")
                 do_sch = mode in ("Scheil", "All")
                 df = self._batch_fill_qpb_newton(df, x_el, y_el, z_el, do_lev, do_sch)
-        keep = self._batch_export_column_names(df.columns, mode)
-        df = df[[c for c in keep if c in df.columns]]
+
+        df = df[[c for c in selected if c in df.columns]]
         return df
 
     def _batch_is_z_all(self, z):
@@ -2107,15 +2449,94 @@ class ThermoQGUI:
         return False
 
     def _batch_numeric_z_columns(self, df):
-        cols = []
+        """
+        Return the curated list of Z columns that users care about in batch plots/exports:
+        - w_*
+        - Qtrue (Lever/Scheil)
+        - Q/P/Beta (* Lever / * Scheil)
+        - ΔT / ΔTs
+        """
         if df is None or len(df) == 0:
-            return cols
+            return []
+
+        keep = set()
         for c in df.columns:
             if str(c).startswith('__'):
                 continue
-            if pd.api.types.is_numeric_dtype(df[c]):
-                cols.append(c)
-        return cols
+            if not pd.api.types.is_numeric_dtype(df[c]):
+                continue
+            cs = str(c)
+            if cs.startswith('w_'):
+                keep.add(cs)
+            elif cs in ('ΔT', 'ΔTs'):
+                keep.add(cs)
+            elif cs.startswith('Qtrue ('):
+                keep.add(cs)
+            elif cs.startswith('Q (') or cs.startswith('P (') or cs.startswith('Beta ('):
+                # e.g. "Q (Al Lever)" / "P (Cu Scheil)" / "Beta (Li Lever)"
+                keep.add(cs)
+
+        # Stable order: group by type then alphabetical within group
+        def _sort_key(s):
+            if s.startswith('w_'):
+                return (0, s)
+            if s.startswith('Qtrue ('):
+                return (1, s)
+            if s in ('ΔT', 'ΔTs'):
+                return (2, s)
+            return (3, s)
+
+        return sorted(keep, key=_sort_key)
+
+    def _batch_export_columns_options(self, df, mode):
+        """
+        Options (ordered) for batch export columns listbox.
+        This is independent from Quantity (Z) — it only reflects Batch source mode.
+        """
+        if df is None or len(df) == 0:
+            return []
+        numeric_curated = set(self._batch_numeric_z_columns(df))
+        opts = [c for c in self._batch_export_column_names(df.columns, mode) if c in numeric_curated]
+        return opts
+
+    def _refresh_batch_export_cols_listbox(self):
+        """Populate batch export columns listbox based on last_batch_mode and last_batch_results_df."""
+        if not hasattr(self, 'batch_export_cols_listbox'):
+            return
+        lb = self.batch_export_cols_listbox
+        df = getattr(self, 'last_batch_results_df', None)
+        if df is None or len(df) == 0:
+            lb.delete(0, tk.END)
+            return
+        mode = self.last_batch_mode or self.batch_source_var.get()
+
+        prev = []
+        try:
+            prev = [lb.get(i) for i in lb.curselection()]
+        except tk.TclError:
+            prev = []
+
+        opts = self._batch_export_columns_options(df, mode)
+        lb.delete(0, tk.END)
+        for c in opts:
+            lb.insert(tk.END, c)
+
+        # Restore previous selection if possible; otherwise select all by default.
+        to_sel = [c for c in prev if c in opts]
+        if not to_sel:
+            # select all
+            try:
+                lb.selection_set(0, tk.END)
+            except tk.TclError:
+                pass
+        else:
+            # select only previous columns
+            for i, c in enumerate(opts):
+                if c in to_sel:
+                    try:
+                        lb.selection_set(i)
+                    except tk.TclError:
+                        pass
 
     def _refresh_batch_z_combo_values(self):
         """Rebuild Quantity (Z) list with localized 'All' + numeric columns; call after compute or language change."""
@@ -2198,7 +2619,21 @@ class ThermoQGUI:
             def _one_source(df_source, n_cap, tag):
                 nonlocal row_id, skipped
                 local_skipped = 0
+                progress_every = max(1, int(n_cap / 50)) if n_cap else 1
                 for idx in range(n_cap):
+                    if idx == 0 or idx % progress_every == 0 or idx == (n_cap - 1):
+                        try:
+                            self.batch_compute_status_label.config(
+                                text=self.tr('batch_status_progress', 'Processing {tag}: {i}/{n}…').format(
+                                    tag=tag,
+                                    i=idx + 1,
+                                    n=n_cap,
+                                ),
+                                foreground="orange",
+                            )
+                            self.root.update_idletasks()
+                        except Exception:
+                            pass
                     wt = self._bulk_composition_from_pandat_row(df_source, idx)
                     if len(wt) < 1:
                         local_skipped += 1
@@ -2304,6 +2739,7 @@ class ThermoQGUI:
         self.last_batch_n_limit = int(len(rows_out))
         self.last_batch_results_df = pd.DataFrame(rows_out)
         self._refresh_batch_z_combo_values()
+        self._refresh_batch_export_cols_listbox()
 
         msg = self.tr('batch_done', 'Batch done: {n} rows ({skipped} skipped).').format(
             n=len(rows_out), skipped=skipped
@@ -2316,7 +2752,7 @@ class ThermoQGUI:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root,
-            title=self.tr('batch_save_csv', 'Save CSV…'),
+            title=self.tr('batch_save_csv', 'Save CSV'),
             defaultextension=".csv",
             filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
             initialfile="thermoq_batch_calc.csv",
@@ -2342,7 +2778,7 @@ class ThermoQGUI:
             return
         path = filedialog.asksaveasfilename(
             parent=self.root,
-            title=self.tr('batch_save_excel_filled', 'Save Excel (interpolated batch)…'),
+            title=self.tr('batch_save_excel_filled', 'Save Excel'),
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
             initialfile="thermoq_batch_filled.xlsx",
@@ -2987,6 +3423,7 @@ class ThermoQGUI:
             self.tools_menu.add_command(label=t['tools_generate'], command=self.open_therocalc_generator)
             self.tools_menu.add_command(label=t['tools_extract_exp'], command=self.open_exp_data_processor)
             self.tools_menu.add_separator()
+            self.tools_menu.add_command(label=t['tools_generate_pandat'], command=self.open_pandat_batch_generator)
             self.tools_menu.add_command(label=t['tools_extract_pandat'], command=self.open_extract_pandat_results)
 
             # Rebuild Help menu and Language submenu
@@ -3636,11 +4073,24 @@ class ThermoQGUI:
         )
         btn_frame.pack(pady=10)
         
-    def open_pandat_import(self):
+    def open_pandat_import(
+        self,
+        p_file=None,
+        ts_file=None,
+        p_s_file=None,
+        ts_s_file=None,
+        auto_import=False,
+    ):
         # Create a new window for Pandat import
         import_window = tk.Toplevel(self.root)
         import_window.title(self.tr('pandat_win_title', 'Pandat to ThermoQ'))
         import_window.geometry("600x500")
+        if auto_import:
+            # Hide the window; we only need it to reuse the existing import logic.
+            try:
+                import_window.withdraw()
+            except tk.TclError:
+                pass
         self._present_tool_window(import_window, self.root)
 
         # Create main frame with scrollable area
@@ -3684,6 +4134,8 @@ class ThermoQGUI:
         p_file_var = tk.StringVar()
         p_entry = ttk.Entry(p_frame, textvariable=p_file_var, width=60)
         p_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        if p_file:
+            p_file_var.set(p_file)
         
         def browse_p_file():
             file_path = filedialog.askopenfilename(
@@ -3710,6 +4162,8 @@ class ThermoQGUI:
         ts_file_var = tk.StringVar()
         ts_entry = ttk.Entry(ts_frame, textvariable=ts_file_var, width=60)
         ts_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        if ts_file:
+            ts_file_var.set(ts_file)
         
         def browse_ts_file():
             file_path = filedialog.askopenfilename(
@@ -3736,6 +4190,8 @@ class ThermoQGUI:
         p_s_file_var = tk.StringVar()
         p_s_entry = ttk.Entry(p_s_frame, textvariable=p_s_file_var, width=60)
         p_s_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        if p_s_file:
+            p_s_file_var.set(p_s_file)
         
         def browse_p_s_file():
             file_path = filedialog.askopenfilename(
@@ -3762,6 +4218,8 @@ class ThermoQGUI:
         ts_s_file_var = tk.StringVar()
         ts_s_entry = ttk.Entry(ts_s_frame, textvariable=ts_s_file_var, width=60)
         ts_s_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        if ts_s_file:
+            ts_s_file_var.set(ts_s_file)
         
         def browse_ts_s_file():
             file_path = filedialog.askopenfilename(
@@ -4076,6 +4534,12 @@ class ThermoQGUI:
         ttk.Button(button_frame, text=self.tr('imp_btn_cancel', 'Cancel'), command=import_window.destroy).pack(
             side=tk.LEFT, padx=10
         )
+
+        if auto_import:
+            # Run the same import routine as the UI button would.
+            # The import routine itself will destroy the window on success.
+            import_pandat_data()
+            return
     
     def update_element_availability(self):
         """Update element selector to show only available elements from Pandat data"""
@@ -7436,7 +7900,656 @@ class ThermoQGUI:
         generator_window.protocol('WM_DELETE_WINDOW', _close_tbatch)
         self._register_tool_lang_refresh(_refresh_tbatch_lang)
         _refresh_tbatch_lang()
-    
+
+    def open_pandat_batch_generator(self):
+        """Generate multiple Pandat .pbfx files by substituting %Element% placeholders."""
+        generator_window = tk.Toplevel(self.root)
+        generator_window.geometry("920x820")
+        self._present_tool_window(generator_window, self.root)
+
+        canvas = tk.Canvas(generator_window)
+        scrollbar = ttk.Scrollbar(generator_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def on_pbfx_canvas_configure(event):
+            w = event.width
+            if w > 1:
+                canvas.itemconfigure(canvas_window, width=w)
+
+        canvas.bind("<Configure>", on_pbfx_canvas_configure)
+        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        scrollbar.pack(side="right", fill="y")
+
+        main_frame = scrollable_frame
+
+        title_label = ttk.Label(
+            main_frame,
+            text=self.tr('pbatch_win_title', 'Pandat Batch File Generator'),
+            font=('Arial', 14, 'bold'),
+        )
+        title_label.pack(pady=(0, 10))
+
+        info_label = ttk.Label(
+            main_frame,
+            text=self.tr('pbatch_subtitle', ''),
+            wraplength=800,
+            justify='center',
+        )
+        info_label.pack(pady=(0, 16))
+
+        def on_pbfx_scrollable_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            if event.width > 100:
+                info_label.configure(wraplength=max(480, event.width - 80))
+
+        scrollable_frame.bind("<Configure>", on_pbfx_scrollable_configure)
+
+        _pb_ft = lambda: (
+            (self.tr('filetype_pbfx', 'Pandat batch (*.pbfx)'), "*.pbfx"),
+            (self.tr('filetype_text', 'Text files'), "*.txt"),
+            (self.tr('filetype_all', 'All files'), "*.*"),
+        )
+
+        generator_state = {
+            'allowed_elements': None,
+            'template_text': '',
+            'balance_base': None,
+            'n_unit_raw': None,
+        }
+
+        template_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_tpl', 'Template (.pbfx)'), padding="10")
+        template_frame.pack(fill=tk.X, pady=5)
+
+        template_var = tk.StringVar()
+        tpl_top = ttk.Frame(template_frame)
+        tpl_top.pack(fill=tk.X)
+        ttk.Entry(tpl_top, textvariable=template_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        tpl_unit_label = ttk.Label(template_frame, text='', wraplength=820, justify='left')
+        tpl_unit_label.pack(fill=tk.X, padx=5, pady=(4, 2))
+
+        elements_frame = ttk.LabelFrame(main_frame, text=self.tr('tbatch_elem_cfg', 'Element Configuration'), padding="10")
+        elements_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        elements_list_frame = ttk.Frame(elements_frame)
+        elements_list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        elements_tree = ttk.Treeview(
+            elements_list_frame, columns=("Element", "Min", "Max", "Step"), show="headings", height=6
+        )
+        elements_tree.heading("Element", text=self.tr('tbatch_tbl_element', 'Element'))
+        elements_tree.heading("Min", text=self.tr('tbatch_tbl_min', 'Min'))
+        elements_tree.heading("Max", text=self.tr('tbatch_tbl_max', 'Max'))
+        elements_tree.heading("Step", text=self.tr('tbatch_tbl_step', 'Step'))
+        elements_tree.column("Element", width=120, minwidth=70, stretch=True)
+        elements_tree.column("Min", width=100, minwidth=60, stretch=True)
+        elements_tree.column("Max", width=100, minwidth=60, stretch=True)
+        elements_tree.column("Step", width=100, minwidth=60, stretch=True)
+        elements_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        elements_scrollbar = ttk.Scrollbar(elements_list_frame, orient=tk.VERTICAL, command=elements_tree.yview)
+        elements_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        elements_tree.configure(yscrollcommand=elements_scrollbar.set)
+
+        remainder_var = tk.BooleanVar(value=False)
+        remainder_fr = ttk.Frame(elements_frame)
+        remainder_fr.pack(fill=tk.X, pady=(2, 6))
+        cb_remainder = ttk.Checkbutton(
+            remainder_fr,
+            text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'),
+            variable=remainder_var,
+        )
+        cb_remainder.pack(side=tk.LEFT, anchor='w')
+        remainder_hint = ttk.Label(remainder_fr, text='', wraplength=840, justify='left')
+        remainder_hint.pack(fill=tk.X, padx=(24, 0), pady=(4, 0))
+
+        def _sync_remainder_ui():
+            els = generator_state.get('allowed_elements') or []
+            if len(els) >= 2:
+                cb_remainder.config(state='normal')
+            else:
+                remainder_var.set(False)
+                cb_remainder.config(state='disabled')
+            if remainder_var.get() and len(els) >= 2:
+                remainder_hint.config(text=self.tr('pbatch_remainder_hint', ''))
+            else:
+                remainder_hint.config(text='')
+
+        cb_remainder.config(command=_sync_remainder_ui)
+
+        add_element_frame = ttk.Frame(elements_frame)
+        add_element_frame.pack(pady=5)
+
+        lbl_el = ttk.Label(add_element_frame, text=self.tr('tbatch_lbl_element', 'Element:'))
+        lbl_el.pack(side=tk.LEFT, padx=5)
+        element_var = tk.StringVar()
+        element_combo = ttk.Combobox(
+            add_element_frame, textvariable=element_var, values=sorted(PERIODIC_TABLE.keys()), width=10
+        )
+        element_combo.pack(side=tk.LEFT, padx=5)
+
+        lbl_min = ttk.Label(add_element_frame, text=self.tr('tbatch_lbl_min', 'Min:'))
+        lbl_min.pack(side=tk.LEFT, padx=5)
+        min_var = tk.StringVar(value="0.0")
+        ttk.Entry(add_element_frame, textvariable=min_var, width=10).pack(side=tk.LEFT, padx=5)
+
+        lbl_max = ttk.Label(add_element_frame, text=self.tr('tbatch_lbl_max', 'Max:'))
+        lbl_max.pack(side=tk.LEFT, padx=5)
+        max_var = tk.StringVar(value="1.0")
+        ttk.Entry(add_element_frame, textvariable=max_var, width=10).pack(side=tk.LEFT, padx=5)
+
+        lbl_step = ttk.Label(add_element_frame, text=self.tr('tbatch_lbl_step', 'Step:'))
+        lbl_step.pack(side=tk.LEFT, padx=5)
+        step_var = tk.StringVar(value="0.5")
+        ttk.Entry(add_element_frame, textvariable=step_var, width=10).pack(side=tk.LEFT, padx=5)
+
+        name_pattern_var = tk.StringVar()
+        out_dir_var = tk.StringVar()
+
+        out_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_output_dir', 'Output folder'), padding="10")
+        out_frame.pack(fill=tk.X, pady=10)
+        ttk.Entry(out_frame, textvariable=out_dir_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        def browse_out_dir():
+            p = filedialog.askdirectory(title=self.tr('pbatch_fd_out_dir', 'Select output folder'))
+            if p:
+                out_dir_var.set(p)
+
+        btn_out = ttk.Button(out_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_out_dir)
+        btn_out.pack(side=tk.RIGHT, padx=5)
+
+        pattern_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_name_pattern', 'Output filename pattern'), padding="10")
+        pattern_frame.pack(fill=tk.X, pady=5)
+        ttk.Entry(pattern_frame, textvariable=name_pattern_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        hint_label = ttk.Label(
+            pattern_frame,
+            text=self.tr('pbatch_name_pattern_hint', 'No extension needed; .pbfx is added automatically.'),
+            wraplength=780,
+        )
+        hint_label.pack(fill=tk.X, padx=6, pady=(6, 0))
+
+        status_label = ttk.Label(main_frame, text=self.tr('pbatch_ready', 'Ready to generate'), foreground="blue")
+        status_label.pack(pady=10)
+
+        def _refresh_tpl_unit_label():
+            if not generator_state.get('allowed_elements'):
+                tpl_unit_label.config(text='')
+                return
+            raw = generator_state.get('n_unit_raw')
+            key = (raw or '').strip().lower()
+            if key == 'w%':
+                t = self.tr('pbatch_unit_line_w_pct', '')
+            elif key == 'x%':
+                t = self.tr('pbatch_unit_line_x_pct', '')
+            elif key == 'w':
+                t = self.tr('pbatch_unit_line_w', '')
+            elif key == 'x':
+                t = self.tr('pbatch_unit_line_x', '')
+            elif raw:
+                t = self.tr('pbatch_unit_line_unknown', '').format(raw=raw)
+            else:
+                t = self.tr('pbatch_unit_no_tag', '')
+            tpl_unit_label.config(text=t)
+
+        def parse_template(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                found = _pbfx_ordered_element_placeholders(content)
+                if not found:
+                    generator_state['allowed_elements'] = None
+                    generator_state['template_text'] = ''
+                    generator_state['balance_base'] = None
+                    generator_state['n_unit_raw'] = None
+                    element_combo.config(state='normal', values=sorted(PERIODIC_TABLE.keys()))
+                    _refresh_tpl_unit_label()
+                    _sync_remainder_ui()
+                    messagebox.showinfo(
+                        self.tr('gen_template_info', 'Template Info'),
+                        self.tr('gen_no_placeholders', 'No element placeholders (like %Al%) found in template.'),
+                    )
+                    return
+
+                generator_state['allowed_elements'] = found
+                generator_state['template_text'] = content
+                bb_u, raw_u = _pbfx_parse_composition_unit_base(content)
+                generator_state['balance_base'] = float(bb_u)
+                generator_state['n_unit_raw'] = raw_u
+                _refresh_tpl_unit_label()
+                for item in elements_tree.get_children():
+                    elements_tree.delete(item)
+                for el in found:
+                    elements_tree.insert("", "end", values=(el, 0.0, 10.0, 1.0))
+                element_combo.config(values=found)
+                element_combo.set(found[0])
+                _sync_remainder_ui()
+                stem = os.path.splitext(os.path.basename(path))[0]
+                name_pattern_var.set(_pbfx_default_output_name_pattern(stem, found))
+                messagebox.showinfo(
+                    self.tr('dlg_success', 'Success'),
+                    self.tr(
+                        'gen_tpl_loaded_body',
+                        'Found elements: {els}\n\nElement selection has been locked to these elements.\nPlease configure Min/Max/Step for each.',
+                    ).format(els=', '.join(found)),
+                )
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('gen_tpl_parse_fail', 'Failed to parse template: {e}').format(e=str(e)),
+                )
+
+        def browse_template():
+            file_path = filedialog.askopenfilename(
+                title=self.tr('pbatch_fd_tpl', 'Select Pandat .pbfx template'),
+                filetypes=_pb_ft(),
+            )
+            if file_path:
+                template_var.set(file_path)
+                parse_template(file_path)
+
+        btn_tpl = ttk.Button(tpl_top, text=self.tr('pandat_browse', 'Browse'), command=browse_template)
+        btn_tpl.pack(side=tk.RIGHT, padx=5)
+
+        def add_element_config():
+            element = element_var.get().strip()
+            try:
+                min_val = float(min_var.get())
+                max_val = float(max_var.get())
+                step_val = float(step_var.get())
+                if element not in PERIODIC_TABLE:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('gen_invalid_el', 'Invalid element: {el}').format(el=element),
+                    )
+                    return
+                if generator_state['allowed_elements'] is not None:
+                    if element not in generator_state['allowed_elements']:
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr(
+                                'gen_el_not_in_tpl',
+                                'Element {el} is not in the template!\nAllowed: {allowed}',
+                            ).format(el=element, allowed=', '.join(generator_state['allowed_elements'])),
+                        )
+                        return
+                if min_val > max_val or step_val <= 0:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('pbatch_invalid_range', 'Invalid range: require Min ≤ Max and Step > 0.'),
+                    )
+                    return
+                existing_item = None
+                for item in elements_tree.get_children():
+                    if elements_tree.item(item)['values'][0] == element:
+                        existing_item = item
+                        break
+                if existing_item:
+                    elements_tree.item(existing_item, values=(element, min_val, max_val, step_val))
+                else:
+                    elements_tree.insert("", "end", values=(element, min_val, max_val, step_val))
+                if generator_state['allowed_elements'] is None:
+                    element_var.set("")
+            except ValueError:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('gen_invalid_nums', 'Please enter valid numbers for Min, Max, and Step!'),
+                )
+
+        def remove_element_config():
+            if not elements_tree.selection():
+                return
+            item = elements_tree.selection()[0]
+            allowed = generator_state.get('allowed_elements')
+            if allowed is not None:
+                others = []
+                for iid in elements_tree.get_children():
+                    if iid != item:
+                        others.append(elements_tree.item(iid)['values'][0])
+                if len(others) < 1:
+                    messagebox.showwarning(
+                        self.tr('dlg_warning', 'Warning'),
+                        self.tr('pbatch_remove_need_one', ''),
+                        parent=generator_window,
+                    )
+                    return
+                missing_after = set(allowed) - set(others)
+                if len(missing_after) > 1:
+                    messagebox.showwarning(
+                        self.tr('dlg_warning', 'Warning'),
+                        self.tr('pbatch_remove_too_many', ''),
+                        parent=generator_window,
+                    )
+                    return
+            elements_tree.delete(item)
+
+        btn_add = ttk.Button(add_element_frame, text=self.tr('tbatch_add', 'Add Element'), command=add_element_config)
+        btn_add.pack(side=tk.LEFT, padx=10)
+        btn_remove = ttk.Button(
+            add_element_frame, text=self.tr('tbatch_remove', 'Remove Selected'), command=remove_element_config
+        )
+        btn_remove.pack(side=tk.LEFT, padx=5)
+
+        def apply_replacements(text, upper_to_val):
+            def _repl(m):
+                u = m.group(1).upper()
+                if u in upper_to_val:
+                    return upper_to_val[u]
+                return m.group(0)
+
+            return re.sub(r'%([A-Za-z]+)%', _repl, text)
+
+        def generate_pbfx_files():
+            try:
+                tpl_path = template_var.get().strip()
+                out_dir = out_dir_var.get().strip()
+                if not tpl_path or not os.path.isfile(tpl_path):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_tpl', ''))
+                    return
+                if not out_dir or not os.path.isdir(out_dir):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_out', ''))
+                    return
+                content = generator_state.get('template_text') or ''
+                if not content:
+                    with open(tpl_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                allowed = generator_state.get('allowed_elements')
+                if not allowed:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('gen_no_placeholders', 'No element placeholders (like %Al%) found in template.'),
+                    )
+                    return
+
+                element_configs = []
+                for item in elements_tree.get_children():
+                    vals = elements_tree.item(item)['values']
+                    element_configs.append({
+                        'element': vals[0],
+                        'min': float(vals[1]),
+                        'max': float(vals[2]),
+                        'step': float(vals[3]),
+                    })
+                if not element_configs:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('gen_need_cfg', 'Please add at least one element configuration!'),
+                    )
+                    return
+
+                allowed_list = list(allowed)
+                by_el = {cfg['element']: cfg for cfg in element_configs}
+                present_ordered = [e for e in allowed_list if e in by_el]
+                missing_ordered = [e for e in allowed_list if e not in by_el]
+
+                if len(present_ordered) < 1:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('pbatch_remove_need_one', ''),
+                    )
+                    return
+
+                balance_base = float(_pbfx_parse_composition_unit_base(content)[0])
+                want_balance_last = bool(remainder_var.get())
+
+                if len(missing_ordered) > 1:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('pbatch_need_full_or_balance', ''),
+                    )
+                    return
+
+                use_balance = False
+                balance_el = None
+                sweep_cfgs = []
+
+                if len(missing_ordered) == 1:
+                    use_balance = True
+                    balance_el = missing_ordered[0]
+                    sweep_cfgs = [by_el[e] for e in present_ordered]
+                elif len(missing_ordered) == 0 and want_balance_last:
+                    if len(allowed_list) < 2:
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_remainder_need_two', ''),
+                        )
+                        return
+                    if set(by_el.keys()) != set(allowed_list):
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_need_full_or_balance', ''),
+                        )
+                        return
+                    use_balance = True
+                    balance_el = allowed_list[-1]
+                    sweep_cfgs = [by_el[e] for e in allowed_list[:-1]]
+                else:
+                    if set(by_el.keys()) != set(allowed_list):
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_need_full_or_balance', ''),
+                        )
+                        return
+                    sweep_cfgs = [by_el[e] for e in allowed_list]
+
+                if len(sweep_cfgs) < 1:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('gen_need_cfg', 'Please add at least one element configuration!'),
+                    )
+                    return
+
+                for cfg in sweep_cfgs:
+                    if cfg['min'] > cfg['max'] or cfg['step'] <= 0:
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_invalid_range', ''),
+                        )
+                        return
+
+                out_decimals = max(_step_to_output_decimals(cfg['step']) for cfg in sweep_cfgs)
+                out_decimals = min(max(out_decimals, 0), 12)
+
+                skipped_remainder = 0
+                valid_rows = None
+                element_names = list(allowed_list)
+
+                if use_balance:
+                    tol = max(1e-9 * balance_base, 1e-12)
+                    ranges = [
+                        _composition_range_float64(cfg['min'], cfg['max'], cfg['step'])
+                        for cfg in sweep_cfgs
+                    ]
+                    mesh = np.meshgrid(*ranges)
+                    combinations = np.stack([m.flatten() for m in mesh], axis=1)
+                    valid_rows = []
+                    for row in combinations:
+                        s = float(np.sum(row))
+                        v_bal = balance_base - s
+                        if v_bal < -tol or v_bal > balance_base + tol:
+                            skipped_remainder += 1
+                            continue
+                        valid_rows.append((row, v_bal))
+                    total = len(valid_rows)
+                    if total == 0:
+                        bd = int(balance_base) if abs(balance_base - round(balance_base)) < 1e-9 else balance_base
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_remainder_none_valid', '').format(base=bd),
+                        )
+                        return
+                else:
+                    ranges = [
+                        _composition_range_float64(cfg['min'], cfg['max'], cfg['step'])
+                        for cfg in sweep_cfgs
+                    ]
+                    mesh = np.meshgrid(*ranges)
+                    combinations = np.stack([m.flatten() for m in mesh], axis=1)
+                    total = len(combinations)
+                    if total == 0:
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('pbatch_invalid_range', ''),
+                        )
+                        return
+
+                if total > 10000:
+                    if not messagebox.askyesno(
+                        self.tr('dlg_confirm_title', 'Confirm'),
+                        self.tr('pbatch_many_files', 'This will create {n} files. Continue?').format(n=total),
+                        parent=generator_window,
+                    ):
+                        return
+
+                pattern_raw = name_pattern_var.get().strip()
+                if not pattern_raw:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('pbatch_need_pattern', 'Please enter an output filename pattern.'),
+                    )
+                    return
+
+                status_label.config(
+                    text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(i=0, n=total),
+                    foreground="orange",
+                )
+                generator_window.update()
+
+                if use_balance:
+                    for idx, (row, v_bal) in enumerate(valid_rows):
+                        data_base = {}
+                        for i, cfg in enumerate(sweep_cfgs):
+                            data_base[cfg['element']] = f"{float(row[i]):.{out_decimals}f}"
+                        data_base[balance_el] = f"{float(v_bal):.{out_decimals}f}"
+                        upper_to_val = {k.upper(): v for k, v in data_base.items()}
+                        body = apply_replacements(content, upper_to_val)
+                        base_name = apply_replacements(pattern_raw, upper_to_val)
+                        base_name = base_name.strip()
+                        if base_name.lower().endswith('.pbfx'):
+                            base_stem = base_name[:-5]
+                        else:
+                            base_stem = base_name
+                        base_stem = self._batch_safe_fname_part(base_stem, max_len=120)
+                        if not base_stem:
+                            base_stem = f"batch_{idx + 1}"
+                        out_name = base_stem + '.pbfx'
+                        out_path = os.path.join(out_dir, out_name)
+                        with open(out_path, 'w', encoding='utf-8') as fp:
+                            fp.write(body)
+                        if total <= 1 or idx % max(1, total // 40) == 0 or idx == total - 1:
+                            status_label.config(
+                                text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(
+                                    i=idx + 1, n=total
+                                ),
+                                foreground="orange",
+                            )
+                            generator_window.update()
+                else:
+                    for idx, combo in enumerate(combinations):
+                        data_base = {
+                            element_names[i]: f"{float(combo[i]):.{out_decimals}f}"
+                            for i in range(len(element_names))
+                        }
+                        upper_to_val = {k.upper(): v for k, v in data_base.items()}
+                        body = apply_replacements(content, upper_to_val)
+                        base_name = apply_replacements(pattern_raw, upper_to_val)
+                        base_name = base_name.strip()
+                        if base_name.lower().endswith('.pbfx'):
+                            base_stem = base_name[:-5]
+                        else:
+                            base_stem = base_name
+                        base_stem = self._batch_safe_fname_part(base_stem, max_len=120)
+                        if not base_stem:
+                            base_stem = f"batch_{idx + 1}"
+                        out_name = base_stem + '.pbfx'
+                        out_path = os.path.join(out_dir, out_name)
+                        with open(out_path, 'w', encoding='utf-8') as fp:
+                            fp.write(body)
+                        if total <= 1 or idx % max(1, total // 40) == 0 or idx == total - 1:
+                            status_label.config(
+                                text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(
+                                    i=idx + 1, n=total
+                                ),
+                                foreground="orange",
+                            )
+                            generator_window.update()
+
+                bd = int(balance_base) if abs(balance_base - round(balance_base)) < 1e-9 else balance_base
+                ok_msg = self.tr(
+                    'pbatch_gen_ok',
+                    'Successfully generated {n} file(s).\n\nOutput folder:\n{dir}',
+                ).format(n=total, dir=out_dir)
+                if use_balance and skipped_remainder > 0:
+                    ok_msg += '\n\n' + self.tr(
+                        'pbatch_remainder_skipped',
+                        'Skipped {k} combinations (balance outside [0, {base}]).',
+                    ).format(k=skipped_remainder, base=bd)
+
+                status_label.config(text=ok_msg[:240], foreground="green")
+                messagebox.showinfo(self.tr('dlg_success', 'Success'), ok_msg)
+
+            except Exception as e:
+                status_label.config(text=str(e), foreground="red")
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('pbatch_gen_fail', 'Failed to generate Pandat batch files:\n{e}').format(e=str(e)),
+                )
+
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(pady=20)
+
+        def _close_pbatch():
+            self._unregister_tool_lang_refresh(_refresh_pbatch_lang)
+            generator_window.destroy()
+
+        btn_gen = ttk.Button(
+            buttons_frame, text=self.tr('pbatch_generate', 'Generate .pbfx files'), command=generate_pbfx_files
+        )
+        btn_gen.pack(side=tk.LEFT, padx=10)
+        btn_close = ttk.Button(buttons_frame, text=self.tr('ui_close', 'Close'), command=_close_pbatch)
+        btn_close.pack(side=tk.LEFT, padx=10)
+
+        def _refresh_pbatch_lang():
+            try:
+                if not generator_window.winfo_exists():
+                    return
+            except tk.TclError:
+                return
+            generator_window.title(self.tr('tools_generate_pandat', 'Generate Pandat Batch File'))
+            title_label.config(text=self.tr('pbatch_win_title', 'Pandat Batch File Generator'))
+            info_label.config(text=self.tr('pbatch_subtitle', ''))
+            template_frame.config(text=self.tr('pbatch_tpl', 'Template (.pbfx)'))
+            btn_tpl.config(text=self.tr('pandat_browse', 'Browse'))
+            _refresh_tpl_unit_label()
+            elements_frame.config(text=self.tr('tbatch_elem_cfg', 'Element Configuration'))
+            elements_tree.heading("Element", text=self.tr('tbatch_tbl_element', 'Element'))
+            elements_tree.heading("Min", text=self.tr('tbatch_tbl_min', 'Min'))
+            elements_tree.heading("Max", text=self.tr('tbatch_tbl_max', 'Max'))
+            elements_tree.heading("Step", text=self.tr('tbatch_tbl_step', 'Step'))
+            lbl_el.config(text=self.tr('tbatch_lbl_element', 'Element:'))
+            lbl_min.config(text=self.tr('tbatch_lbl_min', 'Min:'))
+            lbl_max.config(text=self.tr('tbatch_lbl_max', 'Max:'))
+            lbl_step.config(text=self.tr('tbatch_lbl_step', 'Step:'))
+            btn_add.config(text=self.tr('tbatch_add', 'Add Element'))
+            btn_remove.config(text=self.tr('tbatch_remove', 'Remove Selected'))
+            out_frame.config(text=self.tr('pbatch_output_dir', 'Output folder'))
+            btn_out.config(text=self.tr('pandat_browse', 'Browse'))
+            pattern_frame.config(text=self.tr('pbatch_name_pattern', 'Output filename pattern'))
+            hint_label.config(text=self.tr('pbatch_name_pattern_hint', ''))
+            btn_gen.config(text=self.tr('pbatch_generate', 'Generate .pbfx files'))
+            btn_close.config(text=self.tr('ui_close', 'Close'))
+            cb_remainder.config(text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'))
+            _sync_remainder_ui()
+            cur = status_label.cget('text')
+            if 'Ready' in cur or '就绪' in cur:
+                status_label.config(text=self.tr('pbatch_ready', 'Ready to generate'))
+
+        generator_window.title(self.tr('tools_generate_pandat', 'Generate Pandat Batch File'))
+        generator_window.protocol('WM_DELETE_WINDOW', _close_pbatch)
+        self._register_tool_lang_refresh(_refresh_pbatch_lang)
+        _refresh_pbatch_lang()
+
     def open_exp_data_processor(self):
         """Open Thermo-calc results extractor tool (Melting range + T-zero)."""
         processor_window = tk.Toplevel(self.root)
@@ -8621,6 +9734,45 @@ class ThermoQGUI:
                 )
                 import traceback
                 traceback.print_exc()
+
+        def import_to_thermoq():
+            """Extract results (if needed) then directly import generated Excel files into ThermoQ."""
+            try:
+                output_dir = output_dir_var.get() or os.getcwd()
+                status_label.config(text=self.tr('extp_import_status', 'Importing to ThermoQ...'), foreground="orange")
+                extractor_window.update_idletasks()
+
+                # Re-run extraction using current folder selections.
+                extract_results()
+
+                p_path = os.path.join(output_dir, 'P.xlsx')
+                ts_path = os.path.join(output_dir, 'Ts.xlsx')
+                ps_path = os.path.join(output_dir, 'P-S.xlsx')
+                tss_path = os.path.join(output_dir, 'Ts-S.xlsx')
+
+                required = [p_path, ts_path, ps_path, tss_path]
+                if not all(os.path.exists(x) for x in required):
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('extp_import_missing', 'Generated Excel files not found in {dir}. Please run Extract Results first.').format(dir=output_dir),
+                    )
+                    return
+
+                self.open_pandat_import(
+                    p_file=p_path,
+                    ts_file=ts_path,
+                    p_s_file=ps_path,
+                    ts_s_file=tss_path,
+                    auto_import=True,
+                )
+            except Exception as e:
+                status_label.config(text=f"Error: {str(e)}", foreground="red")
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('extp_import_missing', 'Generated Excel files not found in {dir}. Please run Extract Results first.').format(
+                        dir=(output_dir_var.get() or os.getcwd())
+                    ),
+                )
         
         # Buttons in bottom bar (always visible) - after extract_results is defined
         btn_inner = ttk.Frame(bottom_bar)
@@ -8632,6 +9784,8 @@ class ThermoQGUI:
 
         btn_extp_run = ttk.Button(btn_inner, text=self.tr('extp_extract_btn', 'Extract Results'), command=extract_results)
         btn_extp_run.pack(side=tk.LEFT, padx=10)
+        btn_extp_import = ttk.Button(btn_inner, text=self.tr('extp_import_btn', 'Import to ThermoQ'), command=import_to_thermoq)
+        btn_extp_import.pack(side=tk.LEFT, padx=10)
         btn_extp_close = ttk.Button(btn_inner, text=self.tr('extp_close', 'Close'), command=_close_extp)
         btn_extp_close.pack(side=tk.LEFT, padx=10)
 
@@ -8652,6 +9806,7 @@ class ThermoQGUI:
             btn_extp_out.config(text=self.tr('pandat_browse', 'Browse'))
             status_frame.config(text=self.tr('extp_status', 'Status'))
             btn_extp_run.config(text=self.tr('extp_extract_btn', 'Extract Results'))
+            btn_extp_import.config(text=self.tr('extp_import_btn', 'Import to ThermoQ'))
             btn_extp_close.config(text=self.tr('extp_close', 'Close'))
             cur = status_label.cget('text')
             if 'Ready' in cur or '就绪' in cur:

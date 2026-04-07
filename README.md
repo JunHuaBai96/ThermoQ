@@ -4,7 +4,22 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ## 更新摘要
 
+### 近期工作总览（约 2026 年 4 月）
+
+- **Tools → Generate Pandat Batch File**：基于 `.pbfx` 模板与 `%元素%` 占位符批量生成 Pandat 文件；从 `<unit name="n" value="…"/>` 读取 **w% / x%**（平衡总量 **100**）或 **w / x**（总量 **1**）；支持删去一行或勾选「按列表平衡最后一个」实现单一平衡组元；模板锁定时仍可 **Remove Selected**（至少保留一行且最多缺一个占位元素）。**Help → Language** 切换文案。
+- **Composition space (batch)**：**Export columns** 多选导出；**Save CSV** / **Save Excel**；三组元且导出列含 Q/P/Beta 时做 Newton 角点填充；**Compute batch** 显示进度；作图/导出按钮布局已整理；**Quantity (Z)=All** 时多列 × 四种图批量输出。
+- **Extract Pandat Results**：**Import to ThermoQ** 可在提取后一键打开 **Pandat to ThermoQ** 并预填路径导入。
+
+---
+
 ### 最新版本（近期工作汇总）
+
+#### Tools — **Generate Pandat Batch File（生成 Pandat 批处理 .pbfx）**
+- 位于 **Tools → Generate Pandat Batch File**（在 Extract Pandat Results **上方**）。
+- **占位符**：`%X%` 标识元素；占位符顺序由在模板中**首次出现**决定。
+- **单位与平衡总量**：`<unit name="n" value="w%"/>` / `x%` → 百分数体系，平衡用 **100 − Σ**；`w` / `x` → 分数体系，平衡用 **1 − Σ**；未找到标签时按 **100** 处理并有界面说明。
+- **方式**：(1) 每个占位元素一行 → 全组合网格；(2) **删一行** → 缺省元素为平衡项；(3) **全部行 + 勾选「按列表平衡最后一个」** → 仅前 n−1 个参与网格，最后一项平衡。
+- **输出**：输出目录 + 文件名模式（可含占位符）；**Help → Language** 更新界面。
 
 #### 主界面 — **Calculate → Composition space (batch)（成分空间·批量）**
 - **批量数据来源（Batch source）**  
@@ -12,12 +27,10 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - **Scheil**：按 P-S 表逐行成分计算。  
   - **All**：先取 P 表至多「最大行数」行，再取 P-S 表至多同样行数，**上下拼接**；需已导入 P、Ts、P-S、Ts-S。  
   - 每行带内部索引 `__batch_row__`，便于与源表行对齐。
-- **导出**  
-  - **Save CSV…**、**Save Excel (interpolated batch)…**：在导出前对**三元体系**（恰好三个 `w_*` 列）中缺失的 **Q / P / Beta** 做 **Newton 前向差分**角点填充（w(X)、w(Y)≈0 时利用 w=1,2,3 等网格；Z 角点两方向可算则取平均）；并按所选数据来源**自动筛选列**：  
-    - 仅 Scheil：**ΔTs**、Qtrue/Q/P/Beta（Scheil）等；  
-    - 仅 Lever：**ΔT**、Qtrue/Q/P/Beta（Lever）等；  
-    - **All**：上述全部。  
-  - **已移除**「Save Excel (cleaned + batch)」：批量页**不再**与液相线表 dwdT_L、1/dwdT_L 清洗结果合并导出；液相线清洗仍仅在 **Plot → Plot Liquidus Vectors** 等路径使用。
+- **计算与导出**  
+  - **Compute batch**：状态栏显示**处理进度**（i/n）及完成/跳过信息。  
+  - **Export columns**：多选要导出的列；**Save CSV**、**Save Excel** 仅输出所选列；**三元体系**且所选列包含 **Q / P / Beta** 时，保存前进行 **Newton 前向差分**角点填充（w(X)、w(Y)≈0 利用网格；Z 角点两向可算则平均）。数据来源仍为：**仅 Scheil** 侧重 ΔTs 与 Scheil 的 Q/P/Beta 等；**仅 Lever** 侧重 ΔT 与 Lever 的 Q/P/Beta 等；**All** 含两类。  
+  - **已移除**批量页「Save Excel (cleaned + batch)」及与 dwdT_L / 1/dwdT_L 清洗表的合并导出；液相线清洗仍在 **Plot → Plot Liquidus Vectors** 等路径使用。
 - **X / Y / Z 组元（用于 Q/P/Beta 填充）**  
   - 由批量表中各元素 **平均含量**排序认定：**X 最低、Y 次之、Z 为主组元**（含量通常最高）。
 - **Quantity (Z) —「全部 / All」**  
@@ -55,6 +68,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 主计算、Plot Q Values、Extract Pandat Results 等均使用检测到的固相与 Q 列（如 -T//fw(@FCC_A1)、-T//fw(@BCC_A2)）
   - 组分 Q/P/Beta 针对所有在数据中具备 w(*)、w(*@固相)、w(*@LIQUID)、dwdT_L(*@LIQUID) 的元素计算，不再限于 Mg、Si
 - **Extract Pandat Results 增强**：
+  - **Import to ThermoQ**：提取生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx 后，可一键触发 **Import → Pandat to ThermoQ**（预填路径并自动导入，减少手工选文件步骤）
   - **Lever 与 Scheil 文件夹**：同时支持 `.csv` 和 `.dat`（如 All table_Lever、All table_Scheil 的 CSV 均可）
   - **列名容错**：对 `fs`、`T` 列做大小写不敏感匹配（支持 fs、f_s、Fs；T、t、Temperature），缺失时跳过该文件并提示，避免 KeyError
   - **P-S.xlsx / Ts-S.xlsx**：生成文件中空缺的 **w(*)**（及 P-S 中的 w(*@*)）自动用 **0** 填充
@@ -130,6 +144,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
 
 ### Tools工具集
 - **Composition Converter**：质量分数（wt%）与原子分数（at%）双向转换工具
+- **Generate Pandat Batch File**：从含 `%元素%` 占位符的 `.pbfx` 模板批量生成多个 Pandat 文件；按 `<unit name="n" …/>` 判断百分数（总量 100）或分数（总量 1）；支持删行/勾选实现单一平衡组元（见「更新摘要」）
 - **Generate Thermo-calc Batch File**：生成Thermo-calc批处理文件（.tcm）
   - 支持多元素组合生成
   - 可配置元素范围和步长
@@ -143,7 +158,7 @@ ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素�
   - 结果自动保存为 Excel，可直接被 Phase Surface Plotter（Thermo-calc）与 Plot T-zero Surface 使用
 - **Extract Pandat Results**：从 Pandat 计算结果中提取数据
   - Lever 与 Scheil 文件夹均支持 **.csv** 和 **.dat**（如 All table_Lever、All table_Scheil 的 CSV）
-  - 生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx；列名 w(*@*)、fw(@*)、-T//fw(@*) 按数据自动识别
+  - 生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx；列名 w(*@*)、fw(@*)、-T//fw(@*) 按数据自动识别；支持 **Import to ThermoQ** 将输出直接导入主程序
   - 生成文件中空缺的 w(*) 用 0 填充；P-S.xlsx 始终含 fw(@FCC_A1)、-T//fw(@FCC_A1)（缺失则补 0）
   - **FCC 相分离**：若存在 fw(@FCC_A1#1)、fw(@FCC_A1#2) 等列，会提示“FCC 分离成两个成分不同的 FCC 相”，并用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 补充到 P-S（提示语言随 Help→Language 中/英切换）
   - 保存时若文件被占用会提示关闭或更换输出目录；窗口底部固定 Extract Results / Close 按钮并居中
@@ -245,9 +260,9 @@ python main.py
 #### Composition space (batch)（成分空间·批量）
 1. 在主窗口 **Calculate** 笔记本页切换到 **Composition space (batch)**。  
 2. 选择 **Batch source**（Lever / Scheil / All），可选填 **最大行数**（留空表示该表全部行；All 模式下 P 与 P-S **各自**至多取该行数）。  
-3. 点击 **Compute batch**；状态栏显示完成行数与跳过行数。  
-4. **Save CSV…** 或 **Save Excel (interpolated batch)…**：含三元 Newton 填充（若为三组元）并按来源筛选列（见上文「更新摘要」）。  
-5. **Plot**：选择 X、Y 元素；**Quantity (Z)** 可选某一数值列或 **全部/All**（一次生成所有数值列 × 四种图到输出目录）。设置 **Output Directory**、前缀与可视化参数后点击 **Generate plot**。  
+3. 点击 **Compute batch**；状态栏显示 **处理进度**（进行中 i/n）及完成/跳过信息。  
+4. 在 **Export columns** 中选择要导出的列（**Select all / Clear**）；**Save CSV** 或 **Save Excel** 写出所选列；三组元且所选列含 Q/P/Beta 时会做角点 Newton 填充（见「更新摘要」）。  
+5. **Generate plot** 与 **Save CSV / Save Excel** 位于作图区下方；**Plot**：选择 X、Y；**Quantity (Z)** 可选单列或 **全部/All**（对所有数值列 × 四种可视化批量输出到 **Output Directory**）。  
 6. 界面语言由 **Help → Language** 切换。
 
 ### Plot工具使用
@@ -314,6 +329,13 @@ python main.py
 4. 点击"Convert"进行转换
 5. 查看转换结果
 
+#### Generate Pandat Batch File（生成 Pandat .pbfx 批处理）
+1. 打开：`Tools` > `Generate Pandat Batch File`（在 Extract Pandat Results 上方）  
+2. 选择 `.pbfx` 模板（含 `%Al%`、`%LI%` 等占位符）；界面显示从模板解析的 **成分单位**（w%、x%、w、x）及平衡总量含义  
+3. **Element Configuration**：为要扫描的元素设置 Min / Max / Step；若只需扫描部分元素，可 **Remove Selected** 删去平衡元素对应的一行（须保留至少一行，且模板占位符最多缺一个），或保留全部行并勾选 **按列表平衡最后一个**  
+4. 选择 **输出文件夹** 与 **文件名模式**（可含 `%LI%` 等；不必写 `.pbfx` 后缀）  
+5. 点击 **Generate .pbfx files**；若网格点使平衡值超出合法区间会被跳过并在成功提示中汇总  
+
 #### Generate Thermo-calc Batch File（生成批处理文件）
 1. 打开：`Tools` > `Generate Thermo-calc Batch File`
 2. 选择模板文件：
@@ -354,7 +376,8 @@ python main.py
    - 列 T、fs 支持大小写不敏感（如 fs/f_s/Fs，T/t/Temperature）；缺失 fs 或 T 的文件会被跳过
    - 空缺的 w(*)（及 P-S 中 w(*@*)）会填 0；P-S 始终含 fw(@FCC_A1)、-T//fw(@FCC_A1)（无则补 0）
    - 若 Scheil 文件中存在 **fw(@FCC_A1#1)、fw(@FCC_A1#2)** 等列，会弹窗提示“FCC 分离成两个成分不同的 FCC 相”，并自动用 T 对 fw(@FCC_A1#1) 求导计算 -T//fw(@FCC_A1) 补充到 P-S（语言随 Help→Language 中/英）
-7. 若保存时提示权限错误，请关闭已打开的 Excel 或更换输出目录
+7. 可选：点击 **Import to ThermoQ** 在提取完成后自动打开 **Pandat to ThermoQ** 并导入已生成的文件  
+8. 若保存时提示权限错误，请关闭已打开的 Excel 或更换输出目录
 
 
 ## 项目结构
@@ -426,6 +449,11 @@ ThermoQ/
 2. 数据格式应为：第一列温度，第二列液相分数
 3. 如果文件名模式不匹配，将无法提取元素分数，但仍可提取温度数据
 4. 处理大量文件时可能需要较长时间，请耐心等待
+
+### Generate Pandat Batch File（.pbfx）
+1. 模板须为 UTF-8 文本；占位符格式 `%元素%`（如 `%LI%`、`%Al%`），与 Thermo-calc 工具中 `%Si%` 类似  
+2. 平衡总量由 `<unit name="n" value="…"/>` 决定：**w%、x% → 100**；**w、x → 1**；缺失该标签时程序按 **100** 处理  
+3. 删行平衡时，勿删除到「缺少两个及以上占位元素」或与「全部行 + 勾选平衡最后一个」规则冲突；否则将提示配置错误  
 
 ### Pandat结果提取
 1. Lever/Scheil 文件夹支持 **.csv 和 .dat**；CSV/DAT 格式：制表符分隔，第一行为列名，第二行为单位行（自动跳过）
