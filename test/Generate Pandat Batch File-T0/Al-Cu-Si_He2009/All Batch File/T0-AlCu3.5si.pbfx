@@ -22,7 +22,7 @@
       <points>
         <point>
           <statespace>
-            <T value="1500" />
+            <T value="900" />
             <P value="1" />
             <n component="AL" value="96.5" />
             <n component="CU" value="0" />
@@ -31,7 +31,7 @@
         </point>
         <point>
           <statespace>
-            <T value="300" />
+            <T value="600" />
             <P value="1" />
             <n component="AL" value="96.5" />
             <n component="CU" value="0" />
@@ -40,10 +40,10 @@
         </point>
         <point>
           <statespace>
-            <T value="300" />
+            <T value="600" />
             <P value="1" />
             <n component="AL" value=" " />
-            <n component="CU" value="40" />
+            <n component="CU" value="20" />
             <n component="SI" value="3.5" />
           </statespace>
         </point>

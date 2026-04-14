@@ -1,5 +1,5 @@
 <pbfx>
-  <calculation name="T0_ALCU%SI%SI" type="section" duration="8.5" original_batch_name="" id="3">
+  <calculation name="T0_ALMG%SI%SI" type="section" duration="8.5" original_batch_name="" id="3">
     <databases>
       <database type="tdb" file_name="Al-Mg-Si_COST.tdb" />
     </databases>
@@ -22,7 +22,7 @@
       <points>
         <point>
           <statespace>
-            <T value="1500" />
+            <T value="1000" />
             <P value="1" />
             <n component="AL" value="%AL%" />
             <n component="MG" value="0" />
@@ -43,7 +43,7 @@
             <T value="300" />
             <P value="1" />
             <n component="AL" value=" " />
-            <n component="MG" value="7" />
+            <n component="MG" value="30" />
             <n component="SI" value="%SI%" />
           </statespace>
         </point>
@@ -66,7 +66,7 @@
       </tables>
       <graphs>
         <graph name="T0_ALMG%SI%SI">
-          <plot table_name="T0_ALMG%SI%SI" xaxis="w(CU)" yaxis="T" />
+          <plot table_name="T0_ALMG%SI%SI" xaxis="w(MG)" yaxis="T" />
         </graph>
       </graphs>
     </output>

@@ -1,0 +1,72 @@
+<pbfx>
+  <calculation name="T0_TIFE7.5CU" type="section" duration="8.5" original_batch_name="" id="3">
+    <databases>
+      <database type="tdb" file_name="Ti-Fe-Cu_Bo2013.tdb" />
+    </databases>
+    <units>
+      <unit name="P" value="bar" />
+      <unit name="T" value="K" />
+      <unit name="n" value="w%" />
+    </units>
+    <system name="Default_System">
+      <components>
+        <component name="TI" status="Selected" />
+        <component name="FE" status="Selected" />
+        <component name="CU" status="Selected" />
+      </components>
+      <phases>
+        <phase name="*" status="Entered" />
+      </phases>
+      <points>
+        <point>
+          <statespace>
+            <T value="2000" />
+            <P value="1" />
+            <n component="TI" value="92.5" />
+            <n component="FE" value="0" />
+            <n component="CU" value="7.5" />
+          </statespace>
+        </point>
+        <point>
+          <statespace>
+            <T value="300" />
+            <P value="1" />
+            <n component="TI" value="92.5" />
+            <n component="FE" value="0" />
+            <n component="CU" value="7.5" />
+          </statespace>
+        </point>
+        <point>
+          <statespace>
+            <T value="300" />
+            <P value="1" />
+            <n component="TI" value=" " />
+            <n component="FE" value="50" />
+            <n component="CU" value="7.5" />
+          </statespace>
+        </point>
+      </points>
+      <condition>
+        <equilibrium_type type="global" />
+        <contour name="Contour_T0" property="T0" step="0.1">
+          <constraint name="phase_name=LIQUID+BCC_A2" />
+        </contour>
+      </condition>
+    </system>
+    <output unit="">
+      <tables>
+        <table name="T0_TIFE7.5CU" source="Contour_T0" type="Contour">
+          <column name="T" />
+          <column name="phase_name" />
+          <column name="w(*)" />
+          <column name="x(*)" />
+        </table>
+      </tables>
+      <graphs>
+        <graph name="T0_TIFE7.5CU">
+          <plot table_name="T0_TIFE7.5CU" xaxis="w(FE)" yaxis="T" />
+        </graph>
+      </graphs>
+    </output>
+  </calculation>
+</pbfx>

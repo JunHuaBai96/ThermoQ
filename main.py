@@ -58,7 +58,8 @@ def _pbfx_ordered_element_placeholders(content):
 
 def _pbfx_default_output_name_pattern(stem_no_ext, ordered_elements):
     """
-    Build default output basename (no .pbfx): e.g. T0-AlCuLi + %LI% only -> T0-AlCu%LI%li.
+    Build default output basename (no .pbfx): e.g. T0-AlCuLi + %LI% only -> T0-AlCu%LI%Li.
+    Suffix after %EL% uses canonical element symbols (Si, Li, …), not all-lowercase.
     For several placeholders, if the stem ends with the first element in template order, use that
     sweep-style pattern (balance the others via row removal or checkbox).
     """
@@ -67,11 +68,11 @@ def _pbfx_default_output_name_pattern(stem_no_ext, ordered_elements):
     if len(ordered_elements) == 1:
         sym = ordered_elements[0]
         if len(stem_no_ext) >= len(sym) and stem_no_ext.lower().endswith(sym.lower()):
-            return stem_no_ext[: -len(sym)] + '%' + sym.upper() + '%' + sym.lower()
+            return stem_no_ext[: -len(sym)] + '%' + sym.upper() + '%' + sym
         return stem_no_ext + '_%' + sym.upper() + '%'
     fe = ordered_elements[0]
     if len(stem_no_ext) >= len(fe) and stem_no_ext.lower().endswith(fe.lower()):
-        return stem_no_ext[: -len(fe)] + '%' + fe.upper() + '%' + fe.lower()
+        return stem_no_ext[: -len(fe)] + '%' + fe.upper() + '%' + fe
     return stem_no_ext + '_' + '_'.join('%' + e.upper() + '%' for e in ordered_elements)
 
 
@@ -616,6 +617,8 @@ class ThermoQGUI:
                     'Z uses column: T0 (K). Choose X/Y from w(...) columns.'
                 ),
                 'tzero_input_excel': 'Input Excel',
+                'tzero_tab_tc': 'Thermo-calc',
+                'tzero_tab_pandat': 'Pandat',
                 'tzero_settings': 'Settings',
                 'tzero_fd_excel': 'Select T-zero Excel',
                 'tzero_ready': 'Ready to plot',
@@ -659,6 +662,8 @@ class ThermoQGUI:
                 'extp_win_title': 'Extract Pandat Results',
                 'extp_heading': 'Extract Pandat Results',
                 'extp_intro': 'Extract data from CSV/DAT files to generate P.xlsx, Ts.xlsx, P-S.xlsx, and Ts-S.xlsx',
+                'extp_tab_extract': 'P/Ts (Lever/Scheil)',
+                'extp_tab_t0': 'T-zero',
                 'extp_lever_folder': 'Lever/Equilibrium Folder (All table_Lever)',
                 'extp_scheil_folder': 'Scheil Folder (All table_Scheil)',
                 'extp_output_dir': 'Output Directory',
@@ -666,6 +671,14 @@ class ThermoQGUI:
                 'extp_ready': 'Ready to extract',
                 'extp_extract_btn': 'Extract Results',
                 'extp_import_btn': 'Import to ThermoQ',
+                'extp_t0_folder': 'T-zero Folder (All table_T0)',
+                'extp_fd_t0_folder': 'Select All table_T0 folder',
+                'extp_t0_output_xlsx': 'Output Excel File (T0)',
+                'extp_t0_extract_btn': 'Extract T0',
+                'extp_t0_need_folder': 'Please select a valid T-zero folder!',
+                'extp_t0_no_files': 'No CSV or DAT files found in T-zero folder!',
+                'extp_t0_need_tcol': "Skipped {file}: missing 'T' column.",
+                'extp_t0_saved': 'T0.xlsx saved: {n} rows',
                 'extp_import_status': 'Importing to ThermoQ...',
                 'extp_import_missing': 'Generated Excel files not found in {dir}. Please run Extract Results first.',
                 'extp_fd_lever': 'Select Lever folder',
@@ -1181,6 +1194,8 @@ class ThermoQGUI:
                     'Z 使用列 T0 (K)。X/Y 从 w(...) 列选择。'
                 ),
                 'tzero_input_excel': '输入 Excel',
+                'tzero_tab_tc': 'Thermo-calc',
+                'tzero_tab_pandat': 'Pandat',
                 'tzero_settings': '设置',
                 'tzero_fd_excel': '选择 T-zero Excel',
                 'tzero_ready': '就绪，可绘图',
@@ -1224,6 +1239,8 @@ class ThermoQGUI:
                 'extp_win_title': '提取 Pandat 结果',
                 'extp_heading': '提取 Pandat 结果',
                 'extp_intro': '从 CSV/DAT 提取并生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx',
+                'extp_tab_extract': 'P/Ts（Lever/Scheil）',
+                'extp_tab_t0': 'T-zero',
                 'extp_lever_folder': 'Lever/平衡 文件夹（All table_Lever）',
                 'extp_scheil_folder': 'Scheil 文件夹（All table_Scheil）',
                 'extp_output_dir': '输出目录',
@@ -1231,6 +1248,14 @@ class ThermoQGUI:
                 'extp_ready': '就绪，可提取',
                 'extp_extract_btn': '提取结果',
                 'extp_import_btn': '导入到 ThermoQ',
+                'extp_t0_folder': 'T-zero 文件夹（All table_T0）',
+                'extp_fd_t0_folder': '选择 All table_T0 文件夹',
+                'extp_t0_output_xlsx': '输出 Excel（T0）',
+                'extp_t0_extract_btn': '提取 T0',
+                'extp_t0_need_folder': '请选择有效的 T-zero 文件夹！',
+                'extp_t0_no_files': 'T-zero 文件夹中未找到 CSV 或 DAT 文件！',
+                'extp_t0_need_tcol': '跳过 {file}：缺少 T 列。',
+                'extp_t0_saved': '已保存 T0.xlsx：{n} 行',
                 'extp_import_status': '正在导入到 ThermoQ…',
                 'extp_import_missing': '在 {dir} 中未找到生成的 Excel 文件。请先运行“提取结果”。',
                 'extp_fd_lever': '选择 Lever 文件夹',
@@ -6232,10 +6257,20 @@ class ThermoQGUI:
         )
         info_label.pack(pady=(0, 10))
 
-        file_frame = ttk.LabelFrame(main_frame, text=self.tr('tzero_input_excel', 'Input Excel'), padding="10")
-        file_frame.pack(fill=tk.X, pady=8)
-        file_var = tk.StringVar()
-        ttk.Entry(file_frame, textvariable=file_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        file_group = ttk.LabelFrame(main_frame, text=self.tr('tzero_input_excel', 'Input Excel'), padding="10")
+        file_group.pack(fill=tk.X, pady=8)
+
+        file_notebook = ttk.Notebook(file_group)
+        file_notebook.pack(fill=tk.X, expand=True)
+        tab_tc = ttk.Frame(file_notebook, padding="0")
+        tab_pd = ttk.Frame(file_notebook, padding="0")
+        file_notebook.add(tab_tc, text=self.tr('tzero_tab_tc', 'Thermo-calc'))
+        file_notebook.add(tab_pd, text=self.tr('tzero_tab_pandat', 'Pandat'))
+
+        file_var_tc = tk.StringVar()
+        file_var_pd = tk.StringVar()
+        ttk.Entry(tab_tc, textvariable=file_var_tc, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(tab_pd, textvariable=file_var_pd, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
         state = {"df": None, "elements": []}
 
@@ -6251,7 +6286,7 @@ class ThermoQGUI:
             if len(elems) > 1 and not elem_y_var.get():
                 elem_y_var.set(elems[1])
 
-        def browse_excel():
+        def browse_excel(target_var):
             p = filedialog.askopenfilename(
                 title=self.tr('tzero_fd_excel', 'Select T-zero Excel'),
                 filetypes=[
@@ -6261,7 +6296,7 @@ class ThermoQGUI:
             )
             if not p:
                 return
-            file_var.set(p)
+            target_var.set(p)
             try:
                 df = pd.read_excel(p)
             except Exception as e:
@@ -6284,8 +6319,10 @@ class ThermoQGUI:
                 foreground="green",
             )
 
-        btn_tz_file = ttk.Button(file_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_excel)
-        btn_tz_file.pack(side=tk.RIGHT, padx=5)
+        btn_tz_file_tc = ttk.Button(tab_tc, text=self.tr('pandat_browse', 'Browse'), command=lambda: browse_excel(file_var_tc))
+        btn_tz_file_tc.pack(side=tk.RIGHT, padx=5)
+        btn_tz_file_pd = ttk.Button(tab_pd, text=self.tr('pandat_browse', 'Browse'), command=lambda: browse_excel(file_var_pd))
+        btn_tz_file_pd.pack(side=tk.RIGHT, padx=5)
 
         controls = ttk.LabelFrame(main_frame, text=self.tr('tzero_settings', 'Settings'), padding="10")
         controls.pack(fill=tk.X, pady=10)
@@ -6699,8 +6736,14 @@ class ThermoQGUI:
             plot_window.title(self.tr('tzero_win_title', 'Plot T-zero Surface'))
             title_label.config(text=self.tr('tzero_heading', 'T-zero Surface Plotter'))
             info_label.config(text=self.tr('tzero_intro', ''))
-            file_frame.config(text=self.tr('tzero_input_excel', 'Input Excel'))
-            btn_tz_file.config(text=self.tr('pandat_browse', 'Browse'))
+            file_group.config(text=self.tr('tzero_input_excel', 'Input Excel'))
+            try:
+                file_notebook.tab(0, text=self.tr('tzero_tab_tc', 'Thermo-calc'))
+                file_notebook.tab(1, text=self.tr('tzero_tab_pandat', 'Pandat'))
+            except Exception:
+                pass
+            btn_tz_file_tc.config(text=self.tr('pandat_browse', 'Browse'))
+            btn_tz_file_pd.config(text=self.tr('pandat_browse', 'Browse'))
             controls.config(text=self.tr('tzero_settings', 'Settings'))
             lbl_tz_x.config(text=self.tr('stp_x_element', 'X Element:'))
             lbl_tz_y.config(text=self.tr('stp_y_element', 'Y Element:'))
@@ -8001,9 +8044,20 @@ class ThermoQGUI:
             text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'),
             variable=remainder_var,
         )
-        cb_remainder.pack(side=tk.LEFT, anchor='w')
-        remainder_hint = ttk.Label(remainder_fr, text='', wraplength=840, justify='left')
-        remainder_hint.pack(fill=tk.X, padx=(24, 0), pady=(4, 0))
+        cb_remainder.pack(anchor='w')
+        remainder_hint = ttk.Label(remainder_fr, text='', justify='left', wraplength=560)
+        remainder_hint.pack(fill=tk.X, expand=True, anchor='w', pady=(6, 0))
+
+        def _on_remainder_fr_configure(event):
+            if event.widget is not remainder_fr:
+                return
+            if event.width > 48:
+                try:
+                    remainder_hint.configure(wraplength=max(200, event.width - 20))
+                except tk.TclError:
+                    pass
+
+        remainder_fr.bind('<Configure>', _on_remainder_fr_configure)
 
         def _sync_remainder_ui():
             els = generator_state.get('allowed_elements') or []
@@ -9245,9 +9299,17 @@ class ThermoQGUI:
             justify='center',
         )
         info_label.pack(pady=(0, 20))
+
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        tab_extract = ttk.Frame(notebook, padding="0")
+        tab_t0 = ttk.Frame(notebook, padding="0")
+        notebook.add(tab_extract, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
+        notebook.add(tab_t0, text=self.tr('extp_tab_t0', 'T-zero'))
         
         # Lever folder selection
-        lever_frame = ttk.LabelFrame(main_frame, text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'), padding="15")
+        lever_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'), padding="15")
         lever_frame.pack(fill=tk.X, pady=10)
         
         lever_folder_var = tk.StringVar()
@@ -9262,7 +9324,7 @@ class ThermoQGUI:
         btn_extp_lever.pack(side=tk.RIGHT, padx=5)
         
         # Scheil folder selection
-        scheil_frame = ttk.LabelFrame(main_frame, text=self.tr('extp_scheil_folder', 'Scheil Folder'), padding="15")
+        scheil_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_scheil_folder', 'Scheil Folder'), padding="15")
         scheil_frame.pack(fill=tk.X, pady=10)
         
         scheil_folder_var = tk.StringVar()
@@ -9277,7 +9339,7 @@ class ThermoQGUI:
         btn_extp_scheil.pack(side=tk.RIGHT, padx=5)
         
         # Output directory
-        output_frame = ttk.LabelFrame(main_frame, text=self.tr('extp_output_dir', 'Output Directory'), padding="15")
+        output_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_output_dir', 'Output Directory'), padding="15")
         output_frame.pack(fill=tk.X, pady=10)
         
         output_dir_var = tk.StringVar()
@@ -9292,7 +9354,7 @@ class ThermoQGUI:
         btn_extp_out.pack(side=tk.RIGHT, padx=5)
         
         # Status area
-        status_frame = ttk.LabelFrame(main_frame, text=self.tr('extp_status', 'Status'), padding="8")
+        status_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_status', 'Status'), padding="8")
         status_frame.pack(fill=tk.X, pady=10)
         status_label = ttk.Label(status_frame, text=self.tr('extp_ready', 'Ready to extract'), foreground="blue", wraplength=620)
         status_label.pack(anchor="w")
@@ -9735,6 +9797,175 @@ class ThermoQGUI:
                 import traceback
                 traceback.print_exc()
 
+        # -----------------------------
+        # Tab: T-zero (Pandat)
+        # -----------------------------
+        t0_folder_frame = ttk.LabelFrame(tab_t0, text=self.tr('extp_t0_folder', 'T-zero Folder (All table_T0)'), padding="15")
+        t0_folder_frame.pack(fill=tk.X, pady=10)
+
+        t0_folder_var = tk.StringVar()
+        ttk.Entry(t0_folder_frame, textvariable=t0_folder_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        def browse_extp_t0():
+            p = filedialog.askdirectory(title=self.tr('extp_fd_t0_folder', 'Select All table_T0 folder'))
+            if p:
+                t0_folder_var.set(p)
+
+        btn_extp_t0 = ttk.Button(t0_folder_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_extp_t0)
+        btn_extp_t0.pack(side=tk.RIGHT, padx=5)
+
+        t0_out_frame = ttk.LabelFrame(tab_t0, text=self.tr('extp_t0_output_xlsx', 'Output Excel File (T0)'), padding="15")
+        t0_out_frame.pack(fill=tk.X, pady=10)
+
+        t0_out_var = tk.StringVar(value="T0.xlsx")
+        ttk.Entry(t0_out_frame, textvariable=t0_out_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        def browse_extp_t0_out():
+            p = filedialog.asksaveasfilename(
+                title=self.tr('tbatch_fd_save_out', 'Save Output File'),
+                defaultextension=".xlsx",
+                filetypes=[
+                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
+                    (self.tr('filetype_all', 'All files'), "*.*"),
+                ],
+            )
+            if p:
+                t0_out_var.set(p)
+
+        btn_extp_t0_out = ttk.Button(t0_out_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_extp_t0_out)
+        btn_extp_t0_out.pack(side=tk.RIGHT, padx=5)
+
+        t0_status_frame = ttk.LabelFrame(tab_t0, text=self.tr('extp_status', 'Status'), padding="8")
+        t0_status_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        t0_status_text = tk.Text(t0_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
+        t0_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        t0_status_scroll = ttk.Scrollbar(t0_status_frame, orient=tk.VERTICAL, command=t0_status_text.yview)
+        t0_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        t0_status_text.configure(yscrollcommand=t0_status_scroll.set)
+
+        def t0_log(msg):
+            try:
+                t0_status_text.config(state=tk.NORMAL)
+                t0_status_text.insert(tk.END, str(msg) + "\n")
+                t0_status_text.see(tk.END)
+                t0_status_text.config(state=tk.DISABLED)
+                extractor_window.update()
+            except Exception:
+                pass
+
+        def _t0_parse_filename_param(file_name):
+            base = os.path.splitext(os.path.basename(file_name))[0]
+            m = re.findall(r"(\d+(?:\.\d+)?)([A-Za-z]{1,2})", base)
+            if not m:
+                return None, None
+            v, el = m[-1]
+            el = el.title()
+            if el not in PERIODIC_TABLE:
+                return None, None
+            try:
+                return el, float(v)
+            except Exception:
+                return None, None
+
+        def extract_t0_results():
+            try:
+                folder = t0_folder_var.get().strip()
+                out_xlsx = t0_out_var.get().strip()
+                if not folder or not os.path.isdir(folder):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_t0_need_folder', 'Please select a valid T-zero folder!'))
+                    return
+                if not out_xlsx:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_need_out', 'Please specify an output file!'))
+                    return
+
+                files = sorted([f for f in os.listdir(folder) if f.lower().endswith(('.csv', '.dat'))])
+                if not files:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_t0_no_files', 'No CSV or DAT files found in T-zero folder!'))
+                    return
+
+                t0_status_text.config(state=tk.NORMAL)
+                t0_status_text.delete("1.0", tk.END)
+                t0_status_text.config(state=tk.DISABLED)
+
+                rows = []
+                skipped = 0
+                for fn in files:
+                    path = os.path.join(folder, fn)
+                    try:
+                        df = pd.read_csv(path, sep='\t', header=0, skiprows=[1])
+                    except Exception as e:
+                        t0_log(f"Skip {fn}: read failed: {e}")
+                        skipped += 1
+                        continue
+                    t_col = _find_col(df, ['T', 't', 'Temperature'])
+                    if t_col is None:
+                        t0_log(self.tr('extp_t0_need_tcol', "Skipped {file}: missing 'T' column.").format(file=fn))
+                        skipped += 1
+                        continue
+
+                    # Normalize w(*) columns to canonical element symbol casing (e.g. w(LI) -> w(Li))
+                    out_cols = {}
+                    for c in df.columns:
+                        if not isinstance(c, str):
+                            continue
+                        m = re.match(r'^\s*w\(\s*([A-Za-z]{1,3})\s*\)\s*$', c, re.IGNORECASE)
+                        if not m:
+                            continue
+                        el = m.group(1).strip().title()
+                        key = f"w({el})"
+                        s = pd.to_numeric(df[c], errors='coerce')
+                        if key not in out_cols:
+                            out_cols[key] = s
+                        else:
+                            # Coalesce duplicates (case variants) into one column
+                            out_cols[key] = out_cols[key].where(out_cols[key].notna(), s)
+
+                    out = pd.DataFrame(out_cols)
+                    out.insert(0, "File", pd.Series([fn] * len(df)))
+
+                    pel, pval = _t0_parse_filename_param(fn)
+                    if pel and pval is not None:
+                        colp = f"w({pel})"
+                        # Avoid creating duplicate case variants; keep canonical casing
+                        existing = {str(c).strip().upper(): c for c in out.columns if isinstance(c, str)}
+                        if colp.strip().upper() not in existing:
+                            out[colp] = float(pval)
+
+                    out["T0 (K)"] = pd.to_numeric(df[t_col], errors='coerce')
+                    out = out.dropna(subset=["T0 (K)"])
+                    if not out.empty:
+                        rows.append(out)
+
+                if not rows:
+                    messagebox.showwarning(self.tr('dlg_warning', 'Warning'), self.tr('exp_t0_no_data', 'No valid data extracted from files!'))
+                    return
+                out_df = pd.concat(rows, ignore_index=True)
+                w_cols = sorted([c for c in out_df.columns if isinstance(c, str) and c.lower().startswith('w(')])
+                out_df = out_df[["File"] + w_cols + ["T0 (K)"]]
+
+                try:
+                    out_df.to_excel(out_xlsx, index=False)
+                except PermissionError:
+                    messagebox.showerror(
+                        self.tr('dlg_permission', 'Permission Denied'),
+                        self.tr(
+                            'extp_permission',
+                            'Cannot write {path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.',
+                        ).format(path=out_xlsx),
+                    )
+                    return
+
+                t0_log(f"Saved: {out_xlsx}")
+                t0_log(f"Rows: {len(out_df)}, Files: {len(files)}, Skipped: {skipped}")
+                messagebox.showinfo(self.tr('dlg_success', 'Success'), self.tr('extp_t0_saved', 'T0.xlsx saved: {n} rows').format(n=len(out_df)))
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+
+        t0_btns = ttk.Frame(tab_t0)
+        t0_btns.pack(pady=10)
+        btn_extp_t0_proc = ttk.Button(t0_btns, text=self.tr('extp_t0_extract_btn', 'Extract T0'), command=extract_t0_results)
+        btn_extp_t0_proc.pack(side=tk.LEFT, padx=10)
+
         def import_to_thermoq():
             """Extract results (if needed) then directly import generated Excel files into ThermoQ."""
             try:
@@ -9774,7 +10005,7 @@ class ThermoQGUI:
                     ),
                 )
         
-        # Buttons in bottom bar (always visible) - after extract_results is defined
+        # Buttons in bottom bar: only show on P/Ts tab
         btn_inner = ttk.Frame(bottom_bar)
         btn_inner.pack(expand=True)
 
@@ -9789,6 +10020,29 @@ class ThermoQGUI:
         btn_extp_close = ttk.Button(btn_inner, text=self.tr('extp_close', 'Close'), command=_close_extp)
         btn_extp_close.pack(side=tk.LEFT, padx=10)
 
+        # T-zero tab gets its own Close button; hide bottom bar buttons there.
+        btn_extp_t0_close = ttk.Button(t0_btns, text=self.tr('extp_close', 'Close'), command=_close_extp)
+        btn_extp_t0_close.pack(side=tk.LEFT, padx=10)
+
+        def _sync_extp_bottom_bar():
+            try:
+                cur = notebook.select()
+                on_extract = (cur == str(tab_extract))
+            except Exception:
+                on_extract = True
+            try:
+                if on_extract:
+                    if not btn_inner.winfo_ismapped():
+                        btn_inner.pack(expand=True)
+                else:
+                    if btn_inner.winfo_ismapped():
+                        btn_inner.pack_forget()
+            except Exception:
+                pass
+
+        def _on_extp_tab_changed(_evt=None):
+            _sync_extp_bottom_bar()
+
         def _refresh_extp_lang():
             try:
                 if not extractor_window.winfo_exists():
@@ -9798,6 +10052,11 @@ class ThermoQGUI:
             extractor_window.title(self.tr('extp_win_title', 'Extract Pandat Results'))
             title_label.config(text=self.tr('extp_heading', 'Extract Pandat Results'))
             info_label.config(text=self.tr('extp_intro', ''))
+            try:
+                notebook.tab(0, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
+                notebook.tab(1, text=self.tr('extp_tab_t0', 'T-zero'))
+            except Exception:
+                pass
             lever_frame.config(text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'))
             btn_extp_lever.config(text=self.tr('pandat_browse', 'Browse'))
             scheil_frame.config(text=self.tr('extp_scheil_folder', 'Scheil Folder'))
@@ -9808,13 +10067,25 @@ class ThermoQGUI:
             btn_extp_run.config(text=self.tr('extp_extract_btn', 'Extract Results'))
             btn_extp_import.config(text=self.tr('extp_import_btn', 'Import to ThermoQ'))
             btn_extp_close.config(text=self.tr('extp_close', 'Close'))
+            try:
+                t0_folder_frame.config(text=self.tr('extp_t0_folder', 'T-zero Folder (All table_T0)'))
+                btn_extp_t0.config(text=self.tr('pandat_browse', 'Browse'))
+                t0_out_frame.config(text=self.tr('extp_t0_output_xlsx', 'Output Excel File (T0)'))
+                btn_extp_t0_out.config(text=self.tr('pandat_browse', 'Browse'))
+                t0_status_frame.config(text=self.tr('extp_status', 'Status'))
+                btn_extp_t0_proc.config(text=self.tr('extp_t0_extract_btn', 'Extract T0'))
+                btn_extp_t0_close.config(text=self.tr('extp_close', 'Close'))
+            except Exception:
+                pass
             cur = status_label.cget('text')
             if 'Ready' in cur or '就绪' in cur:
                 status_label.config(text=self.tr('extp_ready', 'Ready to extract'))
 
         extractor_window.protocol('WM_DELETE_WINDOW', _close_extp)
+        notebook.bind('<<NotebookTabChanged>>', _on_extp_tab_changed)
         self._register_tool_lang_refresh(_refresh_extp_lang)
         _refresh_extp_lang()
+        _sync_extp_bottom_bar()
 
     def open_partition_vector_plotter(self):
         """Open solid-liquid partition coefficient vector plotter tool"""
