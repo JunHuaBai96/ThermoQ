@@ -2,6 +2,8 @@
 
 ThermoQ是一个用于热力学计算的应用程序，提供了直观的元素成分输入和计算功能。
 
+<img width="1024" height="1024" alt="logo" src="https://github.com/user-attachments/assets/6486eb41-5c75-4f08-9e41-05c480f2e39b" />
+
 ## 功能特点
 
 ### 核心功能
