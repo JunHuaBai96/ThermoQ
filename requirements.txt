@@ -2,8 +2,8 @@ Pillow>=9.0.0       # For image processing
 pandas>=2.0.0       # Data processing
 openpyxl>=3.1.0     # Read/write .xlsx
 xlrd==1.2.0         # Read .xls (xlrd>=2.0 dropped .xls support)
-numpy>=1.20.0       # Numerical computing
+numpy>=1.21.0       # Numerical computing
 matplotlib>=3.5.0   # Optional: For plotting (2D/3D plots, GIFs)
 plotly>=5.0.0       # Optional: For interactive 3D plots
 scikit-learn>=1.0.0 # Optional: For Gaussian Process smoothing
-scipy>=1.7.0        # Optional: For interpolation/smoothing fallback
+scipy>=1.8.0        # Optional: For interpolation/smoothing fallback

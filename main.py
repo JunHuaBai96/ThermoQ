@@ -13,6 +13,44 @@ import platform
 from decimal import Decimal
 from periodic_table import PERIODIC_TABLE
 
+# Longest symbol first (e.g. match "Cl" before "C") when tokenizing concatenated element runs.
+_PBFX_ELEM_SYMS_BY_LEN = sorted(PERIODIC_TABLE.keys(), key=lambda s: (-len(s), s))
+
+
+def _pbfx_canonicalize_element_run(run):
+    """
+    Parse a concatenation of element symbols (any case) into canonical PERIODIC_TABLE casing.
+    Returns None if the whole string cannot be split into valid symbols.
+    """
+    if not run:
+        return ''
+    lo = run.lower()
+    i = 0
+    parts = []
+    while i < len(lo):
+        matched = None
+        for sym in _PBFX_ELEM_SYMS_BY_LEN:
+            if lo.startswith(sym.lower(), i):
+                matched = sym
+                break
+        if matched is None:
+            return None
+        parts.append(matched)
+        i += len(matched)
+    return ''.join(parts)
+
+
+def _pbfx_canonicalize_trailing_element_run(stem):
+    """If stem ends with a letter run that fully tokenizes as elements, rewrite that run with canonical casing."""
+    m = re.search(r'([A-Za-z]+)$', stem)
+    if not m:
+        return stem
+    run = m.group(1)
+    canon = _pbfx_canonicalize_element_run(run)
+    if canon is None:
+        return stem
+    return stem[: m.start(1)] + canon
+
 
 def _step_to_output_decimals(step):
     """Decimal places needed so batch file values reflect the chosen step (e.g. 0.005 -> 3)."""
@@ -60,20 +98,57 @@ def _pbfx_default_output_name_pattern(stem_no_ext, ordered_elements):
     """
     Build default output basename (no .pbfx): e.g. T0-AlCuLi + %LI% only -> T0-AlCu%LI%Li.
     Suffix after %EL% uses canonical element symbols (Si, Li, …), not all-lowercase.
+    Alloy prefixes (e.g. Gibbs_ALMGSI, Gibbs_ALCULI) are rewritten to Gibbs_AlMg%SI%Si / Gibbs_AlCu%LI%Li
+    using template element order and periodic-table tokenization.
     For several placeholders, if the stem ends with the first element in template order, use that
     sweep-style pattern (balance the others via row removal or checkbox).
     """
     if not ordered_elements:
         return stem_no_ext
-    if len(ordered_elements) == 1:
-        sym = ordered_elements[0]
+    o = ordered_elements
+    
+    # 1) Stem ends with concatenation of all elements in template order (variable-length symbols).
+    rest = stem_no_ext
+    for el in reversed(o):
+        if len(rest) < len(el) or rest[-len(el):].lower() != el.lower():
+            break
+        rest = rest[:-len(el)]
+    else:
+        prefix = rest
+        if len(o) == 1:
+            sym = o[0]
+            return prefix + '%' + sym.upper() + '%' + sym
+        return prefix + ''.join(o[:-1]) + '%' + o[-1].upper() + '%' + o[-1]
+
+    # 2) Trailing letter run equals the concatenation of all element symbols (e.g. ALCULI vs AlCuLi).
+    m = re.search(r'([A-Za-z]+)$', stem_no_ext)
+    if m:
+        run = m.group(1)
+        cat = ''.join(o)
+        if run.lower() == cat.lower():
+            prefix = stem_no_ext[: m.start(1)]
+            if len(o) == 1:
+                sym = o[0]
+                return prefix + '%' + sym.upper() + '%' + sym
+            return prefix + ''.join(o[:-1]) + '%' + o[-1].upper() + '%' + o[-1]
+
+    # 3) Legacy: stem ends with first element in list (sweep that element).
+    fe = o[0]
+    if len(o) > 1 and len(stem_no_ext) >= len(fe) and stem_no_ext.lower().endswith(fe.lower()):
+        prefix = _pbfx_canonicalize_trailing_element_run(stem_no_ext[: -len(fe)])
+        return prefix + '%' + fe.upper() + '%' + fe
+
+    # 4) Single element: strip trailing symbol; normalize remaining alloy prefix casing.
+    if len(o) == 1:
+        sym = o[0]
         if len(stem_no_ext) >= len(sym) and stem_no_ext.lower().endswith(sym.lower()):
-            return stem_no_ext[: -len(sym)] + '%' + sym.upper() + '%' + sym
+            prefix = _pbfx_canonicalize_trailing_element_run(stem_no_ext[: -len(sym)])
+            return prefix + '%' + sym.upper() + '%' + sym
         return stem_no_ext + '_%' + sym.upper() + '%'
-    fe = ordered_elements[0]
-    if len(stem_no_ext) >= len(fe) and stem_no_ext.lower().endswith(fe.lower()):
-        return stem_no_ext[: -len(fe)] + '%' + fe.upper() + '%' + fe
-    return stem_no_ext + '_' + '_'.join('%' + e.upper() + '%' for e in ordered_elements)
+
+    # 5) Fallback: normalize any trailing element run, then list placeholders.
+    stem_norm = _pbfx_canonicalize_trailing_element_run(stem_no_ext)
+    return stem_norm + '_' + '_'.join('%' + e.upper() + '%' for e in o)
 
 
 def _pbfx_parse_composition_unit_base(content):
@@ -105,6 +180,212 @@ def _pbfx_parse_composition_unit_base(content):
     if key in ('x',):
         return 1.0, raw
     return 100.0, raw
+
+
+def _pbfx_parse_temperature_unit_token(content):
+    """
+    Read <unit name="T" value="K/C/F"/> from .pbfx content.
+    Returns raw token (e.g. 'K') or None if not found.
+    """
+    m = re.search(
+        r'<unit\s+[^>]*name\s*=\s*["\']T["\'][^>]*value\s*=\s*["\']([^"\']*)["\']',
+        content,
+        re.I,
+    )
+    if not m:
+        m = re.search(
+            r'<unit\s+[^>]*value\s*=\s*["\']([^"\']*)["\'][^>]*name\s*=\s*["\']T["\']',
+            content,
+            re.I,
+        )
+    if not m:
+        return None
+    raw = (m.group(1) or '').strip()
+    return raw or None
+
+
+def _extp_trist_find_col_df(df, names):
+    if df is None or not hasattr(df, 'columns'):
+        return None
+    cols_upper = {str(c).strip().upper(): c for c in df.columns if isinstance(c, str)}
+    for n in names:
+        nu = str(n).strip().upper()
+        if nu in cols_upper:
+            return cols_upper[nu]
+    return None
+
+
+def _extp_trist_pandat_g_columns(df):
+    """
+    Find liquid and solid molar Gibbs energy columns in Pandat All table_Gibbs exports
+    (e.g. G(@LIQUID:FCC_A1[*]) and G(@FCC_A1:FCC_A1[*])).
+    """
+    gcols = [c for c in df.columns if isinstance(c, str) and c.strip().startswith('G(')]
+    g_liq, g_sol = None, None
+    for c in gcols:
+        if re.search(r'LIQUID', c, re.I):
+            g_liq = c
+    for c in gcols:
+        if c == g_liq:
+            continue
+        u = c.upper()
+        if 'FCC' in u or 'BCC' in u or 'HCP' in u:
+            g_sol = c
+            break
+    if g_sol is None and gcols:
+        for c in gcols:
+            if c != g_liq:
+                g_sol = c
+                break
+    return g_liq, g_sol
+
+
+def _extp_trist_w_columns(df):
+    out = []
+    for c in df.columns:
+        if not isinstance(c, str):
+            continue
+        m = re.match(r'^\s*w\(\s*([A-Za-z]+)\s*\)\s*$', c, re.IGNORECASE)
+        if m:
+            el = m.group(1).title()
+            out.append((c, f"w({el})"))
+    return out
+
+
+def _extp_trist_merge_solid_liquid(
+    df,
+    phase_col,
+    t_col,
+    g_liq,
+    g_sol,
+    w_map,
+    path_label,
+    file_name,
+):
+    """
+    Pair LIQUID and solid (FCC/BCC) rows at the same (T, w*) and return rows with
+    G_solid, G_liquid, dG = G_solid - G_liquid.
+    w_map: list of (orig_col, canonical_name) for w(*) columns.
+    """
+    wcols = [a for a, _ in w_map]
+    ren = {a: b for a, b in w_map}
+    p = df[phase_col].astype(str)
+    p_up = p.str.upper()
+    m_sol = p_up.str.contains('FCC', na=False) | p_up.str.contains('BCC', na=False) | p_up.str.contains('HCP', na=False)
+    m_liq = p_up.str.contains('LIQUID', na=False)
+    if m_sol.sum() < 1 or m_liq.sum() < 1:
+        m_liq = p_up.str.contains('LIQUID', na=False)
+        m_sol = ~m_liq
+    tname = 'T (K)'
+    ds = df.loc[m_sol, [t_col, phase_col, g_sol] + wcols].copy()
+    dl = df.loc[m_liq, [t_col, g_liq] + wcols].copy()
+    ds = ds.rename(columns=ren)
+    ds = ds.rename(columns={t_col: tname, g_sol: 'G_solid (J/mol)'})
+    ds['phase (solid)'] = ds[phase_col].astype(str)
+    ds = ds.drop(columns=[phase_col], errors='ignore')
+    dl = dl.rename(columns=ren)
+    dl = dl.rename(columns={t_col: tname, g_liq: 'G_liquid (J/mol)'})
+    key = [tname] + [b for _, b in w_map]
+    for d in (ds, dl):
+        for c in key:
+            d[c] = pd.to_numeric(d[c], errors='coerce')
+    for c in key[1:]:
+        ds[c] = ds[c].round(10)
+        dl[c] = dl[c].round(10)
+    ds['G_solid (J/mol)'] = pd.to_numeric(ds['G_solid (J/mol)'], errors='coerce')
+    dl['G_liquid (J/mol)'] = pd.to_numeric(dl['G_liquid (J/mol)'], errors='coerce')
+    m = pd.merge(ds, dl, on=key, how='inner')
+    if m.empty:
+        return None, 'no_inner_join'
+    m['dG = G_solid - G_liquid (J/mol)'] = m['G_solid (J/mol)'] - m['G_liquid (J/mol)']
+    m.insert(0, 'File', file_name)
+    m.insert(1, 'Path', path_label)
+    m['phase (liquid)'] = 'LIQUID'
+    m['in_TriST dG le 0'] = (m['dG = G_solid - G_liquid (J/mol)'] <= 0).astype(int)
+    return m, None
+
+
+def _extp_trist_interp_t0_1d(merged, wcols_canon):
+    """
+    Along the composition coordinate with the largest w-range, find (w*) where dG crosses zero
+    by linear interpolation; all w components are interpolated along the same segment.
+    """
+    if merged is None or len(merged) < 2:
+        return None
+    dgcol = 'dG = G_solid - G_liquid (J/mol)'
+    if dgcol not in merged.columns:
+        return None
+    sub = merged.copy()
+    sub[dgcol] = pd.to_numeric(sub[dgcol], errors='coerce')
+    sub = sub.dropna(subset=[dgcol])
+    if len(sub) < 2:
+        return None
+    ranges = {}
+    for c in wcols_canon:
+        if c in sub.columns:
+            x = pd.to_numeric(sub[c], errors='coerce')
+            if x.notna().any():
+                ranges[c] = float(x.max() - x.min())
+    if not ranges:
+        return None
+    scan = max(ranges, key=ranges.get)
+    sub = sub.sort_values(scan)
+    dg = sub[dgcol].to_numpy(dtype=np.float64)
+    out = {'T (K)': float(pd.to_numeric(sub['T (K)'], errors='coerce').iloc[0])}
+    out['T0 scan axis (max w range)'] = scan
+    for i in range(len(dg) - 1):
+        if abs(dg[i]) < 1e-9:
+            for c in wcols_canon:
+                if c in sub.columns:
+                    out[c] = float(sub[c].to_numpy()[i])
+            out['dG (J/mol)'] = 0.0
+            out['interp'] = 'on_grid'
+            return out
+        if dg[i] * dg[i + 1] < 0:
+            tfrac = -dg[i] / (dg[i + 1] - dg[i])
+            for c in wcols_canon:
+                if c not in sub.columns:
+                    continue
+                wc = sub[c].to_numpy(dtype=np.float64)
+                out[c] = float(wc[i] + tfrac * (wc[i + 1] - wc[i]))
+            out['dG (J/mol)'] = 0.0
+            out['interp'] = 'linear'
+            return out
+    if np.isfinite(dg).all() and len(dg) > 0 and np.nanmin(np.abs(dg)) < 0.1:
+        j = int(np.nanargmin(np.abs(dg)))
+        for c in wcols_canon:
+            if c in sub.columns:
+                out[c] = float(sub[c].to_numpy()[j])
+        out['dG (J/mol)'] = float(dg[j])
+        out['interp'] = 'near_zero'
+        return out
+    return None
+
+
+def _ternary_to_xy(a, b, c):
+    """Map ternary (a,b,c) to 2D coordinates; a+b+c may be 1 or 100."""
+    s = a + b + c
+    if not np.isfinite(s) or abs(s) < 1e-12:
+        return np.nan, np.nan
+    x = 0.5 * (2.0 * b + c) / s
+    y = (np.sqrt(3.0) / 2.0) * c / s
+    return x, y
+
+
+def _extp_trist_pick_ternary_wcols(df):
+    """Pick up to 3 w(*) columns (prefer those with largest variance)."""
+    if df is None or not hasattr(df, 'columns'):
+        return []
+    wcols = [c for c in df.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+    if len(wcols) <= 3:
+        return wcols
+    vars_ = []
+    for c in wcols:
+        x = pd.to_numeric(df[c], errors='coerce')
+        vars_.append((float(x.var(skipna=True)) if x.notna().any() else 0.0, c))
+    vars_.sort(reverse=True)
+    return [c for _, c in vars_[:3]]
+
 
 # Optional imports for plotting
 try:
@@ -686,6 +967,44 @@ class ThermoQGUI:
                 'extp_fd_output': 'Select output directory',
                 'extp_processing': 'Processing files...',
                 'extp_close': 'Close',
+                'extp_tab_trist': 'TriST Zone',
+                'extp_trist_intro': (
+                    'Ternary complete solute trapping (TriST): from Pandat Gibbs All table files, pair LIQUID and '
+                    'solid (FCC/BCC) molar Gibbs energies at the same overall composition and temperature. '
+                    'T0 (same composition): G_solid = G_liquid (dG = 0 along the scan). '
+                    'Thermodynamic driving force for partitionless solidification at fixed (T, C) is approximated here '
+                    'as dG = G_solid − G_liquid (J/mol); the TriST sheet lists points with dG ≤ 0 (solid lower than liquid). '
+                    'Outputs: merged data, T0 points (1D crossing along the principal w sweep), and TriST zone points.'
+                ),
+                'extp_trist_folder': 'Gibbs folder (All table_Gibbs)',
+                'extp_fd_trist_folder': 'Select All table_Gibbs folder',
+                'extp_trist_out': 'Output Excel (TriST)',
+                'extp_trist_btn': 'Build TriST workbook',
+                'extp_trist_need_folder': 'Please select a valid Gibbs (All table_Gibbs) folder!',
+                'extp_trist_no_files': 'No CSV or DAT files found in the Gibbs folder!',
+                'extp_trist_no_data': (
+                    'No merged rows. Ensure each file has phase_name, T, w(*), and paired G columns for solid (FCC/BCC) '
+                    'and LIQUID, with matching (T, w*) on both phases.'
+                ),
+                'extp_trist_progress': 'Processing {i} / {n}…',
+                'extp_trist_viz': 'Visualize TriST',
+                'extp_trist_viz_src': 'TriST workbook (.xlsx)',
+                'extp_trist_viz_sheet': 'Data sheet',
+                'extp_trist_viz_cols': 'Ternary axes (w columns)',
+                'extp_trist_viz_a': 'A:',
+                'extp_trist_viz_b': 'B:',
+                'extp_trist_viz_c': 'C:',
+                'extp_trist_viz_filter': 'Filter',
+                'extp_trist_viz_only_trist': 'Only dG ≤ 0',
+                'extp_trist_viz_tmin': 'T min:',
+                'extp_trist_viz_tmax': 'T max:',
+                'extp_trist_viz_html': 'Output HTML',
+                'extp_trist_viz_btn': 'Open interactive plot',
+                'extp_trist_viz_need_plotly': 'Plotly is not installed. Install plotly to view interactive plots.',
+                'extp_trist_viz_no_data': 'No data to plot. Run “Build TriST workbook” first, or choose a workbook with Merged_Gibbs.',
+                'extp_trist_saved': 'TriST workbook saved.\n\n{path}\n\nSheets: {sheets}\nMerged rows: {n}',
+                'extp_trist_skip': 'Skipped {file}: {reason}',
+                'extp_trist_done_log': 'Done. Files processed: {ok}, skipped: {skip}.',
                 'tbatch_fd_tpl0': 'Select Template0 File',
                 'tbatch_fd_tpl': 'Select Template File',
                 'tbatch_fd_tpl1': 'Select Template1 File',
@@ -700,6 +1019,8 @@ class ThermoQGUI:
                     'One .pbfx per valid combination. Filename pattern may include placeholders (e.g. T0-AlCu%LI%li).'
                 ),
                 'pbatch_tpl': 'Template (.pbfx)',
+                'pbatch_tab_t0': 'T-zero',
+                'pbatch_tab_gibbs': 'Gibbs',
                 'pbatch_output_dir': 'Output folder',
                 'pbatch_name_pattern': 'Output filename pattern',
                 'pbatch_name_pattern_hint': 'No extension needed; .pbfx is added automatically.',
@@ -722,6 +1043,16 @@ class ThermoQGUI:
                 'pbatch_unit_line_x': 'Composition unit: x (mole fraction). Balance = 1 − Σ(swept values).',
                 'pbatch_unit_line_unknown': 'Composition unit: "{raw}" (unrecognised); using balance total 100.',
                 'pbatch_unit_no_tag': 'No <unit name="n" …/> found; using balance total 100 (mass %).',
+                'pbatch_temp_line_k': 'Temperature unit: K (Kelvin).',
+                'pbatch_temp_line_c': 'Temperature unit: C (Celsius).',
+                'pbatch_temp_line_f': 'Temperature unit: F (Fahrenheit).',
+                'pbatch_temp_line_unknown': 'Temperature unit: "{raw}" (unrecognised); treating as K for filenames.',
+                'pbatch_temp_no_tag': 'No <unit name="T" …/> found; treating as K for filenames.',
+                'pbatch_need_temp_ph': 'Template needs %T% placeholder for Gibbs tab.',
+                'pbatch_temp_range': 'Temperature range',
+                'pbatch_temp_min': 'T min:',
+                'pbatch_temp_max': 'T max:',
+                'pbatch_temp_step': 'T step:',
                 'pbatch_remove_need_one': 'Keep at least one element row with Min/Max/Step.',
                 'pbatch_remove_too_many': 'Too many rows removed. Leave at most one template element without a row (that one becomes the balance).',
                 'pbatch_need_full_or_balance': 'Either add rows for all placeholders (full grid) or remove exactly one row for balance mode.',
@@ -1263,6 +1594,40 @@ class ThermoQGUI:
                 'extp_fd_output': '选择输出目录',
                 'extp_processing': '正在处理文件…',
                 'extp_close': '关闭',
+                'extp_tab_trist': 'TriST 区域',
+                'extp_trist_intro': (
+                    '三元完全溶质截留（TriST）：从 Pandat Gibbs 全表 CSV/DAT 中，在相同整体成分与温度下配对 LIQUID 与 '
+                    '固相（FCC/BCC 等）的摩尔 Gibbs 能。T0（同成分）：G_固 = G_液（沿成分扫描 dG = 0）。'
+                    '在固定 (T, C) 下，无扩散凝固的热力学驱动力在此近似为 dG = G_固 − G_液（J/mol）；'
+                    'TriST 工作表列出 dG ≤ 0 的网格点（固相低于液相）。'
+                    '输出：合并数据、T0 点（沿主扫描方向的一维穿零）与 TriST 区域点。'
+                ),
+                'extp_trist_folder': 'Gibbs 文件夹（All table_Gibbs）',
+                'extp_fd_trist_folder': '选择 All table_Gibbs 文件夹',
+                'extp_trist_out': '输出 Excel（TriST）',
+                'extp_trist_btn': '生成 TriST 工作簿',
+                'extp_trist_need_folder': '请选择有效的 Gibbs（All table_Gibbs）文件夹！',
+                'extp_trist_no_files': 'Gibbs 文件夹中未找到 CSV 或 DAT 文件！',
+                'extp_trist_no_data': '未得到合并行。请确认每份文件含 phase_name、T、w(*)，以及固相与 LIQUID 的 G 列，且两相在相同 (T, w*) 上成对出现。',
+                'extp_trist_progress': '处理中 {i} / {n}…',
+                'extp_trist_viz': 'TriST 可视化',
+                'extp_trist_viz_src': 'TriST 工作簿（.xlsx）',
+                'extp_trist_viz_sheet': '数据工作表',
+                'extp_trist_viz_cols': '三元坐标轴（w 列）',
+                'extp_trist_viz_a': 'A：',
+                'extp_trist_viz_b': 'B：',
+                'extp_trist_viz_c': 'C：',
+                'extp_trist_viz_filter': '筛选',
+                'extp_trist_viz_only_trist': '仅 dG ≤ 0',
+                'extp_trist_viz_tmin': 'T 最小：',
+                'extp_trist_viz_tmax': 'T 最大：',
+                'extp_trist_viz_html': '输出 HTML',
+                'extp_trist_viz_btn': '打开交互图',
+                'extp_trist_viz_need_plotly': '未安装 Plotly。请安装 plotly 以查看交互图。',
+                'extp_trist_viz_no_data': '没有可绘制数据。请先“生成 TriST 工作簿”，或选择包含 Merged_Gibbs 的工作簿。',
+                'extp_trist_saved': '已保存 TriST 工作簿。\n\n{path}\n\n工作表：{sheets}\n合并行数：{n}',
+                'extp_trist_skip': '跳过 {file}：{reason}',
+                'extp_trist_done_log': '完成。已处理文件：{ok}，跳过：{skip}。',
                 'tbatch_fd_tpl0': '选择 Template0 文件',
                 'tbatch_fd_tpl': '选择 Template 文件',
                 'tbatch_fd_tpl1': '选择 Template1 文件',
@@ -1277,6 +1642,8 @@ class ThermoQGUI:
                     '每个有效组合输出一个 .pbfx；文件名模式可含占位符（如 T0-AlCu%%LI%%li）。'
                 ),
                 'pbatch_tpl': '模板（.pbfx）',
+                'pbatch_tab_t0': 'T-zero',
+                'pbatch_tab_gibbs': 'Gibbs',
                 'pbatch_output_dir': '输出文件夹',
                 'pbatch_name_pattern': '输出文件名模式',
                 'pbatch_name_pattern_hint': '无需写扩展名；将自动添加 .pbfx。',
@@ -1299,6 +1666,16 @@ class ThermoQGUI:
                 'pbatch_unit_line_x': '成分单位：x（摩尔/原子分数）。平衡量 = 1 − Σ（扫描元素）。',
                 'pbatch_unit_line_unknown': '成分单位：「{raw}」（未识别）；按平衡总量 100 处理。',
                 'pbatch_unit_no_tag': '未找到 <unit name="n" …/>，按质量百分数处理（平衡总量 100）。',
+                'pbatch_temp_line_k': '温度单位：K（开尔文）。',
+                'pbatch_temp_line_c': '温度单位：C（摄氏度）。',
+                'pbatch_temp_line_f': '温度单位：F（华氏度）。',
+                'pbatch_temp_line_unknown': '温度单位：「{raw}」（未识别）；文件名按 K 处理。',
+                'pbatch_temp_no_tag': '未找到 <unit name="T" …/>；文件名按 K 处理。',
+                'pbatch_need_temp_ph': 'Gibbs 页模板需要包含 %T% 占位符。',
+                'pbatch_temp_range': '温度范围',
+                'pbatch_temp_min': 'T 最小：',
+                'pbatch_temp_max': 'T 最大：',
+                'pbatch_temp_step': 'T 步长：',
                 'pbatch_remove_need_one': '请至少保留一行元素及其最小/最大/步长。',
                 'pbatch_remove_too_many': '删除行过多。最多只能缺少一个模板占位元素（该元素作为平衡项）。',
                 'pbatch_need_full_or_balance': '请要么为所有占位符保留行（完整网格），要么恰好删去一行进入平衡模式。',
@@ -7983,6 +8360,13 @@ class ThermoQGUI:
         )
         info_label.pack(pady=(0, 16))
 
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        tab_t0 = ttk.Frame(notebook, padding="0")
+        tab_gibbs = ttk.Frame(notebook, padding="0")
+        notebook.add(tab_t0, text=self.tr('pbatch_tab_t0', 'T-zero'))
+        notebook.add(tab_gibbs, text=self.tr('pbatch_tab_gibbs', 'Gibbs'))
+
         def on_pbfx_scrollable_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
             if event.width > 100:
@@ -8003,7 +8387,7 @@ class ThermoQGUI:
             'n_unit_raw': None,
         }
 
-        template_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_tpl', 'Template (.pbfx)'), padding="10")
+        template_frame = ttk.LabelFrame(tab_t0, text=self.tr('pbatch_tpl', 'Template (.pbfx)'), padding="10")
         template_frame.pack(fill=tk.X, pady=5)
 
         template_var = tk.StringVar()
@@ -8014,7 +8398,7 @@ class ThermoQGUI:
         tpl_unit_label = ttk.Label(template_frame, text='', wraplength=820, justify='left')
         tpl_unit_label.pack(fill=tk.X, padx=5, pady=(4, 2))
 
-        elements_frame = ttk.LabelFrame(main_frame, text=self.tr('tbatch_elem_cfg', 'Element Configuration'), padding="10")
+        elements_frame = ttk.LabelFrame(tab_t0, text=self.tr('tbatch_elem_cfg', 'Element Configuration'), padding="10")
         elements_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
         elements_list_frame = ttk.Frame(elements_frame)
@@ -8102,7 +8486,7 @@ class ThermoQGUI:
         name_pattern_var = tk.StringVar()
         out_dir_var = tk.StringVar()
 
-        out_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_output_dir', 'Output folder'), padding="10")
+        out_frame = ttk.LabelFrame(tab_t0, text=self.tr('pbatch_output_dir', 'Output folder'), padding="10")
         out_frame.pack(fill=tk.X, pady=10)
         ttk.Entry(out_frame, textvariable=out_dir_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
@@ -8114,7 +8498,7 @@ class ThermoQGUI:
         btn_out = ttk.Button(out_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_out_dir)
         btn_out.pack(side=tk.RIGHT, padx=5)
 
-        pattern_frame = ttk.LabelFrame(main_frame, text=self.tr('pbatch_name_pattern', 'Output filename pattern'), padding="10")
+        pattern_frame = ttk.LabelFrame(tab_t0, text=self.tr('pbatch_name_pattern', 'Output filename pattern'), padding="10")
         pattern_frame.pack(fill=tk.X, pady=5)
         ttk.Entry(pattern_frame, textvariable=name_pattern_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         hint_label = ttk.Label(
@@ -8124,7 +8508,7 @@ class ThermoQGUI:
         )
         hint_label.pack(fill=tk.X, padx=6, pady=(6, 0))
 
-        status_label = ttk.Label(main_frame, text=self.tr('pbatch_ready', 'Ready to generate'), foreground="blue")
+        status_label = ttk.Label(tab_t0, text=self.tr('pbatch_ready', 'Ready to generate'), foreground="blue")
         status_label.pack(pady=10)
 
         def _refresh_tpl_unit_label():
@@ -8550,7 +8934,7 @@ class ThermoQGUI:
                     self.tr('pbatch_gen_fail', 'Failed to generate Pandat batch files:\n{e}').format(e=str(e)),
                 )
 
-        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame = ttk.Frame(tab_t0)
         buttons_frame.pack(pady=20)
 
         def _close_pbatch():
@@ -8564,6 +8948,475 @@ class ThermoQGUI:
         btn_close = ttk.Button(buttons_frame, text=self.tr('ui_close', 'Close'), command=_close_pbatch)
         btn_close.pack(side=tk.LEFT, padx=10)
 
+        # -----------------------------
+        # Gibbs tab: sweep %T% + elements
+        # -----------------------------
+        gibbs_state = {
+            'allowed_elements': None,
+            'template_text': '',
+            'balance_base': None,
+            'n_unit_raw': None,
+            't_unit_raw': None,
+            'has_temp_ph': False,
+        }
+
+        gibbs_template_frame = ttk.LabelFrame(tab_gibbs, text=self.tr('pbatch_tpl', 'Template (.pbfx)'), padding="10")
+        gibbs_template_frame.pack(fill=tk.X, pady=5)
+        gibbs_template_var = tk.StringVar()
+        g_tpl_top = ttk.Frame(gibbs_template_frame)
+        g_tpl_top.pack(fill=tk.X)
+        ttk.Entry(g_tpl_top, textvariable=gibbs_template_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        gibbs_unit_label = ttk.Label(gibbs_template_frame, text='', wraplength=820, justify='left')
+        gibbs_unit_label.pack(fill=tk.X, padx=5, pady=(4, 2))
+
+        gibbs_elements_frame = ttk.LabelFrame(tab_gibbs, text=self.tr('tbatch_elem_cfg', 'Element Configuration'), padding="10")
+        gibbs_elements_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        g_list = ttk.Frame(gibbs_elements_frame)
+        g_list.pack(fill=tk.BOTH, expand=True, pady=5)
+        g_tree = ttk.Treeview(g_list, columns=("Element", "Min", "Max", "Step"), show="headings", height=6)
+        g_tree.heading("Element", text=self.tr('tbatch_tbl_element', 'Element'))
+        g_tree.heading("Min", text=self.tr('tbatch_tbl_min', 'Min'))
+        g_tree.heading("Max", text=self.tr('tbatch_tbl_max', 'Max'))
+        g_tree.heading("Step", text=self.tr('tbatch_tbl_step', 'Step'))
+        g_tree.column("Element", width=120, minwidth=70, stretch=True)
+        g_tree.column("Min", width=100, minwidth=60, stretch=True)
+        g_tree.column("Max", width=100, minwidth=60, stretch=True)
+        g_tree.column("Step", width=100, minwidth=60, stretch=True)
+        g_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        g_scroll = ttk.Scrollbar(g_list, orient=tk.VERTICAL, command=g_tree.yview)
+        g_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        g_tree.configure(yscrollcommand=g_scroll.set)
+
+        g_remainder_var = tk.BooleanVar(value=False)
+        g_rem_fr = ttk.Frame(gibbs_elements_frame)
+        g_rem_fr.pack(fill=tk.X, pady=(2, 6))
+        g_cb_remainder = ttk.Checkbutton(
+            g_rem_fr,
+            text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'),
+            variable=g_remainder_var,
+        )
+        g_cb_remainder.pack(anchor='w')
+        g_rem_hint = ttk.Label(g_rem_fr, text='', justify='left', wraplength=560)
+        g_rem_hint.pack(fill=tk.X, expand=True, anchor='w', pady=(6, 0))
+
+        def _g_on_rem_fr(event):
+            if event.widget is not g_rem_fr:
+                return
+            if event.width > 48:
+                try:
+                    g_rem_hint.configure(wraplength=max(200, event.width - 20))
+                except tk.TclError:
+                    pass
+
+        g_rem_fr.bind('<Configure>', _g_on_rem_fr)
+
+        def _g_sync_rem():
+            els = gibbs_state.get('allowed_elements') or []
+            if len(els) >= 2:
+                g_cb_remainder.config(state='normal')
+            else:
+                g_remainder_var.set(False)
+                g_cb_remainder.config(state='disabled')
+            if g_remainder_var.get() and len(els) >= 2:
+                g_rem_hint.config(text=self.tr('pbatch_remainder_hint', ''))
+            else:
+                g_rem_hint.config(text='')
+
+        g_cb_remainder.config(command=_g_sync_rem)
+
+        # Temperature range inputs
+        temp_frame = ttk.LabelFrame(gibbs_elements_frame, text=self.tr('pbatch_temp_range', 'Temperature range'), padding="10")
+        temp_frame.pack(fill=tk.X, pady=(4, 8))
+        g_tmin = tk.StringVar(value="500")
+        g_tmax = tk.StringVar(value="600")
+        g_tstep = tk.StringVar(value="100")
+        rowt = ttk.Frame(temp_frame)
+        rowt.pack(fill=tk.X)
+        lbl_tmin = ttk.Label(rowt, text=self.tr('pbatch_temp_min', 'T min:'))
+        lbl_tmin.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(rowt, textvariable=g_tmin, width=10).pack(side=tk.LEFT, padx=5)
+        lbl_tmax = ttk.Label(rowt, text=self.tr('pbatch_temp_max', 'T max:'))
+        lbl_tmax.pack(side=tk.LEFT, padx=10)
+        ttk.Entry(rowt, textvariable=g_tmax, width=10).pack(side=tk.LEFT, padx=5)
+        lbl_tstep = ttk.Label(rowt, text=self.tr('pbatch_temp_step', 'T step:'))
+        lbl_tstep.pack(side=tk.LEFT, padx=10)
+        ttk.Entry(rowt, textvariable=g_tstep, width=10).pack(side=tk.LEFT, padx=5)
+
+        # Add/remove element controls
+        g_add_fr = ttk.Frame(gibbs_elements_frame)
+        g_add_fr.pack(pady=5)
+        g_lbl_el = ttk.Label(g_add_fr, text=self.tr('tbatch_lbl_element', 'Element:'))
+        g_lbl_el.pack(side=tk.LEFT, padx=5)
+        g_el_var = tk.StringVar()
+        g_el_combo = ttk.Combobox(g_add_fr, textvariable=g_el_var, values=sorted(PERIODIC_TABLE.keys()), width=10)
+        g_el_combo.pack(side=tk.LEFT, padx=5)
+        g_lbl_min = ttk.Label(g_add_fr, text=self.tr('tbatch_lbl_min', 'Min:'))
+        g_lbl_min.pack(side=tk.LEFT, padx=5)
+        g_min = tk.StringVar(value="0.0")
+        ttk.Entry(g_add_fr, textvariable=g_min, width=10).pack(side=tk.LEFT, padx=5)
+        g_lbl_max = ttk.Label(g_add_fr, text=self.tr('tbatch_lbl_max', 'Max:'))
+        g_lbl_max.pack(side=tk.LEFT, padx=5)
+        g_max = tk.StringVar(value="10.0")
+        ttk.Entry(g_add_fr, textvariable=g_max, width=10).pack(side=tk.LEFT, padx=5)
+        g_lbl_step = ttk.Label(g_add_fr, text=self.tr('tbatch_lbl_step', 'Step:'))
+        g_lbl_step.pack(side=tk.LEFT, padx=5)
+        g_step = tk.StringVar(value="1.0")
+        ttk.Entry(g_add_fr, textvariable=g_step, width=10).pack(side=tk.LEFT, padx=5)
+
+        def _g_add_cfg():
+            el = g_el_var.get().strip()
+            try:
+                mn, mx, st = float(g_min.get()), float(g_max.get()), float(g_step.get())
+            except Exception:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('gen_invalid_nums', 'Please enter valid numbers for Min, Max, and Step!'))
+                return
+            if el not in PERIODIC_TABLE:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('gen_invalid_el', 'Invalid element: {el}').format(el=el))
+                return
+            allowed = gibbs_state.get('allowed_elements')
+            if allowed is not None and el not in allowed:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('gen_el_not_in_tpl', 'Element {el} is not in the template!\nAllowed: {allowed}').format(el=el, allowed=', '.join(allowed)),
+                )
+                return
+            if mn > mx or st <= 0:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_invalid_range', 'Invalid range: require Min ≤ Max and Step > 0.'))
+                return
+            existing = None
+            for iid in g_tree.get_children():
+                if g_tree.item(iid)['values'][0] == el:
+                    existing = iid
+                    break
+            if existing:
+                g_tree.item(existing, values=(el, mn, mx, st))
+            else:
+                g_tree.insert("", "end", values=(el, mn, mx, st))
+
+        def _g_remove_cfg():
+            if not g_tree.selection():
+                return
+            item = g_tree.selection()[0]
+            allowed = gibbs_state.get('allowed_elements')
+            if allowed is not None:
+                others = []
+                for iid in g_tree.get_children():
+                    if iid != item:
+                        others.append(g_tree.item(iid)['values'][0])
+                if len(others) < 1:
+                    messagebox.showwarning(self.tr('dlg_warning', 'Warning'), self.tr('pbatch_remove_need_one', ''), parent=generator_window)
+                    return
+                missing_after = set(allowed) - set(others)
+                if len(missing_after) > 1:
+                    messagebox.showwarning(self.tr('dlg_warning', 'Warning'), self.tr('pbatch_remove_too_many', ''), parent=generator_window)
+                    return
+            g_tree.delete(item)
+
+        g_btn_add = ttk.Button(g_add_fr, text=self.tr('tbatch_add', 'Add Element'), command=_g_add_cfg)
+        g_btn_add.pack(side=tk.LEFT, padx=10)
+        g_btn_rm = ttk.Button(g_add_fr, text=self.tr('tbatch_remove', 'Remove Selected'), command=_g_remove_cfg)
+        g_btn_rm.pack(side=tk.LEFT, padx=5)
+
+        g_name_pattern = tk.StringVar()
+        g_out_dir = tk.StringVar()
+        g_out_frame = ttk.LabelFrame(tab_gibbs, text=self.tr('pbatch_output_dir', 'Output folder'), padding="10")
+        g_out_frame.pack(fill=tk.X, pady=10)
+        ttk.Entry(g_out_frame, textvariable=g_out_dir, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        def _g_browse_out():
+            p = filedialog.askdirectory(title=self.tr('pbatch_fd_out_dir', 'Select output folder'))
+            if p:
+                g_out_dir.set(p)
+
+        g_btn_out = ttk.Button(g_out_frame, text=self.tr('pandat_browse', 'Browse'), command=_g_browse_out)
+        g_btn_out.pack(side=tk.RIGHT, padx=5)
+
+        g_pat_frame = ttk.LabelFrame(tab_gibbs, text=self.tr('pbatch_name_pattern', 'Output filename pattern'), padding="10")
+        g_pat_frame.pack(fill=tk.X, pady=5)
+        ttk.Entry(g_pat_frame, textvariable=g_name_pattern, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        g_hint = ttk.Label(g_pat_frame, text=self.tr('pbatch_name_pattern_hint', ''), wraplength=780)
+        g_hint.pack(fill=tk.X, padx=6, pady=(6, 0))
+
+        g_status = ttk.Label(tab_gibbs, text=self.tr('pbatch_ready', 'Ready to generate'), foreground="blue")
+        g_status.pack(pady=10)
+
+        def _g_refresh_unit_label():
+            if not gibbs_state.get('allowed_elements'):
+                gibbs_unit_label.config(text='')
+                return
+            parts = []
+            raw_n = gibbs_state.get('n_unit_raw')
+            key_n = (raw_n or '').strip().lower()
+            if key_n == 'w%':
+                parts.append(self.tr('pbatch_unit_line_w_pct', ''))
+            elif key_n == 'x%':
+                parts.append(self.tr('pbatch_unit_line_x_pct', ''))
+            elif key_n == 'w':
+                parts.append(self.tr('pbatch_unit_line_w', ''))
+            elif key_n == 'x':
+                parts.append(self.tr('pbatch_unit_line_x', ''))
+            elif raw_n:
+                parts.append(self.tr('pbatch_unit_line_unknown', '').format(raw=raw_n))
+            else:
+                parts.append(self.tr('pbatch_unit_no_tag', ''))
+
+            raw_t = gibbs_state.get('t_unit_raw')
+            key_t = (raw_t or '').strip().upper()
+            if key_t == 'K':
+                parts.append(self.tr('pbatch_temp_line_k', ''))
+            elif key_t == 'C':
+                parts.append(self.tr('pbatch_temp_line_c', ''))
+            elif key_t == 'F':
+                parts.append(self.tr('pbatch_temp_line_f', ''))
+            elif raw_t:
+                parts.append(self.tr('pbatch_temp_line_unknown', '').format(raw=raw_t))
+            else:
+                parts.append(self.tr('pbatch_temp_no_tag', ''))
+
+            gibbs_unit_label.config(text="  ".join([p for p in parts if p]))
+
+        def _g_parse_template(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                found = _pbfx_ordered_element_placeholders(content)
+                has_t = bool(re.search(r'%\s*T\s*%', content, flags=re.IGNORECASE))
+                gibbs_state['has_temp_ph'] = has_t
+                gibbs_state['allowed_elements'] = found
+                gibbs_state['template_text'] = content
+                bb_u, raw_u = _pbfx_parse_composition_unit_base(content)
+                gibbs_state['balance_base'] = float(bb_u)
+                gibbs_state['n_unit_raw'] = raw_u
+                gibbs_state['t_unit_raw'] = _pbfx_parse_temperature_unit_token(content)
+                _g_refresh_unit_label()
+
+                for item in g_tree.get_children():
+                    g_tree.delete(item)
+                for el in found:
+                    g_tree.insert("", "end", values=(el, 0.0, 10.0, 1.0))
+                g_el_combo.config(values=found or sorted(PERIODIC_TABLE.keys()))
+                if found:
+                    g_el_var.set(found[0])
+                _g_sync_rem()
+
+                stem = os.path.splitext(os.path.basename(path))[0]
+                base = _pbfx_default_output_name_pattern(stem, found)
+                t_unit = (gibbs_state.get('t_unit_raw') or 'K').strip().upper() or 'K'
+                if has_t:
+                    base = f"{base}_%T%{t_unit}"
+                g_name_pattern.set(base)
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('gen_tpl_parse_fail', 'Failed to parse template: {e}').format(e=str(e)))
+
+        def _g_browse_tpl():
+            p = filedialog.askopenfilename(title=self.tr('pbatch_fd_tpl', 'Select Pandat .pbfx template'), filetypes=_pb_ft())
+            if p:
+                gibbs_template_var.set(p)
+                _g_parse_template(p)
+
+        g_btn_tpl = ttk.Button(g_tpl_top, text=self.tr('pandat_browse', 'Browse'), command=_g_browse_tpl)
+        g_btn_tpl.pack(side=tk.RIGHT, padx=5)
+
+        def _format_val(v, decimals):
+            s = f"{float(v):.{decimals}f}"
+            if '.' in s:
+                s = s.rstrip('0').rstrip('.')
+            return s
+
+        def _apply_repl(text, upper_to_val):
+            def _repl(m):
+                u = m.group(1).upper()
+                return upper_to_val.get(u, m.group(0))
+            return re.sub(r'%([A-Za-z]+)%', _repl, text)
+
+        def _g_generate():
+            try:
+                tpl_path = gibbs_template_var.get().strip()
+                out_dir = g_out_dir.get().strip()
+                if not tpl_path or not os.path.isfile(tpl_path):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_tpl', ''))
+                    return
+                if not out_dir or not os.path.isdir(out_dir):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_out', ''))
+                    return
+                content = gibbs_state.get('template_text') or ''
+                if not content:
+                    with open(tpl_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                if not gibbs_state.get('has_temp_ph'):
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_temp_ph', ''))
+                    return
+
+                try:
+                    tmin, tmax, tstep = float(g_tmin.get()), float(g_tmax.get()), float(g_tstep.get())
+                except Exception:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('gen_invalid_nums', 'Please enter valid numbers for Min, Max, and Step!'))
+                    return
+                if tstep <= 0 or tmin > tmax:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_invalid_range', 'Invalid range: require Min ≤ Max and Step > 0.'))
+                    return
+                t_vals = _composition_range_float64(tmin, tmax, tstep)
+                if len(t_vals) < 1:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_invalid_range', 'Invalid range: require Min ≤ Max and Step > 0.'))
+                    return
+
+                element_configs = []
+                for item in g_tree.get_children():
+                    vals = g_tree.item(item)['values']
+                    element_configs.append({'element': vals[0], 'min': float(vals[1]), 'max': float(vals[2]), 'step': float(vals[3])})
+                if not element_configs:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('gen_need_cfg', 'Please add at least one element configuration!'))
+                    return
+
+                allowed_list = list(gibbs_state.get('allowed_elements') or [])
+                by_el = {cfg['element']: cfg for cfg in element_configs}
+                present_ordered = [e for e in allowed_list if e in by_el]
+                missing_ordered = [e for e in allowed_list if e not in by_el]
+                if len(present_ordered) < 1:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_remove_need_one', ''))
+                    return
+                if len(missing_ordered) > 1:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_full_or_balance', ''))
+                    return
+
+                balance_base = float(gibbs_state.get('balance_base') or _pbfx_parse_composition_unit_base(content)[0])
+                want_balance_last = bool(g_remainder_var.get())
+                use_balance = False
+                balance_el = None
+                sweep_cfgs = []
+
+                if len(missing_ordered) == 1:
+                    use_balance = True
+                    balance_el = missing_ordered[0]
+                    sweep_cfgs = [by_el[e] for e in present_ordered]
+                elif len(missing_ordered) == 0 and want_balance_last:
+                    if len(allowed_list) < 2:
+                        messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_remainder_need_two', ''))
+                        return
+                    use_balance = True
+                    balance_el = allowed_list[-1]
+                    sweep_cfgs = [by_el[e] for e in allowed_list[:-1]]
+                else:
+                    if set(by_el.keys()) != set(allowed_list):
+                        messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_full_or_balance', ''))
+                        return
+                    sweep_cfgs = [by_el[e] for e in allowed_list]
+
+                for cfg in sweep_cfgs:
+                    if cfg['min'] > cfg['max'] or cfg['step'] <= 0:
+                        messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_invalid_range', ''))
+                        return
+
+                dec_comp = min(max(max(_step_to_output_decimals(cfg['step']) for cfg in sweep_cfgs), 0), 12)
+                dec_t = min(max(_step_to_output_decimals(tstep), 0), 12)
+
+                skipped_bal = 0
+                if use_balance:
+                    tol = max(1e-9 * balance_base, 1e-12)
+                    ranges = [_composition_range_float64(cfg['min'], cfg['max'], cfg['step']) for cfg in sweep_cfgs]
+                    mesh = np.meshgrid(*ranges)
+                    combos = np.stack([m.flatten() for m in mesh], axis=1)
+                    comp_rows = []
+                    for row in combos:
+                        s = float(np.sum(row))
+                        v_bal = balance_base - s
+                        if v_bal < -tol or v_bal > balance_base + tol:
+                            skipped_bal += 1
+                            continue
+                        comp_rows.append((row, v_bal))
+                    n_comp = len(comp_rows)
+                    if n_comp == 0:
+                        bd = int(balance_base) if abs(balance_base - round(balance_base)) < 1e-9 else balance_base
+                        messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_remainder_none_valid', '').format(base=bd))
+                        return
+                else:
+                    ranges = [_composition_range_float64(cfg['min'], cfg['max'], cfg['step']) for cfg in sweep_cfgs]
+                    mesh = np.meshgrid(*ranges)
+                    combos = np.stack([m.flatten() for m in mesh], axis=1)
+                    comp_rows = combos
+                    n_comp = len(comp_rows)
+                    if n_comp == 0:
+                        messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_invalid_range', ''))
+                        return
+
+                total = int(n_comp) * int(len(t_vals))
+                if total > 10000:
+                    if not messagebox.askyesno(
+                        self.tr('dlg_confirm_title', 'Confirm'),
+                        self.tr('pbatch_many_files', 'This will create {n} files. Continue?').format(n=total),
+                        parent=generator_window,
+                    ):
+                        return
+
+                pattern_raw = g_name_pattern.get().strip()
+                if not pattern_raw:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_need_pattern', ''))
+                    return
+
+                g_status.config(text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(i=0, n=total), foreground="orange")
+                generator_window.update()
+
+                def _write_one(idx1, upper_to_val):
+                    body = _apply_repl(content, upper_to_val)
+                    base_name = _apply_repl(pattern_raw, upper_to_val).strip()
+                    if base_name.lower().endswith('.pbfx'):
+                        base_stem = base_name[:-5]
+                    else:
+                        base_stem = base_name
+                    base_stem = self._batch_safe_fname_part(base_stem, max_len=120) or f"batch_{idx1}"
+                    out_path = os.path.join(out_dir, base_stem + '.pbfx')
+                    with open(out_path, 'w', encoding='utf-8') as fp:
+                        fp.write(body)
+
+                i_out = 0
+                if use_balance:
+                    for row, v_bal in comp_rows:
+                        comp_map = {}
+                        for i, cfg in enumerate(sweep_cfgs):
+                            comp_map[cfg['element']] = _format_val(row[i], dec_comp)
+                        comp_map[balance_el] = _format_val(v_bal, dec_comp)
+                        for tv in t_vals:
+                            i_out += 1
+                            m = dict(comp_map)
+                            m['T'] = _format_val(tv, dec_t)
+                            upper_to_val = {k.upper(): v for k, v in m.items()}
+                            _write_one(i_out, upper_to_val)
+                            if total <= 1 or i_out % max(1, total // 40) == 0 or i_out == total:
+                                g_status.config(text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(i=i_out, n=total), foreground="orange")
+                                generator_window.update()
+                else:
+                    # full grid (no balance)
+                    for combo in comp_rows:
+                        comp_map = {}
+                        for i, cfg in enumerate(sweep_cfgs):
+                            comp_map[cfg['element']] = _format_val(combo[i], dec_comp)
+                        for tv in t_vals:
+                            i_out += 1
+                            m = dict(comp_map)
+                            m['T'] = _format_val(tv, dec_t)
+                            upper_to_val = {k.upper(): v for k, v in m.items()}
+                            _write_one(i_out, upper_to_val)
+                            if total <= 1 or i_out % max(1, total // 40) == 0 or i_out == total:
+                                g_status.config(text=self.tr('pbatch_processing', 'Writing file {i}/{n}…').format(i=i_out, n=total), foreground="orange")
+                                generator_window.update()
+
+                bd = int(balance_base) if abs(balance_base - round(balance_base)) < 1e-9 else balance_base
+                ok_msg = self.tr('pbatch_gen_ok', '').format(n=total, dir=out_dir)
+                if use_balance and skipped_bal > 0:
+                    ok_msg += '\n\n' + self.tr('pbatch_remainder_skipped', '').format(k=skipped_bal, base=bd)
+                g_status.config(text=ok_msg[:240], foreground="green")
+                messagebox.showinfo(self.tr('dlg_success', 'Success'), ok_msg)
+            except Exception as e:
+                g_status.config(text=str(e), foreground="red")
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('pbatch_gen_fail', '').format(e=str(e)))
+
+        g_btns = ttk.Frame(tab_gibbs)
+        g_btns.pack(pady=20)
+        g_btn_gen = ttk.Button(g_btns, text=self.tr('pbatch_generate', 'Generate .pbfx files'), command=_g_generate)
+        g_btn_gen.pack(side=tk.LEFT, padx=10)
+        g_btn_close = ttk.Button(g_btns, text=self.tr('ui_close', 'Close'), command=lambda: _close_pbatch())
+        g_btn_close.pack(side=tk.LEFT, padx=10)
+
         def _refresh_pbatch_lang():
             try:
                 if not generator_window.winfo_exists():
@@ -8573,6 +9426,11 @@ class ThermoQGUI:
             generator_window.title(self.tr('tools_generate_pandat', 'Generate Pandat Batch File'))
             title_label.config(text=self.tr('pbatch_win_title', 'Pandat Batch File Generator'))
             info_label.config(text=self.tr('pbatch_subtitle', ''))
+            try:
+                notebook.tab(0, text=self.tr('pbatch_tab_t0', 'T-zero'))
+                notebook.tab(1, text=self.tr('pbatch_tab_gibbs', 'Gibbs'))
+            except Exception:
+                pass
             template_frame.config(text=self.tr('pbatch_tpl', 'Template (.pbfx)'))
             btn_tpl.config(text=self.tr('pandat_browse', 'Browse'))
             _refresh_tpl_unit_label()
@@ -8595,6 +9453,33 @@ class ThermoQGUI:
             btn_close.config(text=self.tr('ui_close', 'Close'))
             cb_remainder.config(text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'))
             _sync_remainder_ui()
+            # Gibbs tab
+            gibbs_template_frame.config(text=self.tr('pbatch_tpl', 'Template (.pbfx)'))
+            g_btn_tpl.config(text=self.tr('pandat_browse', 'Browse'))
+            _g_refresh_unit_label()
+            gibbs_elements_frame.config(text=self.tr('tbatch_elem_cfg', 'Element Configuration'))
+            g_tree.heading("Element", text=self.tr('tbatch_tbl_element', 'Element'))
+            g_tree.heading("Min", text=self.tr('tbatch_tbl_min', 'Min'))
+            g_tree.heading("Max", text=self.tr('tbatch_tbl_max', 'Max'))
+            g_tree.heading("Step", text=self.tr('tbatch_tbl_step', 'Step'))
+            g_cb_remainder.config(text=self.tr('pbatch_remainder_last', 'Balance last in list (total − Σ of others)'))
+            _g_sync_rem()
+            temp_frame.config(text=self.tr('pbatch_temp_range', 'Temperature range'))
+            lbl_tmin.config(text=self.tr('pbatch_temp_min', 'T min:'))
+            lbl_tmax.config(text=self.tr('pbatch_temp_max', 'T max:'))
+            lbl_tstep.config(text=self.tr('pbatch_temp_step', 'T step:'))
+            g_lbl_el.config(text=self.tr('tbatch_lbl_element', 'Element:'))
+            g_lbl_min.config(text=self.tr('tbatch_lbl_min', 'Min:'))
+            g_lbl_max.config(text=self.tr('tbatch_lbl_max', 'Max:'))
+            g_lbl_step.config(text=self.tr('tbatch_lbl_step', 'Step:'))
+            g_btn_add.config(text=self.tr('tbatch_add', 'Add Element'))
+            g_btn_rm.config(text=self.tr('tbatch_remove', 'Remove Selected'))
+            g_out_frame.config(text=self.tr('pbatch_output_dir', 'Output folder'))
+            g_btn_out.config(text=self.tr('pandat_browse', 'Browse'))
+            g_pat_frame.config(text=self.tr('pbatch_name_pattern', 'Output filename pattern'))
+            g_hint.config(text=self.tr('pbatch_name_pattern_hint', ''))
+            g_btn_gen.config(text=self.tr('pbatch_generate', 'Generate .pbfx files'))
+            g_btn_close.config(text=self.tr('ui_close', 'Close'))
             cur = status_label.cget('text')
             if 'Ready' in cur or '就绪' in cur:
                 status_label.config(text=self.tr('pbatch_ready', 'Ready to generate'))
@@ -9305,8 +10190,10 @@ class ThermoQGUI:
 
         tab_extract = ttk.Frame(notebook, padding="0")
         tab_t0 = ttk.Frame(notebook, padding="0")
+        tab_trist = ttk.Frame(notebook, padding="0")
         notebook.add(tab_extract, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
         notebook.add(tab_t0, text=self.tr('extp_tab_t0', 'T-zero'))
+        notebook.add(tab_trist, text=self.tr('extp_tab_trist', 'TriST Zone'))
         
         # Lever folder selection
         lever_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'), padding="15")
@@ -9966,6 +10853,469 @@ class ThermoQGUI:
         btn_extp_t0_proc = ttk.Button(t0_btns, text=self.tr('extp_t0_extract_btn', 'Extract T0'), command=extract_t0_results)
         btn_extp_t0_proc.pack(side=tk.LEFT, padx=10)
 
+        # -----------------------------
+        # Tab: TriST Zone (Gibbs)
+        # -----------------------------
+        trist_info = ttk.Label(
+            tab_trist,
+            text=self.tr('extp_trist_intro', ''),
+            wraplength=650,
+            justify='left',
+        )
+        trist_info.pack(anchor="w", pady=(0, 10))
+
+        trist_folder_frame = ttk.LabelFrame(
+            tab_trist, text=self.tr('extp_trist_folder', 'Gibbs folder (All table_Gibbs)'), padding="15"
+        )
+        trist_folder_frame.pack(fill=tk.X, pady=10)
+        trist_folder_var = tk.StringVar()
+        ttk.Entry(trist_folder_frame, textvariable=trist_folder_var, width=60).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True
+        )
+
+        def browse_extp_trist():
+            p = filedialog.askdirectory(
+                title=self.tr('extp_fd_trist_folder', 'Select All table_Gibbs folder')
+            )
+            if p:
+                trist_folder_var.set(p)
+
+        btn_extp_trist = ttk.Button(
+            trist_folder_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_extp_trist
+        )
+        btn_extp_trist.pack(side=tk.RIGHT, padx=5)
+
+        trist_out_frame = ttk.LabelFrame(
+            tab_trist, text=self.tr('extp_trist_out', 'Output Excel (TriST)'), padding="15"
+        )
+        trist_out_frame.pack(fill=tk.X, pady=10)
+        trist_out_var = tk.StringVar(value="TriST_pandat.xlsx")
+        ttk.Entry(trist_out_frame, textvariable=trist_out_var, width=60).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True
+        )
+
+        def browse_extp_trist_out():
+            p = filedialog.asksaveasfilename(
+                title=self.tr('tbatch_fd_save_out', 'Save output file'),
+                defaultextension=".xlsx",
+                filetypes=[
+                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
+                    (self.tr('filetype_all', 'All files'), "*.*"),
+                ],
+            )
+            if p:
+                trist_out_var.set(p)
+
+        btn_extp_trist_out = ttk.Button(
+            trist_out_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_extp_trist_out
+        )
+        btn_extp_trist_out.pack(side=tk.RIGHT, padx=5)
+
+        trist_status_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_status', 'Status'), padding="8")
+        trist_status_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        trist_status_text = tk.Text(trist_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
+        trist_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        trist_status_scroll = ttk.Scrollbar(trist_status_frame, orient=tk.VERTICAL, command=trist_status_text.yview)
+        trist_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        trist_status_text.configure(yscrollcommand=trist_status_scroll.set)
+
+        def trist_log(msg):
+            try:
+                trist_status_text.config(state=tk.NORMAL)
+                trist_status_text.insert(tk.END, str(msg) + "\n")
+                trist_status_text.see(tk.END)
+                trist_status_text.config(state=tk.DISABLED)
+                extractor_window.update()
+            except Exception:
+                pass
+
+        def run_trist_extract():
+            try:
+                folder = trist_folder_var.get().strip()
+                out_path = trist_out_var.get().strip()
+                if not folder or not os.path.isdir(folder):
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('extp_trist_need_folder', 'Please select a valid Gibbs (All table_Gibbs) folder!'),
+                    )
+                    return
+                if not out_path:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exp_need_out', 'Please specify an output file!'),
+                    )
+                    return
+                files = sorted([f for f in os.listdir(folder) if f.lower().endswith(('.csv', '.dat'))])
+                if not files:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('extp_trist_no_files', 'No CSV or DAT files found in the Gibbs folder!'),
+                    )
+                    return
+                trist_status_text.config(state=tk.NORMAL)
+                trist_status_text.delete("1.0", tk.END)
+                trist_status_text.config(state=tk.DISABLED)
+
+                merged_blocks = []
+                t0_list = []
+                n_ok, n_skip = 0, 0
+                for k, fn in enumerate(files, start=1):
+                    if k % 50 == 0 or k == 1:
+                        trist_log(
+                            self.tr('extp_trist_progress', 'Processing {i} / {n}…').format(
+                                i=k, n=len(files)
+                            )
+                        )
+                    path = os.path.join(folder, fn)
+                    try:
+                        df = pd.read_csv(path, sep='\t', header=0, skiprows=[1])
+                    except Exception as e:
+                        trist_log(self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(file=fn, reason=str(e)))
+                        n_skip += 1
+                        continue
+                    phase_col = _extp_trist_find_col_df(
+                        df, ['phase_name', 'PHASE', 'PHASE_NAME', 'Phase', 'phasename']
+                    )
+                    t_col = _extp_trist_find_col_df(df, ['T', 't', 'Temperature', 'Temp'])
+                    if not phase_col or not t_col:
+                        trist_log(
+                            self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(
+                                file=fn, reason='no phase or T column'
+                            )
+                        )
+                        n_skip += 1
+                        continue
+                    g_liq, g_sol = _extp_trist_pandat_g_columns(df)
+                    if g_liq is None or g_sol is None:
+                        trist_log(
+                            self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(
+                                file=fn, reason='G columns not found'
+                            )
+                        )
+                        n_skip += 1
+                        continue
+                    w_map = _extp_trist_w_columns(df)
+                    if not w_map or len(w_map) < 2:
+                        trist_log(
+                            self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(
+                                file=fn, reason='w(*) columns < 2'
+                            )
+                        )
+                        n_skip += 1
+                        continue
+                    m, err = _extp_trist_merge_solid_liquid(
+                        df, phase_col, t_col, g_liq, g_sol, w_map, path, fn
+                    )
+                    if m is None or err:
+                        trist_log(
+                            self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(
+                                file=fn, reason=err or 'merge'
+                            )
+                        )
+                        n_skip += 1
+                        continue
+                    n_ok += 1
+                    merged_blocks.append(m)
+                    wcanon = [b for _, b in w_map]
+                    t0p = _extp_trist_interp_t0_1d(m, wcanon)
+                    if t0p is not None:
+                        row = dict(t0p)
+                        row['File'] = fn
+                        t0_list.append(row)
+
+                if not merged_blocks:
+                    messagebox.showwarning(
+                        self.tr('dlg_warning', 'Warning'),
+                        self.tr(
+                            'extp_trist_no_data',
+                            'No merged rows. Check phase_name, G columns, and matching (T, w*).',
+                        ),
+                    )
+                    return
+                merged_all = pd.concat(merged_blocks, ignore_index=True)
+                dgcol = 'dG = G_solid - G_liquid (J/mol)'
+                trist_region = merged_all[merged_all[dgcol] <= 0].copy() if dgcol in merged_all.columns else merged_all
+                t0_df = pd.DataFrame(t0_list) if t0_list else pd.DataFrame()
+
+                try:
+                    with pd.ExcelWriter(out_path, engine='openpyxl') as xw:
+                        merged_all.to_excel(xw, sheet_name='Merged_Gibbs', index=False)
+                        t0_df.to_excel(xw, sheet_name='T0_tie_1D', index=False)
+                        trist_region.to_excel(xw, sheet_name='TriST_dG_le_0', index=False)
+                except PermissionError:
+                    messagebox.showerror(
+                        self.tr('dlg_permission', 'Permission Denied'),
+                        self.tr(
+                            'extp_permission',
+                            'Cannot write {path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.',
+                        ).format(path=out_path),
+                    )
+                    return
+
+                sheets = 'Merged_Gibbs, T0_tie_1D, TriST_dG_le_0'
+                trist_log(
+                    self.tr('extp_trist_done_log', 'Done. Files processed: {ok}, skipped: {skip}.').format(
+                        ok=n_ok, skip=n_skip
+                    )
+                )
+                messagebox.showinfo(
+                    self.tr('dlg_success', 'Success'),
+                    self.tr(
+                        'extp_trist_saved',
+                        'TriST workbook saved.\n\n{path}\n\nSheets: {sheets}\nMerged rows: {n}',
+                    ).format(path=out_path, sheets=sheets, n=len(merged_all)),
+                )
+                # Feed the visualizer with the newly generated workbook.
+                try:
+                    viz_src_var.set(out_path)
+                    viz_html_var.set(os.path.splitext(out_path)[0] + "_TriST_plot.html")
+                    _load_viz_wcols_from_xlsx()
+                except Exception:
+                    pass
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                import traceback
+                traceback.print_exc()
+
+        # Visualization (Plotly)
+        viz_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_trist_viz', 'Visualize TriST'), padding="10")
+        viz_frame.pack(fill=tk.X, pady=(0, 10))
+
+        viz_src_row = ttk.Frame(viz_frame)
+        viz_src_row.pack(fill=tk.X, pady=2)
+        ttk.Label(viz_src_row, text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_src_var = tk.StringVar(value="")
+        ttk.Entry(viz_src_row, textvariable=viz_src_var, width=52).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+        def _browse_trist_viz_src():
+            p = filedialog.askopenfilename(
+                title=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'),
+                filetypes=[
+                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
+                    (self.tr('filetype_all', 'All files'), "*.*"),
+                ],
+            )
+            if p:
+                viz_src_var.set(p)
+                # Immediately populate A/B/C choices after selecting a workbook.
+                _load_viz_wcols_from_xlsx()
+
+        ttk.Button(viz_src_row, text=self.tr('pandat_browse', 'Browse'), command=_browse_trist_viz_src).pack(side=tk.RIGHT, padx=5)
+
+        viz_opts_row = ttk.Frame(viz_frame)
+        viz_opts_row.pack(fill=tk.X, pady=2)
+        ttk.Label(viz_opts_row, text=self.tr('extp_trist_viz_sheet', 'Data sheet')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_sheet_var = tk.StringVar(value="TriST_dG_le_0")
+        viz_sheet_combo = ttk.Combobox(viz_opts_row, textvariable=viz_sheet_var, values=["TriST_dG_le_0", "Merged_Gibbs"], width=18, state="readonly")
+        viz_sheet_combo.pack(side=tk.LEFT, padx=(0, 10))
+
+        only_trist_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var).pack(side=tk.LEFT)
+
+        viz_t_row = ttk.Frame(viz_frame)
+        viz_t_row.pack(fill=tk.X, pady=2)
+        ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmin', 'T min:')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_tmin = tk.StringVar(value="")
+        ttk.Entry(viz_t_row, textvariable=viz_tmin, width=10).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmax', 'T max:')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_tmax = tk.StringVar(value="")
+        ttk.Entry(viz_t_row, textvariable=viz_tmax, width=10).pack(side=tk.LEFT, padx=(0, 10))
+
+        viz_cols_row = ttk.Frame(viz_frame)
+        viz_cols_row.pack(fill=tk.X, pady=2)
+        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_cols', 'Ternary axes (w columns)')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_a = tk.StringVar(value="")
+        viz_b = tk.StringVar(value="")
+        viz_c = tk.StringVar(value="")
+        viz_a_combo = ttk.Combobox(viz_cols_row, textvariable=viz_a, values=[], width=10, state="readonly")
+        viz_b_combo = ttk.Combobox(viz_cols_row, textvariable=viz_b, values=[], width=10, state="readonly")
+        viz_c_combo = ttk.Combobox(viz_cols_row, textvariable=viz_c, values=[], width=10, state="readonly")
+        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_a', 'A:')).pack(side=tk.LEFT, padx=(10, 2))
+        viz_a_combo.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_b', 'B:')).pack(side=tk.LEFT, padx=(0, 2))
+        viz_b_combo.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_c', 'C:')).pack(side=tk.LEFT, padx=(0, 2))
+        viz_c_combo.pack(side=tk.LEFT, padx=(0, 6))
+
+        viz_out_row = ttk.Frame(viz_frame)
+        viz_out_row.pack(fill=tk.X, pady=2)
+        ttk.Label(viz_out_row, text=self.tr('extp_trist_viz_html', 'Output HTML')).pack(side=tk.LEFT, padx=(0, 6))
+        viz_html_var = tk.StringVar(value="TriST_plot.html")
+        ttk.Entry(viz_out_row, textvariable=viz_html_var, width=52).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+        def _default_viz_paths():
+            # Prefer the TriST output path; otherwise use viz_src_var.
+            base = trist_out_var.get().strip()
+            if base and base.lower().endswith('.xlsx'):
+                viz_src_var.set(base)
+                try:
+                    viz_html_var.set(os.path.splitext(base)[0] + "_TriST_plot.html")
+                except Exception:
+                    pass
+
+        _default_viz_paths()
+        # Populate ternary axis comboboxes if a default workbook exists.
+        try:
+            _load_viz_wcols_from_xlsx()
+        except Exception:
+            pass
+
+        def _load_viz_wcols_from_xlsx():
+            p = viz_src_var.get().strip()
+            if not p or not os.path.isfile(p):
+                return
+            try:
+                df0 = pd.read_excel(p, sheet_name=viz_sheet_var.get() or "TriST_dG_le_0", engine='openpyxl')
+            except Exception:
+                return
+            wcols = [c for c in df0.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+            if not wcols:
+                return
+            viz_a_combo.config(values=wcols)
+            viz_b_combo.config(values=wcols)
+            viz_c_combo.config(values=wcols)
+            pick = _extp_trist_pick_ternary_wcols(df0)
+            if len(pick) >= 3:
+                viz_a.set(pick[0]); viz_b.set(pick[1]); viz_c.set(pick[2])
+            elif len(wcols) >= 3:
+                viz_a.set(wcols[0]); viz_b.set(wcols[1]); viz_c.set(wcols[2])
+
+        def _open_trist_plot():
+            if not PLOTLY_AVAILABLE:
+                messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('extp_trist_viz_need_plotly', ''))
+                return
+            xlsx = viz_src_var.get().strip()
+            if not xlsx:
+                _default_viz_paths()
+                xlsx = viz_src_var.get().strip()
+            if not xlsx or not os.path.isfile(xlsx):
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+            sheet = viz_sheet_var.get().strip() or "TriST_dG_le_0"
+            try:
+                dfp = pd.read_excel(xlsx, sheet_name=sheet, engine='openpyxl')
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                return
+            if dfp is None or dfp.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            dgcol = 'dG = G_solid - G_liquid (J/mol)'
+            if dgcol in dfp.columns and only_trist_var.get():
+                dfp[dgcol] = pd.to_numeric(dfp[dgcol], errors='coerce')
+                dfp = dfp[dfp[dgcol] <= 0].copy()
+            if 'T (K)' in dfp.columns:
+                dfp['T (K)'] = pd.to_numeric(dfp['T (K)'], errors='coerce')
+                try:
+                    if viz_tmin.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] >= float(viz_tmin.get())]
+                except Exception:
+                    pass
+                try:
+                    if viz_tmax.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] <= float(viz_tmax.get())]
+                except Exception:
+                    pass
+            if dfp.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            a_col, b_col, c_col = viz_a.get().strip(), viz_b.get().strip(), viz_c.get().strip()
+            wcols = [c for c in (a_col, b_col, c_col) if c]
+            if len(wcols) < 3:
+                pick = _extp_trist_pick_ternary_wcols(dfp)
+                if len(pick) >= 3:
+                    a_col, b_col, c_col = pick[0], pick[1], pick[2]
+                else:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                    return
+
+            a = pd.to_numeric(dfp[a_col], errors='coerce')
+            b = pd.to_numeric(dfp[b_col], errors='coerce')
+            c = pd.to_numeric(dfp[c_col], errors='coerce')
+            t = pd.to_numeric(dfp.get('T (K)', np.nan), errors='coerce')
+            dg = pd.to_numeric(dfp.get(dgcol, np.nan), errors='coerce')
+            mask = a.notna() & b.notna() & c.notna() & t.notna()
+            dfp2 = dfp.loc[mask].copy()
+            if dfp2.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            a2 = pd.to_numeric(dfp2[a_col], errors='coerce').to_numpy(dtype=np.float64)
+            b2 = pd.to_numeric(dfp2[b_col], errors='coerce').to_numpy(dtype=np.float64)
+            c2 = pd.to_numeric(dfp2[c_col], errors='coerce').to_numpy(dtype=np.float64)
+            t2 = pd.to_numeric(dfp2['T (K)'], errors='coerce').to_numpy(dtype=np.float64)
+            dg2 = pd.to_numeric(dfp2.get(dgcol, np.nan), errors='coerce').to_numpy(dtype=np.float64)
+
+            xy = np.array([_ternary_to_xy(a2[i], b2[i], c2[i]) for i in range(len(a2))], dtype=np.float64)
+            x = xy[:, 0]
+            y = xy[:, 1]
+            keep = np.isfinite(x) & np.isfinite(y) & np.isfinite(t2)
+            x, y, t2, dg2 = x[keep], y[keep], t2[keep], dg2[keep]
+            if len(x) < 3:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            hover = (
+                f"{a_col}=%{{customdata[0]:.4g}}<br>{b_col}=%{{customdata[1]:.4g}}<br>{c_col}=%{{customdata[2]:.4g}}"
+                "<br>T=%{z:.1f}K<br>dG=%{marker.color:.3g} J/mol"
+            )
+            fig = go.Figure(
+                data=[
+                    go.Scatter3d(
+                        x=x,
+                        y=y,
+                        z=t2,
+                        mode='markers',
+                        marker=dict(size=3, color=dg2, colorscale='RdBu', reversescale=True, opacity=0.85, colorbar=dict(title="dG")),
+                        customdata=np.stack([a2[keep], b2[keep], c2[keep]], axis=1),
+                        hovertemplate=hover,
+                        name="TriST points",
+                    )
+                ]
+            )
+            fig.update_layout(
+                title=f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}",
+                scene=dict(
+                    xaxis_title="ternary x",
+                    yaxis_title="ternary y",
+                    zaxis_title="T (K)",
+                ),
+                margin=dict(l=0, r=0, t=40, b=0),
+            )
+
+            out_html = viz_html_var.get().strip()
+            if not out_html:
+                out_html = os.path.splitext(xlsx)[0] + "_TriST_plot.html"
+                viz_html_var.set(out_html)
+            try:
+                fig.write_html(out_html)
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                return
+            try:
+                webbrowser.open(out_html)
+            except Exception:
+                pass
+
+        # Keep w-column lists in sync
+        try:
+            viz_sheet_combo.bind("<<ComboboxSelected>>", lambda _e: _load_viz_wcols_from_xlsx())
+        except Exception:
+            pass
+        _load_viz_wcols_from_xlsx()
+
+        trist_btns = ttk.Frame(tab_trist)
+        trist_btns.pack(pady=10)
+        btn_extp_trist_run = ttk.Button(
+            trist_btns, text=self.tr('extp_trist_btn', 'Build TriST workbook'), command=run_trist_extract
+        )
+        btn_extp_trist_run.pack(side=tk.LEFT, padx=10)
+
+        btn_extp_trist_viz = ttk.Button(trist_btns, text=self.tr('extp_trist_viz_btn', 'Open interactive plot'), command=_open_trist_plot)
+        btn_extp_trist_viz.pack(side=tk.LEFT, padx=10)
+
         def import_to_thermoq():
             """Extract results (if needed) then directly import generated Excel files into ThermoQ."""
             try:
@@ -10013,6 +11363,11 @@ class ThermoQGUI:
             self._unregister_tool_lang_refresh(_refresh_extp_lang)
             extractor_window.destroy()
 
+        btn_extp_trist_close = ttk.Button(
+            trist_btns, text=self.tr('extp_close', 'Close'), command=_close_extp
+        )
+        btn_extp_trist_close.pack(side=tk.LEFT, padx=10)
+
         btn_extp_run = ttk.Button(btn_inner, text=self.tr('extp_extract_btn', 'Extract Results'), command=extract_results)
         btn_extp_run.pack(side=tk.LEFT, padx=10)
         btn_extp_import = ttk.Button(btn_inner, text=self.tr('extp_import_btn', 'Import to ThermoQ'), command=import_to_thermoq)
@@ -10055,6 +11410,7 @@ class ThermoQGUI:
             try:
                 notebook.tab(0, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
                 notebook.tab(1, text=self.tr('extp_tab_t0', 'T-zero'))
+                notebook.tab(2, text=self.tr('extp_tab_trist', 'TriST Zone'))
             except Exception:
                 pass
             lever_frame.config(text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'))
@@ -10075,6 +11431,20 @@ class ThermoQGUI:
                 t0_status_frame.config(text=self.tr('extp_status', 'Status'))
                 btn_extp_t0_proc.config(text=self.tr('extp_t0_extract_btn', 'Extract T0'))
                 btn_extp_t0_close.config(text=self.tr('extp_close', 'Close'))
+            except Exception:
+                pass
+            try:
+                trist_info.config(text=self.tr('extp_trist_intro', ''))
+                trist_folder_frame.config(text=self.tr('extp_trist_folder', 'Gibbs folder (All table_Gibbs)'))
+                btn_extp_trist.config(text=self.tr('pandat_browse', 'Browse'))
+                trist_out_frame.config(text=self.tr('extp_trist_out', 'Output Excel (TriST)'))
+                btn_extp_trist_out.config(text=self.tr('pandat_browse', 'Browse'))
+                trist_status_frame.config(text=self.tr('extp_status', 'Status'))
+                btn_extp_trist_run.config(text=self.tr('extp_trist_btn', 'Build TriST workbook'))
+                viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
+                viz_sheet_combo.config(values=["TriST_dG_le_0", "Merged_Gibbs"])
+                btn_extp_trist_viz.config(text=self.tr('extp_trist_viz_btn', 'Open interactive plot'))
+                btn_extp_trist_close.config(text=self.tr('extp_close', 'Close'))
             except Exception:
                 pass
             cur = status_label.cget('text')

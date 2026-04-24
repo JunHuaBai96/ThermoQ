@@ -1,0 +1,70 @@
+<pbfx version="1.0" encoding="utf-8">
+  <Header copyright="CompuTherm, LLC">
+    <!-- this file defines the syntax for a batch calculation -->
+    <Application name="Pandat" version="2025" />
+  </Header>
+  <calculation name="Gibbs_ALCU1.5SI_880K" type="line" duration=" " original_batch_name="" id="0">
+    <databases>
+      <database type="tdb" file_name="Al-Cu-Si_He2009.tdb" />
+    </databases>
+    <units>
+      <unit name="P" value="bar" />
+      <unit name="T" value="K" />
+      <unit name="n" value="w%" />
+    </units>
+    <system name="Default_System">
+      <components>
+        <component name="AL" status="Selected" />
+        <component name="CU" status="Selected" />
+        <component name="SI" status="Selected" />
+      </components>
+      <phases>
+        <phase name="*" status="Suspended" />
+        <phase name="FCC_A1" status="Entered" />
+        <phase name="LIQUID" status="Entered" />
+      </phases>
+      <points>
+        <point>
+          <statespace>
+            <T value="880" />
+            <P value="1" />
+            <n component="AL" value="100" />
+            <n component="CU" value="0" />
+            <n component="SI" value="0" />
+          </statespace>
+        </point>
+        <point>
+          <statespace>
+            <T value="880" />
+            <P value="1" />
+            <n component="AL" value="  " />
+            <n component="CU" value="40" />
+            <n component="SI" value="1.5" />
+          </statespace>
+        </point>
+      </points>
+      <condition>
+        <extensive_search value="true" />
+        <equilibrium_type type="global" />
+        <steps value="100" />
+        <individual_phase value="true" />
+      </condition>
+    </system>
+    <output unit="">
+      <tables>
+        <table name="Gibbs_ALCU1.5SI_880K" source="Default" type="thermodynamic_property">
+          <column name="T" />
+          <column name="phase_name" />
+          <column name="x(*)" />
+          <column name="w(*)" />
+          <column name="G(@*:FCC_A1[*])" />
+        </table>
+      </tables>
+      <graphs>
+        <graph name="Gibbs_ALCU1.5SI_880K">
+          <plot table_name="Gibbs_ALCU1.5SI_880K" xaxis="w(CU)" yaxis="G(@*)" />
+        </graph>
+      </graphs>
+    </output>
+  </calculation>
+</pbfx>
