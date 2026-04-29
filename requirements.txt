@@ -5,5 +5,6 @@ xlrd==1.2.0         # Read .xls (xlrd>=2.0 dropped .xls support)
 numpy>=1.21.0       # Numerical computing
 matplotlib>=3.5.0   # Optional: For plotting (2D/3D plots, GIFs)
 plotly>=5.0.0       # Optional: For interactive 3D plots
+kaleido             # Optional: For Plotly static image export (write_image)
 scikit-learn>=1.0.0 # Optional: For Gaussian Process smoothing
 scipy>=1.8.0        # Optional: For interpolation/smoothing fallback

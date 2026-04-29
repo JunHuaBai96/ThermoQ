@@ -63,8 +63,12 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
   - **T-zero**: read `All table_T0` and export `T0.xlsx` with normalized `w(Element)` columns.
   - **TriST Zone** (Pandat Gibbs):
     - Read `All table_Gibbs` and pair LIQUID + solid Gibbs energies at the same \(T\) and composition.
-    - Export a TriST workbook: `Merged_Gibbs`, `T0_tie_1D`, `TriST_dG_le_0`.
-    - **Visualize TriST**: Plotly 3D HTML, ternary projection \(x/y\), \(z=T\), color by \(dG\); A/B/C axes auto-populate from `w(…)` columns.
+    - Export a TriST workbook: `T0_tie_1D`, `T0_lines`, `TriST_boundaries`, `TriST_mask`.
+    - Optionally saves a companion `_trist_cube.npz` for smooth \(f(C_0)=0\) boundary rendering.
+    - **Visualize TriST**: Plotly 3D HTML with user-selected `w(*)` columns as the 2D composition plane (X/Y); \(z=T\).
+      - `TriST_boundaries` can be drawn as discrete lines (**Boundary lines every (K)**) and (optionally) as a smooth surface via cubic interpolation in \(T\).
+      - `TriST_mask` supports both point-cloud rendering and Mesh3d surface rendering (per temperature).
+      - Export supports **Interactive HTML** and **Static image** (image format selection).
 
 ### Installation
 
@@ -78,6 +82,7 @@ pip install -r requirements.txt
 Optional packages enable extra plots:
 - `matplotlib` for 2D/3D static + GIF
 - `plotly` for interactive 3D
+- `kaleido` for Plotly static image export
 - `scikit-learn` / `scipy` for smoothing/interpolation fallbacks
 
 ### Run
@@ -141,8 +146,12 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - **T-zero**：读取 `All table_T0` 导出 `T0.xlsx`（`w(Element)` 列会规范化合并）。
   - **TriST Zone（Pandat Gibbs）**：
     - 读取 `All table_Gibbs`，在相同 \(T\) 与相同成分下配对 LIQUID 与固相 Gibbs 能。
-    - 导出 TriST 工作簿：`Merged_Gibbs`、`T0_tie_1D`、`TriST_dG_le_0`。
-    - **Visualize TriST**：Plotly 交互 3D（\(x/y\) 为三元投影，\(z=T\)，颜色 \(dG\)）；A/B/C 会自动从 `w(…)` 列填充。
+    - 导出 TriST 工作簿：`T0_tie_1D`、`T0_lines`、`TriST_boundaries`、`TriST_mask`。
+    - 可选：在同目录生成 `_trist_cube.npz`，用于 \(f(C_0)=0\) 的光滑边界面渲染。
+    - **Visualize TriST**：Plotly 交互 3D；通过 `w(*)` 列选择 2D 成分平面（X/Y），\(z=T\)。
+      - `TriST_boundaries` 支持离散温度折线（**Boundary lines every (K)**）与基于 \(T\) 的三次插值光滑曲面（可选）。
+      - `TriST_mask` 支持点云与每温度 Mesh3d 曲面渲染。
+      - 导出支持 **交互式 HTML** 与 **静态图片**（图片格式可选）。静态图片导出需要 `kaleido`。
 
 ### 安装与运行
 
