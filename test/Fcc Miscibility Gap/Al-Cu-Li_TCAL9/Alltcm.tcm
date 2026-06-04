@@ -1,0 +1,1284 @@
+go da
+sw  tcal9
+d-sys
+al cu li
+rej ph *
+res ph FCC_A1
+get
+
+go p-3
+s-c t=300,p=101325,n=1
+s-c x(cu)=0.5
+s-c x(li)=0.5
+l-c
+c-e
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_300K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_300K.exp y
+
+back
+
+s-c t=310
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_310K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_310K.exp 
+
+back
+
+s-c t=320
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_320K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_320K.exp 
+
+back
+
+s-c t=330
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_330K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_330K.exp 
+
+back
+
+s-c t=340
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_340K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_340K.exp 
+
+back
+
+s-c t=350
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_350K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_350K.exp 
+
+back
+
+s-c t=360
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_360K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_360K.exp 
+
+back
+
+s-c t=370
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_370K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_370K.exp 
+
+back
+
+s-c t=380
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_380K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_380K.exp 
+
+back
+
+s-c t=390
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_390K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_390K.exp 
+
+back
+
+s-c t=400
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_400K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_400K.exp 
+
+back
+
+s-c t=410
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_410K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_410K.exp 
+
+back
+
+s-c t=420
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_420K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_420K.exp 
+
+back
+
+s-c t=430
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_430K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_430K.exp 
+
+back
+
+s-c t=440
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_440K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_440K.exp 
+
+back
+
+s-c t=450
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_450K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_450K.exp 
+
+back
+
+s-c t=460
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_460K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_460K.exp 
+
+back
+
+s-c t=470
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_470K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_470K.exp 
+
+back
+
+s-c t=480
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_480K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_480K.exp 
+
+back
+
+s-c t=490
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_490K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_490K.exp 
+
+back
+
+s-c t=500
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_500K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_500K.exp 
+
+back
+
+s-c t=510
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_510K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_510K.exp 
+
+back
+
+s-c t=520
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_520K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_520K.exp 
+
+back
+
+s-c t=530
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_530K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_530K.exp 
+
+back
+
+s-c t=540
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_540K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_540K.exp 
+
+back
+
+s-c t=550
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_550K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_550K.exp 
+
+back
+
+s-c t=560
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_560K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_560K.exp 
+
+back
+
+s-c t=570
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_570K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_570K.exp 
+
+back
+
+s-c t=580
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_580K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_580K.exp 
+
+back
+
+s-c t=590
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_590K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_590K.exp 
+
+back
+
+s-c t=600
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_600K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_600K.exp 
+
+back
+
+s-c t=610
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_610K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_610K.exp 
+
+back
+
+s-c t=620
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_620K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_620K.exp 
+
+back
+
+s-c t=630
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_630K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_630K.exp 
+
+back
+
+s-c t=640
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_640K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_640K.exp 
+
+back
+
+s-c t=650
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_650K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_650K.exp 
+
+back
+
+s-c t=660
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_660K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_660K.exp 
+
+back
+
+s-c t=670
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_670K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_670K.exp 
+
+back
+
+s-c t=680
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_680K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_680K.exp 
+
+back
+
+s-c t=690
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_690K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_690K.exp 
+
+back
+
+s-c t=700
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_700K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_700K.exp 
+
+back
+
+s-c t=710
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_710K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_710K.exp 
+
+back
+
+s-c t=720
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_720K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_720K.exp 
+
+back
+
+s-c t=730
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_730K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_730K.exp 
+
+back
+
+s-c t=740
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_740K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_740K.exp 
+
+back
+
+s-c t=750
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_750K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_750K.exp 
+
+back
+
+s-c t=760
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_760K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_760K.exp 
+
+back
+
+s-c t=770
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_770K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_770K.exp 
+
+back
+
+s-c t=780
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_780K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_780K.exp 
+
+back
+
+s-c t=790
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_790K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_790K.exp 
+
+back
+
+s-c t=800
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_800K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_800K.exp 
+
+back
+
+s-c t=810
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_810K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_810K.exp 
+
+back
+
+s-c t=820
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_820K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_820K.exp 
+
+back
+
+s-c t=830
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_830K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_830K.exp 
+
+back
+
+s-c t=840
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_840K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_840K.exp 
+
+back
+
+s-c t=850
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_850K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_850K.exp 
+
+back
+
+s-c t=860
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_860K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_860K.exp 
+
+back
+
+s-c t=870
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_870K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_870K.exp 
+
+back
+
+s-c t=880
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_880K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_880K.exp 
+
+back
+
+s-c t=890
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_890K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_890K.exp 
+
+back
+
+s-c t=900
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_900K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_900K.exp 
+
+back
+
+s-c t=910
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_910K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_910K.exp 
+
+back
+
+s-c t=920
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_920K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_920K.exp 
+
+back
+
+s-c t=930
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_930K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_930K.exp 
+
+back
+
+s-c t=940
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_940K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_940K.exp 
+
+back
+
+s-c t=950
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_950K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_950K.exp 
+
+back
+
+s-c t=960
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_960K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_960K.exp 
+
+back
+
+s-c t=970
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_970K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_970K.exp 
+
+back
+
+s-c t=980
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_980K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_980K.exp 
+
+back
+
+s-c t=990
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_990K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_990K.exp 
+
+back
+
+s-c t=1000
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_1000K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_1000K.exp 
+

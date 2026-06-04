@@ -1,0 +1,2422 @@
+go da
+sw u
+
+d-sys al mg si
+l-s c
+get
+
+go p-3
+s-c t=1600,p=101325,n=1
+s-c w(si)=0.00
+s-c w(mg)=0.00
+l-c
+c-e
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.00Si_np-T.POL y
+step normal
+
+post
+s-d-a x t
+s-d-a y np(liquid)
+make file Al0.00Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.00
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.00Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.00Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.01
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.01Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.01Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.02
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.02Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.02Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.03
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.03Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.03Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.04
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.04Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.04Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.05
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.05Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.05Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.06
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.06Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.06Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.07
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.07Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.07Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.08
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.08Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.08Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.09
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.09Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.09Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.00
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.00Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.01
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.01Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.01Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.02
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.02Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.02Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.03
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.03Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.03Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.04
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.04Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.04Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.05
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.05Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.05Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.06
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.06Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.06Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.07
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.07Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.07Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.08
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.08Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.08Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.09
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.09Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.09Mg0.10Si_np-T.exp
+
+back
+
+s-c w(si)=0.10
+s-c w(mg)=0.10
+
+l-c
+
+c-e
+
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.10Mg0.10Si_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al0.10Mg0.10Si_np-T.exp
+

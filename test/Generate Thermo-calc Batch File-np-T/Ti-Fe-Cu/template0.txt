@@ -1,0 +1,21 @@
+go da
+sw u
+
+d-sys ti fe cu
+l-s c
+get
+
+go p-3
+s-c t=500,p=101325,n=1
+s-c w(cu)=0.00
+s-c w(fe)=0.00
+l-c
+c-e
+s-a-v 1 t 300 2000 12.5
+save_workspace Al0.00Cu0.00Li_np-T.POL y
+step normal
+
+post
+s-d-a x t
+s-d-a y np(liquid)
+make file Ti0.00Fe0.00Cu_np-T.exp

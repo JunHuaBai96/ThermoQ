@@ -1,10 +1,19 @@
-Pillow>=9.0.0       # For image processing
-pandas>=2.0.0       # Data processing
-openpyxl>=3.1.0     # Read/write .xlsx
-xlrd==1.2.0         # Read .xls (xlrd>=2.0 dropped .xls support)
-numpy>=1.21.0       # Numerical computing
-matplotlib>=3.5.0   # Optional: For plotting (2D/3D plots, GIFs)
-plotly>=5.0.0       # Optional: For interactive 3D plots
-kaleido             # Optional: For Plotly static image export (write_image)
-scikit-learn>=1.0.0 # Optional: For Gaussian Process smoothing
-scipy>=1.8.0        # Optional: For interpolation/smoothing fallback
+# ThermoQ — Python dependencies
+# GUI uses stdlib tkinter (no pip package). On Linux: sudo apt install python3-tk
+# Recommended: Python 3.8+
+
+# --- Core (required) ---
+numpy>=1.21.0
+pandas>=2.0.0
+openpyxl>=3.1.0       # Read/write .xlsx (Pandat/Thermo-Calc import & extract)
+xlrd==1.2.0           # Read legacy .xls (xlrd>=2.0 dropped .xls support)
+Pillow>=9.0.0         # Image handling in the GUI
+
+# --- Plotting (recommended; required for Plot menu tools) ---
+matplotlib>=3.5.0     # 2D/3D static plots, rotation GIFs (phase surfaces, miscibility gap, …)
+plotly>=5.0.0         # Interactive 3D HTML (Plotly 3D, TriST visualize)
+
+# --- Plot export & smoothing (optional but recommended) ---
+kaleido               # Plotly static image export (write_image)
+scikit-learn>=1.0.0   # Gaussian-process smooth surfaces (phase / miscibility gap surfaces)
+scipy>=1.8.0          # Interpolation fallback when sklearn is unavailable
