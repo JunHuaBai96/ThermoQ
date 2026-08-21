@@ -1,0 +1,17 @@
+back
+
+s-c t=%T%
+
+l-c
+
+c-e
+
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_%T%K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_%T%K.exp 

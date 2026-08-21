@@ -1,10 +1,11 @@
 go da
-sw u
+sw tcal9
 d-sys
 al cu li
 rej ph *
 res ph LIQUID:L FCC_A1
 get
+
 go  p-3
 s-c n=1 p=101325 t=700 w(CU)=0.01 w(LI)=0.00
 l-c

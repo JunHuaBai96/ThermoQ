@@ -1,0 +1,23 @@
+go da
+sw  tcal9
+d-sys
+al cu li
+rej ph *
+res ph FCC_A1
+get
+
+go p-3
+s-c t=300,p=101325,n=1
+s-c x(cu)=0.5
+s-c x(li)=0.5
+l-c
+c-e
+s-a-v 1 x(cu) 0 1 0.025
+s-a-v 2 x(li) 0 1 0.025
+save_workspace AlCuLi_300K.POL y
+map
+
+post
+s-d-a x m-p cu
+s-d-a y m-p li
+make file AlCuLi_300K.exp y

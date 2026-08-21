@@ -638,6 +638,155 @@ def _tcm_should_skip_loop_iteration(baseline, element_names, combo, t_val):
     return False
 
 
+TCM_SC_W_ZERO_COMP_STR = '0.00001'
+
+
+def _tcm_is_sc_w_composition_line(line):
+    """True for Thermo-Calc ``s-c w(element)=...`` composition setup lines."""
+    return bool(re.match(r'^\s*s-c\s+w\s*\(\s*[^)]+\s*\)\s*=', line, re.IGNORECASE))
+
+
+def _tcm_is_zero_batch_comp(val, out_decimals):
+    """True when a loop composition formats to 0.00 (etc.) at the chosen precision."""
+    fv = float(val)
+    fmt_zero = f"{0.0:.{out_decimals}f}"
+    return f"{fv:.{out_decimals}f}" == fmt_zero
+
+
+def _exptc_format_comp_token(val):
+    """Format a composition value for Al0.005Cu0.000Li-style TCM filenames."""
+    fv = float(val)
+    if abs(fv) < 1e-12:
+        return '0.000'
+    s = f"{fv:.6f}".rstrip('0').rstrip('.')
+    return s if s else '0'
+
+
+def _exptc_format_placeholder_value(val):
+    fv = float(val)
+    if abs(fv) < 1e-12:
+        return '0.000'
+    s = f"{fv:.6f}".rstrip('0').rstrip('.')
+    return s if s else '0'
+
+
+def _exptc_record_to_placeholder_values(rec):
+    ph = {}
+    for k, v in rec.items():
+        if not isinstance(k, str) or not k.lower().startswith('w('):
+            continue
+        m = re.match(r'w\(([^)]+)\)', k, re.I)
+        if not m:
+            continue
+        el_raw = m.group(1)
+        if re.match(r'element', el_raw, re.I):
+            continue
+        el = _tcm_normalize_element_symbol(el_raw)
+        if el:
+            ph[el] = _exptc_format_placeholder_value(v)
+    if rec.get('Temperature_K') is not None:
+        t = float(rec['Temperature_K'])
+        ph['T'] = f"{int(t)}" if abs(t - round(t)) < 1e-6 else f"{t:g}"
+    return ph
+
+
+def _exptc_apply_template1(template_text, placeholder_values):
+    upper_to_val = {k.upper(): v for k, v in placeholder_values.items()}
+
+    def _repl(m):
+        u = m.group(1).upper()
+        if u in upper_to_val:
+            return upper_to_val[u]
+        return m.group(0)
+
+    return re.sub(r'%([A-Za-z]+)%', _repl, template_text)
+
+
+def _exptc_dedupe_error_records(records):
+    seen = set()
+    out = []
+    for rec in records:
+        key_parts = []
+        for k, v in sorted(rec.items()):
+            if k == 'file':
+                continue
+            if isinstance(k, str) and k.lower().startswith('w('):
+                try:
+                    key_parts.append((k, float(v)))
+                except (TypeError, ValueError):
+                    key_parts.append((k, v))
+            elif k == 'Temperature_K' and v is not None:
+                try:
+                    key_parts.append(('T', float(v)))
+                except (TypeError, ValueError):
+                    key_parts.append(('T', v))
+        key = tuple(key_parts)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rec)
+    return out
+
+
+def _exptc_comp_basename_from_record(rec):
+    w_items = []
+    for k, v in rec.items():
+        if not isinstance(k, str) or not k.lower().startswith('w('):
+            continue
+        m = re.match(r'w\(([^)]+)\)', k, re.I)
+        if not m:
+            continue
+        el_raw = m.group(1)
+        if re.match(r'element', el_raw, re.I):
+            continue
+        el = _tcm_normalize_element_symbol(el_raw)
+        if el:
+            try:
+                w_items.append((el, float(v)))
+            except (TypeError, ValueError):
+                pass
+    if w_items:
+        w_items.sort(key=lambda x: x[0])
+        stem = 'Al'
+        for el, val in w_items:
+            stem += _exptc_format_comp_token(val) + el
+        if rec.get('Temperature_K') is not None:
+            t = float(rec['Temperature_K'])
+            stem += f"_{int(t) if abs(t - round(t)) < 1e-6 else t:g}K"
+        return stem
+    base = os.path.splitext(os.path.basename(rec.get('file', 'abnormal')))[0]
+    if rec.get('Temperature_K') is not None:
+        t = float(rec['Temperature_K'])
+        base += f"_{int(t) if abs(t - round(t)) < 1e-6 else t:g}K"
+    return re.sub(r'[^\w.-]', '_', base)
+
+
+def _exptc_generate_abnormal_tcm_files(template1_path, output_dir, error_records):
+    if not error_records:
+        return 0, []
+    with open(template1_path, 'r', encoding='utf-8') as f:
+        template_text = f.read()
+    os.makedirs(output_dir, exist_ok=True)
+    deduped = _exptc_dedupe_error_records(error_records)
+    written = []
+    used_names = set()
+    for rec in deduped:
+        ph = _exptc_record_to_placeholder_values(rec)
+        content = _exptc_apply_template1(template_text, ph)
+        base = _exptc_comp_basename_from_record(rec)
+        fname = base
+        n = 2
+        while fname in used_names:
+            fname = f"{base}_{n}"
+            n += 1
+        used_names.add(fname)
+        out_path = os.path.join(output_dir, fname + '.tcm')
+        with open(out_path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(content)
+        written.append(out_path)
+    return len(written), written
+
+
 def _extp_trist_find_col_df(df, names):
     if df is None or not hasattr(df, 'columns'):
         return None
@@ -1534,7 +1683,6 @@ class ThermoQGUI:
                 ),
                 'tbatch_tpl0': 'Template0 File (Complete TCM for single point calculation)',
                 'tbatch_tpl': 'Template File (Loop body)',
-                'tbatch_tpl1': 'Template1 File (Optional - TCM for abnormal point calculation)',
                 'tbatch_elem_cfg': 'Element Configuration',
                 'tbatch_tbl_element': 'Element',
                 'tbatch_tbl_min': 'Min',
@@ -1641,7 +1789,6 @@ class ThermoQGUI:
                 'extp_trist_done_log': 'Done. Files processed: {ok}, skipped: {skip}.',
                 'tbatch_fd_tpl0': 'Select Template0 File',
                 'tbatch_fd_tpl': 'Select Template File',
-                'tbatch_fd_tpl1': 'Select Template1 File',
                 'tbatch_fd_save_out': 'Save Output File',
                 'pbatch_win_title': 'Pandat Batch File Generator',
                 'pbatch_subtitle': (
@@ -1994,6 +2141,21 @@ class ThermoQGUI:
                     'Rows: {rows}\n'
                     'Saved to: {path}'
                 ),
+                'exptc_tpl1': 'Template1 File (Optional — TCM for abnormal point calculation)',
+                'exptc_tpl1_hint': (
+                    'Reference template with %Element% and %T% placeholders (e.g. %Cu%, %Li%). '
+                    'After processing, generate one .tcm per failed composition/temperature from status errors.'
+                ),
+                'exptc_fd_tpl1': 'Select Template1 reference file',
+                'exptc_abnormal_out_dir': 'Abnormal-point TCM output folder',
+                'exptc_fd_abnormal_out': 'Select folder for abnormal-point TCM files',
+                'exptc_gen_abnormal_tcm': 'Generate abnormal-point TCM files',
+                'exptc_abnormal_no_errors': 'No error records in status. Process files first.',
+                'exptc_abnormal_need_tpl1': 'Please select a valid Template1 reference file.',
+                'exptc_abnormal_need_out': 'Please select an output folder for TCM files.',
+                'exptc_abnormal_done': 'Generated {n} abnormal-point TCM file(s) in:\n{dir}',
+                'exptc_abnormal_log': 'Generated {n} abnormal-point TCM file(s) in {dir}',
+                'exptc_abnormal_fail': 'Failed to generate abnormal-point TCM files:\n{e}',
                 # Extract Pandat Results
                 'extp_need_lever': 'Please select a valid Lever folder!',
                 'extp_need_scheil': 'Please select a valid Scheil folder!',
@@ -2259,7 +2421,6 @@ class ThermoQGUI:
                 ),
                 'tbatch_tpl0': 'Template0 文件（单点计算的完整 TCM）',
                 'tbatch_tpl': 'Template 文件（循环体）',
-                'tbatch_tpl1': 'Template1 文件（可选：异常点计算用 TCM）',
                 'tbatch_elem_cfg': '组元配置',
                 'tbatch_tbl_element': '元素',
                 'tbatch_tbl_min': '最小',
@@ -2361,7 +2522,6 @@ class ThermoQGUI:
                 'extp_trist_done_log': '完成。已处理文件：{ok}，跳过：{skip}。',
                 'tbatch_fd_tpl0': '选择 Template0 文件',
                 'tbatch_fd_tpl': '选择 Template 文件',
-                'tbatch_fd_tpl1': '选择 Template1 文件',
                 'tbatch_fd_save_out': '保存输出文件',
                 'pbatch_win_title': 'Pandat 批处理文件生成器',
                 'pbatch_subtitle': (
@@ -2700,6 +2860,21 @@ class ThermoQGUI:
                     '行数：{rows}\n'
                     '已保存至：{path}'
                 ),
+                'exptc_tpl1': 'Template1 文件（可选：异常点计算用 TCM）',
+                'exptc_tpl1_hint': (
+                    '参考模板，含 %元素% 与 %T% 占位符（如 %Cu%、%Li%）。'
+                    '处理完成后，可根据状态中的错误记录为每个失败成分/温度生成 .tcm 文件。'
+                ),
+                'exptc_fd_tpl1': '选择 Template1 参考文件',
+                'exptc_abnormal_out_dir': '异常点 TCM 输出文件夹',
+                'exptc_fd_abnormal_out': '选择异常点 TCM 输出文件夹',
+                'exptc_gen_abnormal_tcm': '生成异常点 TCM 文件',
+                'exptc_abnormal_no_errors': '状态中无错误记录。请先处理文件。',
+                'exptc_abnormal_need_tpl1': '请选择有效的 Template1 参考文件。',
+                'exptc_abnormal_need_out': '请选择 TCM 输出文件夹。',
+                'exptc_abnormal_done': '已生成 {n} 个异常点 TCM 文件，保存于：\n{dir}',
+                'exptc_abnormal_log': '已在 {dir} 生成 {n} 个异常点 TCM 文件',
+                'exptc_abnormal_fail': '生成异常点 TCM 文件失败：\n{e}',
                 'extp_need_lever': '请选择有效的 Lever 文件夹！',
                 'extp_need_scheil': '请选择有效的 Scheil 文件夹！',
                 'extp_no_csv': 'Lever 文件夹中未找到 CSV 或 DAT 文件！',
@@ -9853,20 +10028,6 @@ class ThermoQGUI:
         btn_tpl = ttk.Button(template_frame, text=self.tr('pandat_browse', 'Browse'), command=lambda: browse_template())
         btn_tpl.pack(side=tk.RIGHT, padx=5)
         
-        template1_frame = ttk.LabelFrame(main_frame, text=self.tr('tbatch_tpl1', 'Template1 File'), padding="10")
-        template1_frame.pack(fill=tk.X, pady=5)
-        
-        template1_var = tk.StringVar()
-        ttk.Entry(template1_frame, textvariable=template1_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
-        def browse_template1():
-            p = filedialog.askopenfilename(title=self.tr('tbatch_fd_tpl1', 'Select Template1 File'), filetypes=_txt_ft())
-            if p:
-                template1_var.set(p)
-
-        btn_tpl1 = ttk.Button(template1_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_template1)
-        btn_tpl1.pack(side=tk.RIGHT, padx=5)
-        
         # Elements configuration
         elements_frame = ttk.LabelFrame(main_frame, text=self.tr('tbatch_elem_cfg', 'Element Configuration'), padding="10")
         elements_frame.pack(fill=tk.BOTH, expand=True, pady=10)
@@ -10151,7 +10312,6 @@ class ThermoQGUI:
                 # Validate inputs
                 template0_file = template0_var.get()
                 template_file = template_var.get()
-                template1_file = template1_var.get()
                 output_file = output_var.get()
                 
                 if not template0_file or not os.path.exists(template0_file):
@@ -10167,8 +10327,6 @@ class ThermoQGUI:
                         self.tr('gen_need_tpl', 'Please select a valid Template file!'),
                     )
                     return
-                
-                # Template1 is optional
                 
                 if not output_file:
                     messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_need_out', 'Please specify an output file!'))
@@ -10284,16 +10442,25 @@ class ThermoQGUI:
 
                         upper_to_val = {k.upper(): v for k, v in data_base.items()}
 
-                        def _repl_batch_ph(m, _u2v=upper_to_val):
+                        def _repl_batch_ph(m, _u2v=upper_to_val, _for_sc_w=False, _combo=combo, _els=element_names, _od=out_decimals):
                             u = m.group(1).upper()
-                            if u in _u2v:
-                                return _u2v[u]
-                            return m.group(0)
+                            if u not in _u2v:
+                                return m.group(0)
+                            if _for_sc_w:
+                                for i, el in enumerate(_els):
+                                    if el.upper() == u and _tcm_is_zero_batch_comp(_combo[i], _od):
+                                        return TCM_SC_W_ZERO_COMP_STR
+                            return _u2v[u]
 
                         write = []
                         for line in template_lines:
                             if '%' in line:
-                                new_line = re.sub(r'%([A-Za-z]+)%', _repl_batch_ph, line)
+                                for_sc_w = _tcm_is_sc_w_composition_line(line)
+                                new_line = re.sub(
+                                    r'%([A-Za-z]+)%',
+                                    lambda m, _f=for_sc_w: _repl_batch_ph(m, _for_sc_w=_f),
+                                    line,
+                                )
                             else:
                                 new_line = line
                             write.append(new_line)
@@ -10311,12 +10478,6 @@ class ThermoQGUI:
                                 foreground="orange",
                             )
                             generator_window.update()
-                
-                # Add template1 (optional)
-                if template1_file and os.path.exists(template1_file):
-                    out.append('\n')
-                    with open(template1_file, "r", encoding="utf-8") as f1:
-                        out.extend(f1.readlines())
                 
                 # Write output file
                 with open(output_file, 'w', encoding="utf-8") as fp:
@@ -10366,8 +10527,6 @@ class ThermoQGUI:
             btn_tpl0.config(text=self.tr('pandat_browse', 'Browse'))
             template_frame.config(text=self.tr('tbatch_tpl', 'Template File (Loop body)'))
             btn_tpl.config(text=self.tr('pandat_browse', 'Browse'))
-            template1_frame.config(text=self.tr('tbatch_tpl1', 'Template1 File'))
-            btn_tpl1.config(text=self.tr('pandat_browse', 'Browse'))
             elements_frame.config(text=self.tr('tbatch_elem_cfg', 'Element Configuration'))
             elements_tree.heading("Element", text=self.tr('tbatch_tbl_element', 'Element'))
             elements_tree.heading("Min", text=self.tr('tbatch_tbl_min', 'Min'))
@@ -11572,11 +11731,54 @@ class ThermoQGUI:
         """Open Thermo-calc results extractor tool (Melting range + T-zero)."""
         processor_window = tk.Toplevel(self.root)
         processor_window.geometry("800x800")
+        processor_window.minsize(680, 520)
         self._present_tool_window(processor_window, self.root)
 
-        # Create main frame
-        main_frame = ttk.Frame(processor_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        bottom_bar = ttk.Frame(processor_window, padding=(10, 6))
+        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        main_frame = ttk.Frame(processor_window, padding="12")
+        main_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        _exptc_wheel_bindings = []
+
+        def _exptc_bind_mousewheel(canvas):
+            def _on_wheel(event):
+                try:
+                    if not processor_window.winfo_exists() or not canvas.winfo_exists():
+                        return
+                except tk.TclError:
+                    return
+                if platform.system() == "Windows":
+                    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                elif platform.system() == "Darwin":
+                    canvas.yview_scroll(int(-1 * event.delta), "units")
+                else:
+                    if event.num == 4:
+                        canvas.yview_scroll(-1, "units")
+                    elif event.num == 5:
+                        canvas.yview_scroll(1, "units")
+
+            def _bind(_event=None):
+                if platform.system() == "Linux":
+                    canvas.bind_all("<Button-4>", _on_wheel)
+                    canvas.bind_all("<Button-5>", _on_wheel)
+                else:
+                    canvas.bind_all("<MouseWheel>", _on_wheel)
+
+            def _unbind(_event=None):
+                try:
+                    if platform.system() == "Linux":
+                        canvas.unbind_all("<Button-4>")
+                        canvas.unbind_all("<Button-5>")
+                    else:
+                        canvas.unbind_all("<MouseWheel>")
+                except tk.TclError:
+                    pass
+
+            canvas.bind("<Enter>", _bind)
+            canvas.bind("<Leave>", _unbind)
+            _exptc_wheel_bindings.append(_unbind)
         
         # Title
         title_label = ttk.Label(
@@ -11584,34 +11786,183 @@ class ThermoQGUI:
             text=self.tr('exptc_heading', 'Extract Thermo-calc Results'),
             font=('Arial', 14, 'bold'),
         )
-        title_label.pack(pady=(0, 10))
+        title_label.pack(pady=(0, 4))
         
         info_label = ttk.Label(
             main_frame,
             text=self.tr('exptc_intro', ''),
-            wraplength=720,
-            justify="center",
+            wraplength=680,
+            justify="left",
         )
-        info_label.pack(pady=(0, 10))
+        info_label.pack(pady=(0, 6), anchor=tk.W)
 
         notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 10))
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
 
-        tab_mr = ttk.Frame(notebook, padding="10")
-        tab_lmg = ttk.Frame(notebook, padding="10")
-        tab_t0 = ttk.Frame(notebook, padding="10")
-        notebook.add(tab_mr, text=self.tr('exptc_tab_mr', 'Melting Range'))
-        notebook.add(tab_lmg, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
-        notebook.add(tab_t0, text=self.tr('exptc_tab_t0', 'T-zero'))
+        tab_mr_outer = ttk.Frame(notebook)
+        tab_lmg_outer = ttk.Frame(notebook)
+        tab_t0_outer = ttk.Frame(notebook)
+        notebook.add(tab_mr_outer, text=self.tr('exptc_tab_mr', 'Melting Range'))
+        notebook.add(tab_lmg_outer, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
+        notebook.add(tab_t0_outer, text=self.tr('exptc_tab_t0', 'T-zero'))
+
+        def _exptc_make_tab_scrollable(tab_outer):
+            canvas = tk.Canvas(tab_outer, highlightthickness=0, borderwidth=0)
+            sb = ttk.Scrollbar(tab_outer, orient=tk.VERTICAL, command=canvas.yview)
+            inner = ttk.Frame(canvas, padding="6")
+            cwin = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+            def _sync_tab_scroll(_event=None):
+                canvas.update_idletasks()
+                canvas.configure(scrollregion=canvas.bbox("all"))
+
+            def on_canvas_configure(event):
+                if event.width > 1:
+                    canvas.itemconfigure(cwin, width=event.width)
+                _sync_tab_scroll()
+
+            canvas.bind("<Configure>", on_canvas_configure)
+            inner.bind("<Configure>", _sync_tab_scroll)
+            canvas.configure(yscrollcommand=sb.set)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            sb.pack(side=tk.RIGHT, fill=tk.Y)
+            _exptc_bind_mousewheel(canvas)
+            return inner
+
+        tab_mr = _exptc_make_tab_scrollable(tab_mr_outer)
+        tab_lmg = _exptc_make_tab_scrollable(tab_lmg_outer)
+        tab_t0 = _exptc_make_tab_scrollable(tab_t0_outer)
+
+        exptc_state = {'mr_errors': [], 'lmg_errors': [], 't0_errors': []}
+        _exptc_txt_ft = (
+            (self.tr('filetype_text', 'Text files'), "*.txt"),
+            (self.tr('filetype_all', 'All files'), "*.*"),
+        )
+
+        def _exptc_append_error(errors_key, file_name, comp_cols=None, temperature_k=None):
+            rec = {'file': file_name}
+            if comp_cols:
+                rec.update(comp_cols)
+            if temperature_k is not None:
+                rec['Temperature_K'] = float(temperature_k)
+            exptc_state[errors_key].append(rec)
+
+        def _exptc_make_abnormal_tcm_section(parent, errors_key, log_fn):
+            tpl1_frame = ttk.LabelFrame(
+                parent,
+                text=self.tr('exptc_tpl1', 'Template1 File (Optional — TCM for abnormal point calculation)'),
+                padding="8",
+            )
+            tpl1_frame.pack(fill=tk.X, pady=4)
+
+            lbl_tpl1_hint = ttk.Label(
+                tpl1_frame,
+                text=self.tr('exptc_tpl1_hint', ''),
+                font=("Arial", 8),
+                foreground="gray",
+                wraplength=640,
+                justify=tk.LEFT,
+            )
+            lbl_tpl1_hint.pack(anchor=tk.W, padx=4, pady=(0, 4))
+
+            tpl1_row = ttk.Frame(tpl1_frame)
+            tpl1_row.pack(fill=tk.X, pady=(0, 4))
+            tpl1_var = tk.StringVar()
+            ttk.Entry(tpl1_row, textvariable=tpl1_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+
+            def browse_tpl1():
+                p = filedialog.askopenfilename(
+                    title=self.tr('exptc_fd_tpl1', 'Select Template1 reference file'),
+                    filetypes=_exptc_txt_ft,
+                )
+                if p:
+                    tpl1_var.set(p)
+
+            btn_tpl1_browse = ttk.Button(tpl1_row, text=self.tr('pandat_browse', 'Browse'), command=browse_tpl1)
+            btn_tpl1_browse.pack(side=tk.RIGHT, padx=5)
+
+            out_row = ttk.Frame(tpl1_frame)
+            out_row.pack(fill=tk.X, pady=(0, 4))
+            lbl_out_dir = ttk.Label(out_row, text=self.tr('exptc_abnormal_out_dir', 'Abnormal-point TCM output folder') + ':')
+            lbl_out_dir.pack(side=tk.LEFT, padx=4)
+            abnormal_out_var = tk.StringVar()
+            ttk.Entry(out_row, textvariable=abnormal_out_var, width=40).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+
+            def browse_abnormal_out():
+                p = filedialog.askdirectory(title=self.tr('exptc_fd_abnormal_out', 'Select folder for abnormal-point TCM files'))
+                if p:
+                    abnormal_out_var.set(p)
+
+            btn_abnormal_out = ttk.Button(out_row, text=self.tr('pandat_browse', 'Browse'), command=browse_abnormal_out)
+            btn_abnormal_out.pack(side=tk.RIGHT, padx=5)
+
+            def generate_abnormal_tcm():
+                records = exptc_state[errors_key]
+                if not records:
+                    messagebox.showwarning(
+                        self.tr('dlg_warning', 'Warning'),
+                        self.tr('exptc_abnormal_no_errors', 'No error records in status. Process files first.'),
+                    )
+                    return
+                tpl_path = tpl1_var.get().strip()
+                if not tpl_path or not os.path.isfile(tpl_path):
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exptc_abnormal_need_tpl1', 'Please select a valid Template1 reference file.'),
+                    )
+                    return
+                out_dir = abnormal_out_var.get().strip()
+                if not out_dir:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exptc_abnormal_need_out', 'Please select an output folder for TCM files.'),
+                    )
+                    return
+                try:
+                    n_written, paths = _exptc_generate_abnormal_tcm_files(tpl_path, out_dir, records)
+                    log_fn(
+                        self.tr('exptc_abnormal_log', 'Generated {n} abnormal-point TCM file(s) in {dir}').format(
+                            n=n_written, dir=out_dir,
+                        )
+                    )
+                    for p in paths:
+                        log_fn(f"  {os.path.basename(p)}")
+                    messagebox.showinfo(
+                        self.tr('dlg_success', 'Success'),
+                        self.tr('exptc_abnormal_done', 'Generated {n} abnormal-point TCM file(s) in:\n{dir}').format(
+                            n=n_written, dir=out_dir,
+                        ),
+                    )
+                except Exception as e:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exptc_abnormal_fail', 'Failed to generate abnormal-point TCM files:\n{e}').format(e=str(e)),
+                    )
+
+            btn_gen_abnormal = ttk.Button(
+                tpl1_frame,
+                text=self.tr('exptc_gen_abnormal_tcm', 'Generate abnormal-point TCM files'),
+                command=generate_abnormal_tcm,
+            )
+            btn_gen_abnormal.pack(anchor=tk.W, padx=4, pady=(2, 0))
+
+            return {
+                'tpl1_frame': tpl1_frame,
+                'lbl_tpl1_hint': lbl_tpl1_hint,
+                'btn_tpl1_browse': btn_tpl1_browse,
+                'lbl_out_dir': lbl_out_dir,
+                'btn_abnormal_out': btn_abnormal_out,
+                'btn_gen_abnormal': btn_gen_abnormal,
+            }
 
         # -----------------------------
         # Tab 1: Melting range (legacy)
         # -----------------------------
-        mr_folder_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_mr_folder', 'Select Folder Containing .exp Files'), padding="12")
-        mr_folder_frame.pack(fill=tk.X, pady=8)
+        mr_folder_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_mr_folder', 'Select Folder Containing .exp Files'), padding="8")
+        mr_folder_frame.pack(fill=tk.X, pady=4)
 
         mr_folder_var = tk.StringVar()
-        ttk.Entry(mr_folder_frame, textvariable=mr_folder_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(mr_folder_frame, textvariable=mr_folder_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_mr_folder():
             p = filedialog.askdirectory(title=self.tr('exptc_fd_mr_folder', 'Select Folder with .exp Files'))
@@ -11625,8 +11976,8 @@ class ThermoQGUI:
         )
         btn_exptc_mr_fd.pack(side=tk.RIGHT, padx=5)
 
-        mr_pattern_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_mr_pattern', 'Filename Filter (Optional)'), padding="12")
-        mr_pattern_frame.pack(fill=tk.X, pady=8)
+        mr_pattern_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_mr_pattern', 'Filename Filter (Optional)'), padding="8")
+        mr_pattern_frame.pack(fill=tk.X, pady=4)
 
         lbl_exptc_mr_pat = ttk.Label(mr_pattern_frame, text=self.tr('exptc_mr_pattern_lbl', 'Regex:'))
         lbl_exptc_mr_pat.pack(side=tk.LEFT, padx=5)
@@ -11640,11 +11991,11 @@ class ThermoQGUI:
         )
         lbl_exptc_mr_hint.pack(side=tk.LEFT, padx=5)
 
-        mr_output_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="12")
-        mr_output_frame.pack(fill=tk.X, pady=8)
+        mr_output_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="8")
+        mr_output_frame.pack(fill=tk.X, pady=4)
 
         mr_output_var = tk.StringVar(value="melting_range.xlsx")
-        ttk.Entry(mr_output_frame, textvariable=mr_output_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(mr_output_frame, textvariable=mr_output_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_mr_out():
             p = filedialog.asksaveasfilename(
@@ -11665,13 +12016,9 @@ class ThermoQGUI:
         )
         btn_exptc_mr_out.pack(side=tk.RIGHT, padx=5)
 
-        mr_status_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_status', 'Status'), padding="10")
-        mr_status_frame.pack(fill=tk.BOTH, expand=True, pady=8)
-
-        mr_status_text = tk.Text(mr_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
-        mr_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        mr_status_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_status', 'Status'), padding="6")
+        mr_status_text = tk.Text(mr_status_frame, height=5, width=52, wrap=tk.WORD, state=tk.DISABLED)
         mr_status_scrollbar = ttk.Scrollbar(mr_status_frame, orient=tk.VERTICAL, command=mr_status_text.yview)
-        mr_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         mr_status_text.configure(yscrollcommand=mr_status_scrollbar.set)
 
         def mr_log(message):
@@ -11680,6 +12027,12 @@ class ThermoQGUI:
             mr_status_text.see(tk.END)
             mr_status_text.config(state=tk.DISABLED)
             processor_window.update()
+
+        mr_abnormal_ui = _exptc_make_abnormal_tcm_section(tab_mr, 'mr_errors', mr_log)
+
+        mr_status_frame.pack(fill=tk.X, pady=4)
+        mr_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        mr_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         def mr_snap_near_zero(v, eps=1e-7):
             """Treat tiny float noise (e.g. 4e-8) as 0 in Excel output."""
@@ -11770,6 +12123,7 @@ class ThermoQGUI:
                 mr_status_text.config(state=tk.NORMAL)
                 mr_status_text.delete("1.0", tk.END)
                 mr_status_text.config(state=tk.DISABLED)
+                exptc_state['mr_errors'] = []
 
                 mr_log(f"Processing folder: {folder_path}")
                 mr_log(f"Output file: {output_file}")
@@ -11819,12 +12173,14 @@ class ThermoQGUI:
                     data = mr_extract_data_from_exp_file(file_path)
                     if data is None or data.empty:
                         mr_log("  Error: Could not extract data from file")
+                        _exptc_append_error('mr_errors', file_name, comp_cols=comp_cols)
                         error_count += 1
                         continue
 
                     temp_liq_1, temp_liq_0 = mr_find_temperatures(data)
                     if temp_liq_1 is None or temp_liq_0 is None or np.isnan(temp_liq_1) or np.isnan(temp_liq_0):
                         mr_log("  Error: Could not find liquidus or solidus temperature")
+                        _exptc_append_error('mr_errors', file_name, comp_cols=comp_cols)
                         error_count += 1
                         continue
 
@@ -11878,7 +12234,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
         mr_buttons = ttk.Frame(tab_mr)
-        mr_buttons.pack(pady=10)
+        mr_buttons.pack(pady=4)
         btn_exptc_mr_proc = ttk.Button(
             mr_buttons,
             text=self.tr('exptc_process', 'Process Files'),
@@ -11892,12 +12248,12 @@ class ThermoQGUI:
         lmg_folder_frame = ttk.LabelFrame(
             tab_lmg,
             text=self.tr('exptc_lmg_folder', 'Select Folder Containing .exp Files (one temperature per file)'),
-            padding="12",
+            padding="8",
         )
-        lmg_folder_frame.pack(fill=tk.X, pady=8)
+        lmg_folder_frame.pack(fill=tk.X, pady=4)
 
         lmg_folder_var = tk.StringVar()
-        ttk.Entry(lmg_folder_frame, textvariable=lmg_folder_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(lmg_folder_frame, textvariable=lmg_folder_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_lmg_folder():
             p = filedialog.askdirectory(title=self.tr('exptc_fd_lmg_folder', 'Select Folder with miscibility gap .exp Files'))
@@ -11911,8 +12267,8 @@ class ThermoQGUI:
         )
         btn_exptc_lmg_fd.pack(side=tk.RIGHT, padx=5)
 
-        lmg_filter_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_lmg_filter', 'Filename Filter (Optional)'), padding="12")
-        lmg_filter_frame.pack(fill=tk.X, pady=8)
+        lmg_filter_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_lmg_filter', 'Filename Filter (Optional)'), padding="8")
+        lmg_filter_frame.pack(fill=tk.X, pady=4)
         lbl_exptc_lmg_rx = ttk.Label(lmg_filter_frame, text=self.tr('exptc_t0_regex_lbl', 'Regex:'))
         lbl_exptc_lmg_rx.pack(side=tk.LEFT, padx=5)
         lmg_filter_var = tk.StringVar(value=self.tr('exptc_lmg_filter_default', EXPTC_LMG_FILTER_DEFAULT))
@@ -11925,11 +12281,11 @@ class ThermoQGUI:
         )
         lbl_exptc_lmg_hint.pack(side=tk.LEFT, padx=5)
 
-        lmg_output_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="12")
-        lmg_output_frame.pack(fill=tk.X, pady=8)
+        lmg_output_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="8")
+        lmg_output_frame.pack(fill=tk.X, pady=4)
 
         lmg_output_var = tk.StringVar(value="miscibility_gap.xlsx")
-        ttk.Entry(lmg_output_frame, textvariable=lmg_output_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(lmg_output_frame, textvariable=lmg_output_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_lmg_out():
             p = filedialog.asksaveasfilename(
@@ -11950,13 +12306,9 @@ class ThermoQGUI:
         )
         btn_exptc_lmg_out.pack(side=tk.RIGHT, padx=5)
 
-        lmg_status_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_status', 'Status'), padding="10")
-        lmg_status_frame.pack(fill=tk.BOTH, expand=True, pady=8)
-
-        lmg_status_text = tk.Text(lmg_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
-        lmg_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        lmg_status_frame = ttk.LabelFrame(tab_lmg, text=self.tr('exptc_status', 'Status'), padding="6")
+        lmg_status_text = tk.Text(lmg_status_frame, height=5, width=52, wrap=tk.WORD, state=tk.DISABLED)
         lmg_status_scrollbar = ttk.Scrollbar(lmg_status_frame, orient=tk.VERTICAL, command=lmg_status_text.yview)
-        lmg_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         lmg_status_text.configure(yscrollcommand=lmg_status_scrollbar.set)
 
         def lmg_log(message):
@@ -11965,6 +12317,12 @@ class ThermoQGUI:
             lmg_status_text.see(tk.END)
             lmg_status_text.config(state=tk.DISABLED)
             processor_window.update()
+
+        lmg_abnormal_ui = _exptc_make_abnormal_tcm_section(tab_lmg, 'lmg_errors', lmg_log)
+
+        lmg_status_frame.pack(fill=tk.X, pady=4)
+        lmg_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        lmg_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         def lmg_process_files():
             try:
@@ -11982,6 +12340,7 @@ class ThermoQGUI:
                 lmg_status_text.config(state=tk.NORMAL)
                 lmg_status_text.delete("1.0", tk.END)
                 lmg_status_text.config(state=tk.DISABLED)
+                exptc_state['lmg_errors'] = []
 
                 lmg_log(f"Processing folder: {folder_path}")
                 lmg_log(f"Output file: {output_file}")
@@ -12019,16 +12378,19 @@ class ThermoQGUI:
                     temp_k = _lmg_parse_temperature_from_filename(file_name)
                     if temp_k is None:
                         lmg_log(self.tr('exptc_lmg_no_temp', 'Could not parse temperature from filename: {name}').format(name=file_name))
+                        _exptc_append_error('lmg_errors', file_name)
                         errors += 1
                         continue
 
                     x_col, y_col, pts = _lmg_extract_boundary_points_from_exp(file_path)
                     if not x_col or not y_col:
                         lmg_log(self.tr('exptc_lmg_no_axes', 'Could not find XTEXT/YTEXT axis labels in: {name}').format(name=file_name))
+                        _exptc_append_error('lmg_errors', file_name, temperature_k=temp_k)
                         errors += 1
                         continue
                     if not pts:
                         lmg_log(self.tr('exptc_lmg_no_points', 'No boundary points found in: {name}').format(name=file_name))
+                        _exptc_append_error('lmg_errors', file_name, temperature_k=temp_k)
                         errors += 1
                         continue
 
@@ -12093,7 +12455,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
         lmg_buttons = ttk.Frame(tab_lmg)
-        lmg_buttons.pack(pady=10)
+        lmg_buttons.pack(pady=4)
         btn_exptc_lmg_proc = ttk.Button(
             lmg_buttons,
             text=self.tr('exptc_process', 'Process Files'),
@@ -12104,11 +12466,11 @@ class ThermoQGUI:
         # -----------------------------
         # Tab 2: T-zero extraction
         # -----------------------------
-        t0_folder_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_t0_folder', 'Select Folder Containing *_T0.exp Files'), padding="12")
-        t0_folder_frame.pack(fill=tk.X, pady=8)
+        t0_folder_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_t0_folder', 'Select Folder Containing *_T0.exp Files'), padding="8")
+        t0_folder_frame.pack(fill=tk.X, pady=4)
 
         t0_folder_var = tk.StringVar()
-        ttk.Entry(t0_folder_frame, textvariable=t0_folder_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(t0_folder_frame, textvariable=t0_folder_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_t0_folder():
             p = filedialog.askdirectory(title=self.tr('exptc_fd_t0_folder', 'Select Folder with *_T0.exp Files'))
@@ -12122,8 +12484,8 @@ class ThermoQGUI:
         )
         btn_exptc_t0_fd.pack(side=tk.RIGHT, padx=5)
 
-        t0_filter_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_t0_filter', 'Filename Filter (Optional)'), padding="12")
-        t0_filter_frame.pack(fill=tk.X, pady=8)
+        t0_filter_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_t0_filter', 'Filename Filter (Optional)'), padding="8")
+        t0_filter_frame.pack(fill=tk.X, pady=4)
         lbl_exptc_t0_rx = ttk.Label(t0_filter_frame, text=self.tr('exptc_t0_regex_lbl', 'Regex:'))
         lbl_exptc_t0_rx.pack(side=tk.LEFT, padx=5)
         t0_filter_var = tk.StringVar(value=r".*_T0\.exp$")
@@ -12136,11 +12498,11 @@ class ThermoQGUI:
         )
         lbl_exptc_t0_hint.pack(side=tk.LEFT, padx=5)
 
-        t0_output_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="12")
-        t0_output_frame.pack(fill=tk.X, pady=8)
+        t0_output_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_output_xlsx', 'Output Excel File'), padding="8")
+        t0_output_frame.pack(fill=tk.X, pady=4)
 
         t0_output_var = tk.StringVar(value="t_zero.xlsx")
-        ttk.Entry(t0_output_frame, textvariable=t0_output_var, width=70).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Entry(t0_output_frame, textvariable=t0_output_var, width=52).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         def browse_exptc_t0_out():
             p = filedialog.asksaveasfilename(
@@ -12161,13 +12523,9 @@ class ThermoQGUI:
         )
         btn_exptc_t0_out.pack(side=tk.RIGHT, padx=5)
 
-        t0_status_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_status', 'Status'), padding="10")
-        t0_status_frame.pack(fill=tk.BOTH, expand=True, pady=8)
-
-        t0_status_text = tk.Text(t0_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
-        t0_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        t0_status_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_status', 'Status'), padding="6")
+        t0_status_text = tk.Text(t0_status_frame, height=5, width=52, wrap=tk.WORD, state=tk.DISABLED)
         t0_status_scrollbar = ttk.Scrollbar(t0_status_frame, orient=tk.VERTICAL, command=t0_status_text.yview)
-        t0_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         t0_status_text.configure(yscrollcommand=t0_status_scrollbar.set)
 
         def t0_log(message):
@@ -12176,6 +12534,12 @@ class ThermoQGUI:
             t0_status_text.see(tk.END)
             t0_status_text.config(state=tk.DISABLED)
             processor_window.update()
+
+        t0_abnormal_ui = _exptc_make_abnormal_tcm_section(tab_t0, 't0_errors', t0_log)
+
+        t0_status_frame.pack(fill=tk.X, pady=4)
+        t0_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        t0_status_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         def t0_snap_near_zero_mass_fraction(v, eps=1e-7):
             """Mass fractions: treat tiny float noise (e.g. 5e-9) as 0 for Excel output."""
@@ -12263,6 +12627,7 @@ class ThermoQGUI:
                 t0_status_text.config(state=tk.NORMAL)
                 t0_status_text.delete("1.0", tk.END)
                 t0_status_text.config(state=tk.DISABLED)
+                exptc_state['t0_errors'] = []
 
                 t0_log(f"Processing folder: {folder_path}")
                 t0_log(f"Output file: {output_file}")
@@ -12296,12 +12661,14 @@ class ThermoQGUI:
                     p_el, p_val = t0_parse_filename_param(file_name)
                     if p_el is None:
                         t0_log(f"Skipping (cannot parse filename param): {file_name}")
+                        _exptc_append_error('t0_errors', file_name)
                         errors += 1
                         continue
 
                     x_el, rows = t0_extract_xy_from_exp(file_path)
                     if not x_el or not rows:
                         t0_log(f"Skipping (cannot parse exp data): {file_name}")
+                        _exptc_append_error('t0_errors', file_name, comp_cols={f'w({p_el})': p_val})
                         errors += 1
                         continue
 
@@ -12372,7 +12739,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
         t0_buttons = ttk.Frame(tab_t0)
-        t0_buttons.pack(pady=10)
+        t0_buttons.pack(pady=4)
         btn_exptc_t0_proc = ttk.Button(
             t0_buttons,
             text=self.tr('exptc_process', 'Process Files'),
@@ -12380,16 +12747,25 @@ class ThermoQGUI:
         )
         btn_exptc_t0_proc.pack(side=tk.LEFT, padx=10)
 
-        # Bottom buttons (shared)
-        bottom_buttons = ttk.Frame(main_frame)
-        bottom_buttons.pack(pady=5)
+        def _exptc_update_wrap(_event=None):
+            w = main_frame.winfo_width()
+            if w > 80:
+                wl = max(360, w - 24)
+                info_label.configure(wraplength=wl)
+                hint_wl = max(320, w - 48)
+                for ui in (mr_abnormal_ui, lmg_abnormal_ui, t0_abnormal_ui):
+                    ui['lbl_tpl1_hint'].configure(wraplength=hint_wl)
+
+        main_frame.bind("<Configure>", _exptc_update_wrap)
 
         def _close_exptc():
+            for unbind in _exptc_wheel_bindings:
+                unbind()
             self._unregister_tool_lang_refresh(_refresh_exptc_lang)
             processor_window.destroy()
 
         btn_exptc_close = ttk.Button(
-            bottom_buttons,
+            bottom_bar,
             text=self.tr('extp_close', 'Close'),
             command=_close_exptc,
         )
@@ -12417,6 +12793,18 @@ class ThermoQGUI:
             lbl_exptc_mr_hint.config(text=self.tr('exptc_mr_pattern_hint', ''))
             mr_output_frame.config(text=self.tr('exptc_output_xlsx', 'Output Excel File'))
             btn_exptc_mr_out.config(text=self.tr('pandat_browse', 'Browse'))
+            mr_abnormal_ui['tpl1_frame'].config(
+                text=self.tr('exptc_tpl1', 'Template1 File (Optional — TCM for abnormal point calculation)'),
+            )
+            mr_abnormal_ui['lbl_tpl1_hint'].config(text=self.tr('exptc_tpl1_hint', ''))
+            mr_abnormal_ui['btn_tpl1_browse'].config(text=self.tr('pandat_browse', 'Browse'))
+            mr_abnormal_ui['lbl_out_dir'].config(
+                text=self.tr('exptc_abnormal_out_dir', 'Abnormal-point TCM output folder') + ':',
+            )
+            mr_abnormal_ui['btn_abnormal_out'].config(text=self.tr('pandat_browse', 'Browse'))
+            mr_abnormal_ui['btn_gen_abnormal'].config(
+                text=self.tr('exptc_gen_abnormal_tcm', 'Generate abnormal-point TCM files'),
+            )
             mr_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_mr_proc.config(text=self.tr('exptc_process', 'Process Files'))
             lmg_folder_frame.config(text=self.tr('exptc_lmg_folder', 'Select Folder Containing .exp Files (one temperature per file)'))
@@ -12426,6 +12814,18 @@ class ThermoQGUI:
             lbl_exptc_lmg_hint.config(text=self.tr('exptc_lmg_filter_hint', ''))
             lmg_output_frame.config(text=self.tr('exptc_output_xlsx', 'Output Excel File'))
             btn_exptc_lmg_out.config(text=self.tr('pandat_browse', 'Browse'))
+            lmg_abnormal_ui['tpl1_frame'].config(
+                text=self.tr('exptc_tpl1', 'Template1 File (Optional — TCM for abnormal point calculation)'),
+            )
+            lmg_abnormal_ui['lbl_tpl1_hint'].config(text=self.tr('exptc_tpl1_hint', ''))
+            lmg_abnormal_ui['btn_tpl1_browse'].config(text=self.tr('pandat_browse', 'Browse'))
+            lmg_abnormal_ui['lbl_out_dir'].config(
+                text=self.tr('exptc_abnormal_out_dir', 'Abnormal-point TCM output folder') + ':',
+            )
+            lmg_abnormal_ui['btn_abnormal_out'].config(text=self.tr('pandat_browse', 'Browse'))
+            lmg_abnormal_ui['btn_gen_abnormal'].config(
+                text=self.tr('exptc_gen_abnormal_tcm', 'Generate abnormal-point TCM files'),
+            )
             lmg_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_lmg_proc.config(text=self.tr('exptc_process', 'Process Files'))
             t0_folder_frame.config(text=self.tr('exptc_t0_folder', 'Select Folder Containing *_T0.exp Files'))
@@ -12435,6 +12835,18 @@ class ThermoQGUI:
             lbl_exptc_t0_hint.config(text=self.tr('exptc_t0_filter_hint', 'Only matching filenames will be processed.'))
             t0_output_frame.config(text=self.tr('exptc_output_xlsx', 'Output Excel File'))
             btn_exptc_t0_out.config(text=self.tr('pandat_browse', 'Browse'))
+            t0_abnormal_ui['tpl1_frame'].config(
+                text=self.tr('exptc_tpl1', 'Template1 File (Optional — TCM for abnormal point calculation)'),
+            )
+            t0_abnormal_ui['lbl_tpl1_hint'].config(text=self.tr('exptc_tpl1_hint', ''))
+            t0_abnormal_ui['btn_tpl1_browse'].config(text=self.tr('pandat_browse', 'Browse'))
+            t0_abnormal_ui['lbl_out_dir'].config(
+                text=self.tr('exptc_abnormal_out_dir', 'Abnormal-point TCM output folder') + ':',
+            )
+            t0_abnormal_ui['btn_abnormal_out'].config(text=self.tr('pandat_browse', 'Browse'))
+            t0_abnormal_ui['btn_gen_abnormal'].config(
+                text=self.tr('exptc_gen_abnormal_tcm', 'Generate abnormal-point TCM files'),
+            )
             t0_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_t0_proc.config(text=self.tr('exptc_process', 'Process Files'))
             btn_exptc_close.config(text=self.tr('extp_close', 'Close'))

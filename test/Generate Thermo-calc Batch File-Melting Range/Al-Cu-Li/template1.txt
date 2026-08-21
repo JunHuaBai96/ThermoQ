@@ -1,0 +1,25 @@
+go da
+sw u
+
+d-sys al cu li
+l-s c
+get
+
+go p-3
+s-c t=500,p=101325,n=1
+s-c w(cu)=%Cu%
+s-c w(li)=%Li%
+l-c
+c-e
+
+s-a-v 1 t 300 1000 12.5
+save_workspace Al%Cu%Cu%Li%Li_np-T.POL y
+step normal
+
+post
+
+s-d-a x t
+s-d-a y np(liquid)
+
+make file Al%Cu%Cu%Li%Li_np-T.exp
+
