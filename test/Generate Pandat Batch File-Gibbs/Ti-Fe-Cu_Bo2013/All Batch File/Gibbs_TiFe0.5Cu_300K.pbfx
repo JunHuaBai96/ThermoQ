@@ -3,7 +3,7 @@
     <!-- this file defines the syntax for a batch calculation -->
     <Application name="Pandat" version="2025" />
   </Header>
-  <calculation name="Gibbs_TIFE0.5CU_300K" type="line" duration=" " original_batch_name="" id=" ">
+  <calculation name="Gibbs_TIFE0.5CU_300K" type="line" duration=" " original_batch_name="" id="0">
     <databases>
       <database type="tdb" file_name="Ti-Fe-Cu_Bo2013.TDB" />
     </databases>
@@ -28,9 +28,9 @@
           <statespace>
             <T value="300" />
             <P value="1" />
-            <n component="TI" value="100" />
+            <n component="TI" value="99.5" />
             <n component="FE" value="0" />
-            <n component="CU" value="0" />
+            <n component="CU" value="0.5" />
           </statespace>
         </point>
         <point>

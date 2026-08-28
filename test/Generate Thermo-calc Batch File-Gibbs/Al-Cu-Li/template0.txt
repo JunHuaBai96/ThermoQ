@@ -1,0 +1,25 @@
+go da
+sw u
+d-sys
+al cu li
+rej ph *
+res ph LIQUID:L FCC_A1
+get
+go  p-3
+s-c n=1 p=101325 t=700 w(CU)=0.01 w(LI)=0.00
+l-c
+C-E
+S-A-V 1
+w(Cu)
+0
+0.2
+0.005
+save AlCu-0.00Li_T0.POL y
+step
+t-z
+FCC_A1
+liquid
+po
+s-d-a x w(CU) 
+s-d-a y t-k
+make file AlCu-0.00Li_T0.exp

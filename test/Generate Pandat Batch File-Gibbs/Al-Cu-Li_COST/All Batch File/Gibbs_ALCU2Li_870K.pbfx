@@ -28,9 +28,9 @@
           <statespace>
             <T value="870" />
             <P value="1" />
-            <n component="AL" value="100" />
+            <n component="AL" value="98" />
             <n component="CU" value="0" />
-            <n component="LI" value="0" />
+            <n component="LI" value="2" />
           </statespace>
         </point>
         <point>

@@ -13,6 +13,79 @@ import platform
 from decimal import Decimal
 from periodic_table import PERIODIC_TABLE
 
+_PERIODIC_UPPER = {k.upper(): k for k in PERIODIC_TABLE.keys()}
+
+
+def canonical_element_symbol(symbol):
+    """Return PERIODIC_TABLE-style element symbol (e.g. Cu, Mg, Li)."""
+    if symbol is None:
+        return ''
+    s = str(symbol).strip()
+    if not s:
+        return ''
+    canon = _PERIODIC_UPPER.get(s.upper())
+    if canon:
+        return canon
+    return s[0].upper() + s[1:].lower() if len(s) > 1 else s.upper()
+
+
+def format_w_element_label(element, suffix=''):
+    """Display label for weight fraction axis, e.g. w(Cu) or w(Cu) (%)."""
+    return f"w({canonical_element_symbol(element)}){suffix}"
+
+
+def w_column_name(element, phase=None):
+    """Canonical w(*) column name for DataFrames."""
+    el = canonical_element_symbol(element)
+    if phase:
+        return f"w({el}@{phase})"
+    return f"w({el})"
+
+
+def format_chemistry_axis_label(label):
+    """Format column/axis text so element symbols use canonical casing."""
+    if not isinstance(label, str):
+        return label
+    s = label.strip()
+    m = re.match(r'^(w)\(([^)]+)\)(.*)$', s, re.IGNORECASE)
+    if m:
+        inner, suffix = m.group(2), m.group(3)
+        if '@' in inner:
+            el, phase = inner.split('@', 1)
+            return f"w({canonical_element_symbol(el)}@{phase}){suffix}"
+        return f"w({canonical_element_symbol(inner)}){suffix}"
+    m = re.match(r'^(1/)?(dwdT_L)\(([^)]+)\)(.*)$', s, re.IGNORECASE)
+    if m:
+        inv_prefix, inner, suffix = (m.group(1) or ''), m.group(3), m.group(4)
+        if '@' in inner:
+            el, phase = inner.split('@', 1)
+            return f"{inv_prefix}dwdT_L({canonical_element_symbol(el)}@{phase}){suffix}"
+        return f"{inv_prefix}dwdT_L({canonical_element_symbol(inner)}){suffix}"
+    m = re.match(
+        r'^(MOLE_PERCENT|ATOMIC_PERCENT|MASS_PERCENT|WEIGHT_PERCENT)_([A-Za-z0-9]+)(.*)$',
+        s, re.IGNORECASE,
+    )
+    if m:
+        prefix, el, suffix = m.group(1).upper(), m.group(2), m.group(3)
+        return f"{prefix}_{canonical_element_symbol(el)}{suffix}"
+    if re.fullmatch(r'[A-Za-z]{1,3}', s):
+        return canonical_element_symbol(s)
+    return s
+
+
+def standardize_dataframe_element_columns(df):
+    """Rename w(*)/dwdT_L(*) columns to canonical element symbol casing."""
+    if df is None or getattr(df, 'empty', True):
+        return df
+    mapping = {}
+    for col in df.columns:
+        new_col = format_chemistry_axis_label(col)
+        if new_col != col:
+            mapping[col] = new_col
+    if mapping:
+        df = df.rename(columns=mapping)
+    return df
+
 # Longest symbol first (e.g. match "Cl" before "C") when tokenizing concatenated element runs.
 _PBFX_ELEM_SYMS_BY_LEN = sorted(PERIODIC_TABLE.keys(), key=lambda s: (-len(s), s))
 
@@ -445,6 +518,60 @@ def _lmg_contour_segments(x_lin, y_lin, z2d, levels):
     return out
 
 
+def _extp_trist_boundary_xyz(dfp, a_col, b_col):
+    """Extract (x, y, T) arrays from TriST boundary / T0 line points."""
+    ax = pd.to_numeric(dfp[a_col], errors='coerce')
+    by = pd.to_numeric(dfp[b_col], errors='coerce')
+    bt = pd.to_numeric(dfp.get('T (K)', np.nan), errors='coerce')
+    m = ax.notna() & by.notna() & bt.notna()
+    if not m.any():
+        return (
+            np.empty(0, dtype=np.float64),
+            np.empty(0, dtype=np.float64),
+            np.empty(0, dtype=np.float64),
+        )
+    return (
+        ax.loc[m].to_numpy(dtype=np.float64),
+        by.loc[m].to_numpy(dtype=np.float64),
+        bt.loc[m].to_numpy(dtype=np.float64),
+    )
+
+
+def _extp_trist_draw_iso_3d_mpl(ax, xi, yi, zi, levels, line_color='#2c3e50', text_color='#1a252f', mid_frac=0.5, level_fmt='.0f'):
+    """Draw labeled isocontours on a 3D Matplotlib surface."""
+    for lvl, seg in _lmg_contour_segments(xi, yi, zi, levels):
+        if seg is None or len(seg) < 2:
+            continue
+        ax.plot(seg[:, 0], seg[:, 1], np.full(len(seg), lvl, dtype=np.float64), color=line_color, linewidth=1.0)
+        mid = int(max(0, min(len(seg) - 1, round((len(seg) - 1) * mid_frac))))
+        ax.text(
+            seg[mid, 0], seg[mid, 1], float(lvl), f'{lvl:{level_fmt}}',
+            color=text_color, fontsize=8, fontweight='bold',
+            ha='center', va='center',
+            bbox=dict(boxstyle='round,pad=0.15', fc='white', alpha=0.78, edgecolor='none'),
+        )
+
+
+def _extp_trist_plotly_iso_traces(traces, lvl, seg, line_color, text_color, mid_frac=0.5, level_fmt='.0f'):
+    """Append Plotly 3D isocontour line + value label traces."""
+    if not PLOTLY_AVAILABLE or seg is None or len(seg) < 2:
+        return
+    traces.append(
+        go.Scatter3d(
+            x=seg[:, 0], y=seg[:, 1], z=np.full(len(seg), lvl, dtype=float),
+            mode='lines', line=dict(color=line_color, width=3), showlegend=False,
+        )
+    )
+    mid = int(max(0, min(len(seg) - 1, round((len(seg) - 1) * mid_frac))))
+    traces.append(
+        go.Scatter3d(
+            x=[float(seg[mid, 0])], y=[float(seg[mid, 1])], z=[float(lvl)],
+            mode='text', text=[f'{lvl:{level_fmt}}'],
+            textfont=dict(color=text_color, size=11), showlegend=False,
+        )
+    )
+
+
 def _pbfx_ordered_element_placeholders(content):
     """Element symbols (e.g. 'Li') in first-occurrence order from %[A-Za-z]%+ tokens."""
     order = []
@@ -568,12 +695,7 @@ def _pbfx_parse_temperature_unit_token(content):
 
 
 def _tcm_normalize_element_symbol(symbol):
-    if not symbol:
-        return ''
-    s = str(symbol).strip()
-    if not s:
-        return ''
-    return s[0].upper() + s[1:].lower() if len(s) > 1 else s.upper()
+    return canonical_element_symbol(symbol)
 
 
 _TCM_SC_LINE_RE = re.compile(r'^\s*s-c\s+(.*)$', re.IGNORECASE)
@@ -1055,15 +1177,17 @@ def _extp_trist_filled_f_for_rgi(f_arr):
     return a
 
 
-def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32):
+def _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube):
     """
-    Plotly go.Isosurface for f=0, with cubic/linear regular-grid interpolation in (T, y, x).
-    Scene axes: x = composition X, y = composition Y, z = T (K).
+    Interpolate saved f(C0) cube onto a dense (T, y, x) grid.
+    Returns (Tq, y_lin, x_lin, Vt, V_plot) where Vt is (nt, ny, nx) and V_plot is (nx, ny, nt) for Plotly.
     """
-    if not PLOTLY_AVAILABLE or not SCIPY_AVAILABLE:
+    if not SCIPY_AVAILABLE:
         return None
     T1 = np.asarray(T_vals, dtype=np.float64).ravel()
-    if T1.size < 2:
+    y_lin = np.asarray(y_lin, dtype=np.float64).ravel()
+    x_lin = np.asarray(x_lin, dtype=np.float64).ravel()
+    if T1.size < 2 or y_lin.size < 2 or x_lin.size < 2:
         return None
     order = np.argsort(T1, kind="mergesort")
     T1 = T1[order]
@@ -1084,8 +1208,358 @@ def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32
     T3, Y3, X3 = np.meshgrid(Tq, y_lin, x_lin, indexing="ij")
     pts = np.stack((T3, Y3, X3), -1)
     Vt = rgi(pts)
-    # Plotly Isosurface: value first dim = x, second = y, third = z (for x,y,z 1D coords)
     V_plot = np.transpose(Vt, (2, 1, 0)).astype(np.float64)
+    return Tq, y_lin, x_lin, Vt, V_plot
+
+
+def _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """Slice the saved f(C0) cube to user XY/T bounds."""
+    T_vals = np.asarray(T_vals, dtype=np.float64).ravel()
+    y_lin = np.asarray(y_lin, dtype=np.float64).ravel()
+    x_lin = np.asarray(x_lin, dtype=np.float64).ravel()
+    f_cube = np.asarray(f_cube, dtype=np.float64)
+    if f_cube.ndim != 3:
+        return None
+    t_mask = np.ones(T_vals.shape, dtype=bool)
+    y_mask = np.ones(y_lin.shape, dtype=bool)
+    x_mask = np.ones(x_lin.shape, dtype=bool)
+    if tmin is not None and str(tmin).strip() != "" and np.isfinite(float(tmin)):
+        t_mask &= T_vals >= float(tmin)
+    if tmax is not None and str(tmax).strip() != "" and np.isfinite(float(tmax)):
+        t_mask &= T_vals <= float(tmax)
+    if px0 is not None and np.isfinite(float(px0)):
+        x_mask &= x_lin >= float(px0)
+    if px1 is not None and np.isfinite(float(px1)):
+        x_mask &= x_lin <= float(px1)
+    if py0 is not None and np.isfinite(float(py0)):
+        y_mask &= y_lin >= float(py0)
+    if py1 is not None and np.isfinite(float(py1)):
+        y_mask &= y_lin <= float(py1)
+    if t_mask.sum() < 2 or y_mask.sum() < 2 or x_mask.sum() < 2:
+        return None
+    f2 = f_cube[np.ix_(t_mask, y_mask, x_mask)]
+    return T_vals[t_mask], y_lin[y_mask], x_lin[x_mask], f2
+
+
+def _extp_trist_f_for_viz_volume(V_plot):
+    """Mask f grid for Plotly Volume: only finite f <= 0 kept."""
+    V = np.asarray(V_plot, dtype=np.float64).copy()
+    V[~np.isfinite(V)] = np.nan
+    V[V > 0.0] = np.nan
+    return V
+
+
+def _extp_trist_filter_df_xy(df, a_col, b_col, px0, px1, py0, py1):
+    if df is None or df.empty or a_col not in df.columns or b_col not in df.columns:
+        return df
+    out = df.copy()
+    av = pd.to_numeric(out[a_col], errors='coerce')
+    bv = pd.to_numeric(out[b_col], errors='coerce')
+    m = av.notna() & bv.notna() & (av >= px0) & (av <= px1) & (bv >= py0) & (bv <= py1)
+    return out.loc[m]
+
+
+def _extp_trist_clip_mesh_faces(xs, ys, zs, faces, px0, px1, py0, py1, tmin=None, tmax=None):
+    """Keep only triangle/face centroids inside the plot box."""
+    if faces is None or len(faces) == 0:
+        return faces
+    xs = np.asarray(xs, dtype=np.float64)
+    ys = np.asarray(ys, dtype=np.float64)
+    zs = np.asarray(zs, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int32)
+    cx = xs[faces].mean(axis=1)
+    cy = ys[faces].mean(axis=1)
+    cz = zs[faces].mean(axis=1)
+    keep = (
+        (cx >= px0) & (cx <= px1) & (cy >= py0) & (cy <= py1) &
+        np.isfinite(cx) & np.isfinite(cy) & np.isfinite(cz)
+    )
+    if tmin is not None and str(tmin).strip() != "" and np.isfinite(float(tmin)):
+        keep &= cz >= float(tmin)
+    if tmax is not None and str(tmax).strip() != "" and np.isfinite(float(tmax)):
+        keep &= cz <= float(tmax)
+    return faces[keep] if keep.any() else np.empty((0, 3), dtype=np.int32)
+
+
+def _extp_trist_default_coord_limits(x_min, x_max, y_min, y_max, pad_frac=0.02):
+    """Per-axis data extent with small padding (TriST w axes may differ strongly, e.g. 0–40 vs 0–5)."""
+    x_min, x_max = float(x_min), float(x_max)
+    y_min, y_max = float(y_min), float(y_max)
+
+    def _pad(lo, hi):
+        span = hi - lo
+        p = pad_frac * span if span > 0 else 0.05
+        return lo - p, hi + p
+
+    px0, px1 = _pad(x_min, x_max)
+    py0, py1 = _pad(y_min, y_max)
+    if x_min >= 0.0:
+        px0 = max(0.0, px0)
+    if y_min >= 0.0:
+        py0 = max(0.0, py0)
+    return px0, px1, py0, py1
+
+
+def _extp_trist_plotly_scene_config(a_col, b_col, px0, px1, py0, py1, z0=None, z1=None):
+    """
+    Plotly 3D scene with square composition viewport and capped T-axis height.
+    aspectmode='data' over-stretches T when w-axis spans differ strongly (e.g. 0–40 vs 0–5).
+    """
+    xspan = max(float(px1) - float(px0), 1e-9)
+    yspan = max(float(py1) - float(py0), 1e-9)
+    ref = max(xspan, yspan)
+    if z0 is not None and z1 is not None and float(z1) > float(z0):
+        zspan = float(z1) - float(z0)
+    else:
+        zspan = ref
+    z_ratio = zspan / ref
+    z_ratio = min(max(z_ratio, 0.35), 1.0)
+    scene = dict(
+        xaxis_title=format_chemistry_axis_label(a_col),
+        yaxis_title=format_chemistry_axis_label(b_col),
+        zaxis_title="T (K)",
+        xaxis=dict(range=[px0, px1]),
+        yaxis=dict(range=[py0, py1]),
+        aspectmode="manual",
+        aspectratio=dict(x=1.0, y=1.0, z=z_ratio),
+    )
+    if z0 is not None and z1 is not None and float(z1) > float(z0):
+        scene["zaxis"] = dict(range=[float(z0), float(z1)])
+    return scene
+
+
+def _extp_trist_try_load_cube(xlsx_path, a_col, b_col):
+    """Load companion _trist_cube.npz if axes match the selected w columns."""
+    npz_p = os.path.splitext(xlsx_path)[0] + "_trist_cube.npz"
+    if not os.path.isfile(npz_p):
+        return None
+    try:
+        dnp = np.load(npz_p, allow_pickle=False)
+        raw_x = dnp.get("x_col", None)
+        raw_y = dnp.get("y_col", None)
+        x_saved = (
+            raw_x.decode("utf-8") if isinstance(raw_x, (bytes, bytearray)) else str(np.asarray(raw_x).item())
+        )
+        y_saved = (
+            raw_y.decode("utf-8") if isinstance(raw_y, (bytes, bytearray)) else str(np.asarray(raw_y).item())
+        )
+        if a_col.strip() != str(x_saved).strip() or b_col.strip() != str(y_saved).strip():
+            return None
+        T_c = np.asarray(dnp["T_vals"], dtype=np.float64)
+        xg = np.asarray(dnp["x_lin"], dtype=np.float64)
+        yg = np.asarray(dnp["y_lin"], dtype=np.float64)
+        f_c = np.asarray(dnp["f_cube"], dtype=np.float64)
+        return T_c, yg, xg, f_c
+    except Exception:
+        return None
+
+
+def _extp_trist_resample_ring(x, y, n):
+    """Resample a closed/open polyline to n points by arc length."""
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    ok = np.isfinite(x) & np.isfinite(y)
+    x, y = x[ok], y[ok]
+    if len(x) < 3:
+        return None, None
+    span = max(float(np.ptp(x)), float(np.ptp(y)), 1.0e-9)
+    if np.hypot(x[0] - x[-1], y[0] - y[-1]) > 1.0e-6 * span:
+        x = np.r_[x, x[0]]
+        y = np.r_[y, y[0]]
+    seg = np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2)
+    s = np.r_[0.0, np.cumsum(seg)]
+    if s[-1] <= 0.0:
+        return None, None
+    su = np.linspace(0.0, s[-1], int(n), endpoint=False)
+    return np.interp(su, s, x), np.interp(su, s, y)
+
+
+def _extp_trist_collect_rings_per_T(dfp, a_col, b_col, n_arc=56):
+    """One resampled boundary ring per temperature (largest perimeter if multiple curves)."""
+    rings_by_t = {}
+    dfp = dfp.copy()
+    dfp["T (K)"] = pd.to_numeric(dfp["T (K)"], errors="coerce")
+    grp_keys = ["T (K)", "curve_id"] if "curve_id" in dfp.columns else ["T (K)"]
+    for _, gdf in dfp.dropna(subset=["T (K)", a_col, b_col]).groupby(grp_keys, sort=True):
+        tval = float(gdf["T (K)"].iloc[0])
+        gdf = gdf.sort_values("point_i") if "point_i" in gdf.columns else gdf
+        xr = pd.to_numeric(gdf[a_col], errors="coerce").to_numpy(dtype=np.float64)
+        yr = pd.to_numeric(gdf[b_col], errors="coerce").to_numpy(dtype=np.float64)
+        xu, yu = _extp_trist_resample_ring(xr, yr, n_arc)
+        if xu is None:
+            continue
+        perim = float(np.sum(np.sqrt(np.diff(xu) ** 2 + np.diff(yu) ** 2)))
+        prev = rings_by_t.get(tval)
+        if prev is None or perim > prev[0]:
+            rings_by_t[tval] = (perim, xu, yu)
+    return [(tval, rings_by_t[tval][1], rings_by_t[tval][2]) for tval in sorted(rings_by_t)]
+
+
+def _extp_trist_loft_surface_mpl(ax, rings, color="#c0392b", alpha=0.48, label=None,
+                                  px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """Loft resampled boundary rings into one continuous dome-like surface (Matplotlib)."""
+    if not rings or len(rings) < 2:
+        return False
+    verts_x, verts_y, verts_z, tris = [], [], [], []
+
+    def _add_v(xv, yv, zv):
+        verts_x.append(float(xv))
+        verts_y.append(float(yv))
+        verts_z.append(float(zv))
+        return len(verts_x) - 1
+
+    for i in range(len(rings) - 1):
+        t0, x0, y0 = rings[i]
+        t1, x1, y1 = rings[i + 1]
+        n = len(x0)
+        for j in range(n):
+            j1 = (j + 1) % n
+            a = _add_v(x0[j], y0[j], t0)
+            b = _add_v(x0[j1], y0[j1], t0)
+            c = _add_v(x1[j], y1[j], t1)
+            d = _add_v(x1[j1], y1[j1], t1)
+            tris.append([a, c, b])
+            tris.append([b, c, d])
+    if not tris:
+        return False
+    vx = np.asarray(verts_x, dtype=np.float64)
+    vy = np.asarray(verts_y, dtype=np.float64)
+    vz = np.asarray(verts_z, dtype=np.float64)
+    tri_arr = np.asarray(tris, dtype=np.int32)
+    if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+        tri_arr = _extp_trist_clip_mesh_faces(vx, vy, vz, tri_arr, px0, px1, py0, py1, tmin, tmax)
+    if tri_arr.size == 0:
+        return False
+    try:
+        ax.plot_trisurf(
+            vx, vy, vz, triangles=tri_arr, color=color, alpha=alpha,
+            linewidth=0, shade=True, antialiased=True, label=label,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _extp_trist_loft_surface_plotly(tr, rings, color="rgba(192,57,43,0.55)",
+                                    px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """Loft resampled boundary rings into one Plotly Mesh3d dome."""
+    if not PLOTLY_AVAILABLE or not rings or len(rings) < 2:
+        return None
+    xs, ys, zs, tris = [], [], [], []
+
+    def _add_v(xv, yv, zv):
+        xs.append(float(xv))
+        ys.append(float(yv))
+        zs.append(float(zv))
+        return len(xs) - 1
+
+    for i in range(len(rings) - 1):
+        t0, x0, y0 = rings[i]
+        t1, x1, y1 = rings[i + 1]
+        n = len(x0)
+        for j in range(n):
+            j1 = (j + 1) % n
+            a = _add_v(x0[j], y0[j], t0)
+            b = _add_v(x0[j1], y0[j1], t0)
+            c = _add_v(x1[j], y1[j], t1)
+            d = _add_v(x1[j1], y1[j1], t1)
+            tris.extend([a, c, b, b, c, d])
+    if not tris:
+        return None
+    xs_arr = np.asarray(xs, dtype=np.float64)
+    ys_arr = np.asarray(ys, dtype=np.float64)
+    zs_arr = np.asarray(zs, dtype=np.float64)
+    tri_arr = np.asarray(tris, dtype=np.int32).reshape(-1, 3)
+    if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+        tri_arr = _extp_trist_clip_mesh_faces(xs_arr, ys_arr, zs_arr, tri_arr, px0, px1, py0, py1, tmin, tmax)
+    if tri_arr.size == 0:
+        return None
+    return go.Mesh3d(
+        x=xs_arr,
+        y=ys_arr,
+        z=zs_arr,
+        i=tri_arr[:, 0],
+        j=tri_arr[:, 1],
+        k=tri_arr[:, 2],
+        color=color,
+        opacity=0.55,
+        flatshading=False,
+        name=tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)"),
+        showscale=False,
+    )
+
+
+def _extp_trist_mpl_isosurface_f_zero(ax, T_vals, y_lin, x_lin, f_cube, color="#c0392b", alpha=0.48,
+                                      label=None, px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """Matplotlib 3D f=0 isosurface (requires scikit-image marching_cubes)."""
+    if not MATPLOTLIB_AVAILABLE:
+        return False
+    if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+        clipped = _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0, px1, py0, py1, tmin, tmax)
+        if clipped is None:
+            return False
+        T_vals, y_lin, x_lin, f_cube = clipped
+    dense = _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube)
+    if dense is None:
+        return False
+    Tq, y_lin, x_lin, Vt, _ = dense
+    try:
+        from skimage.measure import marching_cubes
+    except ImportError:
+        return False
+    try:
+        nt, ny, nx = Vt.shape
+        dt = float(Tq[-1] - Tq[0]) / max(nt - 1, 1)
+        dy = float(y_lin[-1] - y_lin[0]) / max(ny - 1, 1) if ny > 1 else 1.0
+        dx = float(x_lin[-1] - x_lin[0]) / max(nx - 1, 1) if nx > 1 else 1.0
+        Vmc = np.asarray(Vt, dtype=np.float64)
+        Vmc[~np.isfinite(Vmc)] = 1.0e9
+        Vmc[Vmc > 0.0] = 1.0e9
+        if not np.any(Vmc <= 0.0):
+            return False
+        verts, faces, _, _ = marching_cubes(Vmc, level=0.0, spacing=(dt, dy, dx))
+        xs = verts[:, 2] * dx + float(x_lin[0])
+        ys = verts[:, 1] * dy + float(y_lin[0])
+        zs = verts[:, 0] * dt + float(Tq[0])
+        if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+            faces = _extp_trist_clip_mesh_faces(xs, ys, zs, faces, px0, px1, py0, py1, tmin, tmax)
+        if faces.size == 0:
+            return False
+        ax.plot_trisurf(
+            xs, ys, zs, triangles=faces, color=color, alpha=alpha, linewidth=0,
+            shade=True, antialiased=True, label=label,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32,
+                                  px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """
+    Plotly go.Isosurface for f=0, with cubic/linear regular-grid interpolation in (T, y, x).
+    Scene axes: x = composition X, y = composition Y, z = T (K).
+    """
+    if not PLOTLY_AVAILABLE:
+        return None
+    if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+        clipped = _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0, px1, py0, py1, tmin, tmax)
+        if clipped is None:
+            return None
+        T_vals, y_lin, x_lin, f_cube = clipped
+    dense = _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube)
+    if dense is None:
+        return None
+    Tq, y_lin, x_lin, _, V_plot = dense
+    V_iso = np.asarray(V_plot, dtype=np.float64).copy()
+    V_iso[~np.isfinite(V_iso)] = np.nan
+    V_iso[V_iso > 0.0] = np.nan
+    f_neg = V_iso[np.isfinite(V_iso)]
+    if f_neg.size == 0:
+        return None
+    # Plotly Isosurface filters by [isomin, isomax] in physical units (J/mol), not ±1e-6.
+    iso_min = float(np.min(f_neg))
+    iso_max = 0.0
     name = tr(
         "extp_trist_trace_smooth",
         "TriST boundary f=0 (cubic in T, x, y; from saved 3D field)",
@@ -1094,15 +1568,60 @@ def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32
         x=x_lin,
         y=y_lin,
         z=Tq,
-        value=V_plot,
-        isomin=-1.0e-6,
-        isomax=1.0e-6,
+        value=V_iso,
+        isomin=iso_min,
+        isomax=iso_max,
         surface_count=1,
         showscale=False,
         opacity=opacity,
         name=name,
         caps=dict(x_show=False, y_show=False, z_show=False),
+        colorscale=[[0, "rgb(255,120,80)"], [1, "rgb(180,20,20)"]],
     )
+
+
+def _extp_trist_plotly_mask_dome(tr, T_vals, y_lin, x_lin, f_cube, show_volume=True,
+                                 px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
+    """Plotly traces: semi-transparent interior volume + f=0 dome surface."""
+    if not PLOTLY_AVAILABLE:
+        return []
+    if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
+        clipped = _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0, px1, py0, py1, tmin, tmax)
+        if clipped is None:
+            return []
+        T_vals, y_lin, x_lin, f_cube = clipped
+    dense = _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube)
+    if dense is None:
+        return []
+    Tq, y_lin, x_lin, _, V_plot = dense
+    V_vol = _extp_trist_f_for_viz_volume(V_plot)
+    traces = []
+    if show_volume:
+        f_neg = V_vol[np.isfinite(V_vol)]
+        if f_neg.size:
+            traces.append(
+                go.Volume(
+                    x=x_lin,
+                    y=y_lin,
+                    z=Tq,
+                    value=V_vol,
+                    isomin=float(np.nanmin(f_neg)),
+                    isomax=min(-1.0e-8, float(np.nanmax(f_neg))),
+                    opacity=0.16,
+                    surface_count=8,
+                    colorscale=[[0, "rgb(255,230,230)"], [1, "rgb(200,40,40)"]],
+                    showscale=False,
+                    name=tr("extp_trist_legend_mask_vol", "TriST inside (volume)"),
+                    caps=dict(x_show=False, y_show=False, z_show=False),
+                )
+            )
+    iso = _extp_trist_isosurface_f_zero(
+        tr, T_vals, y_lin, x_lin, f_cube, opacity=0.58,
+    )
+    if iso is not None:
+        iso.name = tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+        traces.append(iso)
+    return traces
 
 
 # Optional imports for plotting
@@ -1601,9 +2120,10 @@ class ThermoQGUI:
                 'plot_phase_solidus': 'Solidus',
                 'plot_phase_overlay': 'Liquidus + Solidus overlay',
                 'plot_phase_iso_interval': 'Isotherm interval (K):',
-                'plot_phase_iso_interval_hint': 'Contour spacing for overlay isotherms',
+                'plot_phase_iso_interval_hint': 'Contour spacing for temperature isotherms on the surface',
                 'plot_phase_legend_liq': 'Liquidus isotherms',
                 'plot_phase_legend_sol': 'Solidus isotherms',
+                'plot_phase_legend_isotherms': 'Temperature isotherms',
                 'plot_phase_overlay_saved': 'Overlay plot saved: {path}',
                 'plot_phase_overlay_need_both': 'Overlay requires both liquidus and solidus data.',
                 'plot_phase_ready_pandat': 'Ready to plot (Pandat)',
@@ -1627,6 +2147,8 @@ class ThermoQGUI:
                 'qtrue_ds_equilibrium': 'Equilibrium/Lever',
                 'qtrue_ds_scheil': 'Scheil',
                 'qtrue_ready': 'Ready to plot',
+                'qtrue_iso_interval': 'Contour interval:',
+                'qtrue_iso_interval_hint': 'Spacing for Q-value isocontours on the surface',
                 'liqvec_win_title': 'Plot Liquidus Vectors',
                 'liqvec_heading': 'Liquidus Vector Plotter',
                 'liqvec_intro': (
@@ -1647,8 +2169,59 @@ class ThermoQGUI:
                 'liqvec_plotly_arrow': 'Plotly 3D (Interactive)',
                 'liqvec_plotly_len': 'Arrow Length Scale (relative):',
                 'liqvec_plotly_head': 'Arrow Head Fraction:',
+                'liqvec_coord_frame': 'Coordinate Range',
+                'liqvec_coord_hint': (
+                    'Default: square window from (0, 0) when data start at w≈0–1; '
+                    'upper limit = min(X max, Y max) + 0.1. '
+                    'Applies to all 2D vector plots and X/Y axes of 3D / heatmap views.'
+                ),
+                'liqvec_x_min': 'X Min:',
+                'liqvec_x_max': 'X Max:',
+                'liqvec_y_min': 'Y Min:',
+                'liqvec_y_max': 'Y Max:',
+                'liqvec_coord_reset': 'Reset to default (square)',
+                'liqvec_coord_invalid': 'Invalid coordinate range: X Min < X Max and Y Min < Y Max are required.',
+                'liqvec_coord_partial': 'Please fill all four coordinate fields or leave them all blank for the default square range.',
+                'liqvec_coord_reset_ok': 'Coordinate range reset to default square window.',
+                'liqvec_coord_reset_fail': 'Could not compute default range: {e}',
+                'plot_coord_frame': 'Coordinate Range',
+                'plot_coord_hint': (
+                    'Default: square window from (0, 0) when data start at w≈0–1; '
+                    'upper limit = min(X max, Y max) + 0.1. '
+                    'Applies to 2D plots and X/Y axes of 3D / heatmap views.'
+                ),
+                'plot_coord_x_min': 'X Min:',
+                'plot_coord_x_max': 'X Max:',
+                'plot_coord_y_min': 'Y Min:',
+                'plot_coord_y_max': 'Y Max:',
+                'plot_coord_reset': 'Reset to default (square)',
+                'plot_coord_invalid': 'Invalid coordinate range: X Min < X Max and Y Min < Y Max are required.',
+                'plot_coord_partial': 'Please fill all four coordinate fields or leave them all blank for the default square range.',
+                'plot_coord_reset_ok': 'Coordinate range reset to default square window.',
+                'plot_coord_reset_fail': 'Could not compute default range: {e}',
+                'plot_exp_frame': 'Experimental Points',
+                'plot_exp_enable': 'Show experimental points on plot',
+                'plot_exp_file': 'Batch file (Excel/CSV/TSV):',
+                'plot_exp_manual': 'Manual points (one per line: X, Y [, Z]):',
+                'plot_exp_hint': (
+                    'Optional comparison with measured data. File columns should include w(X), w(Y), '
+                    'and optionally T / T0 / value for 3D plots. Manual X/Y are w(X) and w(Y) in wt%; '
+                    'optional Z is temperature or the plotted quantity (same unit as the calculation).'
+                ),
+                'plot_exp_legend': 'Experimental',
+                'plot_exp_browse': 'Browse',
+                'plot_exp_fd': 'Select experimental data file',
+                'plot_exp_no_cols': 'Could not find w({ex}) and w({ey}) in the experimental data file.',
+                'plot_exp_file_missing': 'Experimental points file not found: {path}',
+                'plot_exp_read_fail': 'Failed to read experimental data file:\n{e}',
+                'plot_data_export_xlsx': 'Excel (.xlsx)',
+                'plot_data_export_csv': 'CSV (.csv)',
+                'plot_data_export_tsv': 'TSV (.tsv)',
+                'plot_data_export_json': 'JSON (.json)',
+                'plot_data_export_unsupported': 'Unsupported export format: {ext}',
+                'plot_data_save_cleaned': 'Save Cleaned Data File',
                 'liqvec_no_pandat': 'No Pandat data imported. Please import data via Import → Pandat to ThermoQ first.',
-                'liqvec_fd_clean': 'Save Cleaned Excel File',
+                'liqvec_fd_clean': 'Save Cleaned Data File',
                 'liqvec_proc_export_title': 'Export processed data',
                 'tzero_win_title': 'Plot T-zero Surface',
                 'tzero_heading': 'T-zero Surface Plotter',
@@ -1662,6 +2235,8 @@ class ThermoQGUI:
                 'tzero_settings': 'Settings',
                 'tzero_fd_excel': 'Select T-zero Excel',
                 'tzero_ready': 'Ready to plot',
+                'tzero_iso_interval': 'Isotherm interval (K):',
+                'tzero_iso_interval_hint': 'Contour spacing for T0 isotherms on 2D/3D surface plots',
                 'conv_win_title': 'Composition Converter (wt% ↔ at%)',
                 'conv_heading': 'Composition Converter',
                 'conv_intro': 'Enter element compositions and convert between weight percent (wt%) and atomic percent (at%)',
@@ -1671,7 +2246,7 @@ class ThermoQGUI:
                 'conv_at': 'at%',
                 'conv_example_text': (
                     'Example input format (one element per line):\n'
-                    'Al 90.0\nMg 8.0\nSi 2.0\nOr:\nAl: 90.0\nMg: 8.0\nSi: 2.0'
+                    'Al 90.0\nMg 8.0\nSi 2.0'
                 ),
                 'conv_convert': 'Convert',
                 'conv_clear': 'Clear',
@@ -1715,6 +2290,12 @@ class ThermoQGUI:
                 'extp_import_btn': 'Import to ThermoQ',
                 'extp_t0_folder': 'T-zero Folder (All table_T0)',
                 'extp_fd_t0_folder': 'Select All table_T0 folder',
+                'extp_t0_intro': (
+                    'Extract T-zero data from Pandat All table_T0 CSV/DAT files. '
+                    'Each file contributes w(*) composition columns; the T column is exported as T0 (K). '
+                    'If the filename encodes a fixed w(element) (e.g. …5Cu…), that value is added as a constant column. '
+                    'Output: T0.xlsx with File, w(*), and T0 (K).'
+                ),
                 'extp_t0_output_xlsx': 'Output Excel File (T0)',
                 'extp_t0_extract_btn': 'Extract T0',
                 'extp_t0_need_folder': 'Please select a valid T-zero folder!',
@@ -1754,7 +2335,7 @@ class ThermoQGUI:
                 'extp_trist_viz_cols': 'Axes (w columns)',
                 'extp_trist_viz_x': 'X:',
                 'extp_trist_viz_y': 'Y:',
-                'extp_trist_viz_mask_mesh': 'TriST_mask: Mesh3d surface (per T)',
+                'extp_trist_viz_mask_mesh': 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)',
                 'extp_trist_viz_filter': 'Filter',
                 'extp_trist_viz_only_trist': 'Only dG ≤ 0',
                 'extp_trist_viz_tmin': 'T min:',
@@ -1765,7 +2346,8 @@ class ThermoQGUI:
                 'extp_trist_viz_export_image': 'Static image',
                 'extp_trist_viz_img_fmt': 'Image format:',
                 'extp_trist_viz_need_kaleido': 'Static image export requires Plotly image engine (kaleido). Please run: pip install -U kaleido',
-                'extp_trist_viz_btn': 'Open interactive plot',
+                'extp_trist_viz_btn': 'Plot',
+                'extp_trist_viz_saved': 'TriST plot saved: {path}',
                 'extp_trist_viz_need_plotly': 'Plotly is not installed. Install plotly to view interactive plots.',
                 'extp_trist_viz_no_data': 'No data to plot. Run “Build TriST workbook” first.',
                 'extp_trist_settings': 'Settings',
@@ -1780,10 +2362,19 @@ class ThermoQGUI:
                 'extp_trist_colorbar_f': 'f (C0) (J/mol) — tangent-plane margin (Viridis: lower = deeper inside TriST)',
                 'extp_trist_trace_smooth': 'TriST boundary f=0 (cubic in T, x, y; from saved 3D field)',
                 'extp_trist_viz_bnd_interval': 'Boundary lines every (K):',
-                'extp_trist_viz_bnd_interval_hint': '0 = all temperatures',
-                'extp_trist_viz_smooth_surf': 'Smooth f=0 surface (cubic in T; needs _trist_cube.npz)',
+                'extp_trist_viz_bnd_interval_hint': '0 = all temperatures (2D mode)',
+                'extp_trist_viz_smooth_surf': 'Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)',
+                'extp_trist_viz_iso_interval': 'Isotherm interval (K):',
+                'extp_trist_viz_iso_interval_hint': 'Contour spacing for temperature isotherms on the smooth surface',
+                'extp_trist_legend_smooth_surf': 'TriST boundary (Gaussian smooth surface)',
+                'extp_trist_legend_t0_smooth_surf': 'T0 line (Gaussian smooth surface, dG=0)',
+                'extp_trist_legend_isotherms': 'Temperature isotherms',
                 'extp_trist_legend_mask_mesh': 'TriST inside (mesh)',
                 'extp_trist_legend_mask_pts': 'TriST inside (points)',
+                'extp_trist_legend_mask_dome': 'TriST region (continuous dome, f=0 surface)',
+                'extp_trist_legend_mask_vol': 'TriST inside (volume)',
+                'extp_trist_legend_boundary': 'TriST boundary (f=0)',
+                'extp_trist_legend_t0': 'T0 line (dG=0)',
                 'extp_trist_saved': 'TriST workbook saved.\n\n{path}\n\nSheets: {sheets}\nMerged rows: {n}',
                 'extp_trist_skip': 'Skipped {file}: {reason}',
                 'extp_trist_done_log': 'Done. Files processed: {ok}, skipped: {skip}.',
@@ -1890,6 +2481,7 @@ class ThermoQGUI:
                 'batch_z_quantity': 'Quantity (Z):',
                 'batch_viz': 'Visualization:',
                 'batch_viz_2d': '2D Heatmap',
+                'batch_viz_2d_curves': '2D Curves',
                 'batch_viz_3d': '3D Static',
                 'batch_viz_gif': '3D Rotation GIF',
                 'batch_viz_plotly': 'Plotly 3D',
@@ -1920,6 +2512,42 @@ class ThermoQGUI:
                 'batch_no_rows': 'No valid rows computed. Check that compositions sum to ~100 wt% and lie within tabulated ranges.',
                 'batch_plot_x_el': 'X element:',
                 'batch_plot_y_el': 'Y element:',
+                'batch_iso_interval': 'Contour interval:',
+                'batch_iso_interval_hint': 'Spacing for isocontours on 2D/3D surface plots',
+                'batch_curve_group': 'Plot curves (composition)',
+                'batch_curve_intro': (
+                    'Fix one element at specified wt% content(s), then plot ΔT, ΔTs, Qtrue, '
+                    'and Q/P/β vs another element (from the last batch table).'
+                ),
+                'batch_curve_x_el': 'Varying element (X axis):',
+                'batch_curve_fixed_el': 'Fixed element:',
+                'batch_curve_fixed_val': 'Fixed content (wt%):',
+                'batch_curve_fixed_val_hint': 'One value, or comma-separated values for multiple curves (e.g. 5, 10, 15).',
+                'batch_curve_plot_btn': 'Generate curves',
+                'batch_curve_saved': 'Curve plot saved: {path}',
+                'batch_curve_same_x_fixed': 'Varying and fixed element must differ.',
+                'batch_curve_need_fixed_val': 'Enter fixed content (wt%) for the fixed element.',
+                'batch_curve_fixed_val_invalid': 'Fixed content must be a number or comma-separated numbers.',
+                'batch_curve_no_match': 'No batch rows with w({el}) near {val} wt% (±{tol:.3g}).',
+                'batch_curve_all_done': 'Generated {n} curve plot file(s).',
+                'batch_curve_title': '{z} vs w({ex}); w({fixed})={fv} wt%',
+                'batch_curve_z_multi_label': 'Quantities for curve overlay (multi-select):',
+                'batch_curve_z_multi_hint': 'Select ΔT, ΔTs, Qtrue, Q/P/β, etc. to plot vs the varying element.',
+                'batch_curve_multi_title': 'Batch quantities vs w({ex}); w({fixed})={fv} wt%',
+                'batch_curve_multi_title_multi': 'Batch quantities vs w({ex}); fixed w({fixed})',
+                'batch_curve_multi_ylabel': 'Value',
+                'batch_curve_multi_saved': 'Multi-quantity curve plot saved: {path}',
+                'batch_curve_multi_need_z': 'Select at least one quantity in the list below.',
+                'batch_curve_coord_frame': 'Coordinate Range',
+                'batch_curve_coord_hint': (
+                    'X axis: w(varying element) in wt%; Y axis: plotted quantity. '
+                    'Leave blank for auto range from filtered curve data.'
+                ),
+                'batch_curve_coord_x_min': 'X Min:',
+                'batch_curve_coord_x_max': 'X Max:',
+                'batch_curve_coord_y_min': 'Y Min:',
+                'batch_curve_coord_y_max': 'Y Max:',
+                'batch_curve_coord_reset': 'Reset to default (from data)',
                 'batch_output_block': 'Output files',
                 # Main window / element selector
                 'el_frame_title': 'Element Selection',
@@ -2086,11 +2714,11 @@ class ThermoQGUI:
                 # Extract Thermo-calc Results (GUI)
                 'exptc_win_title': 'Extract Thermo-calc Results',
                 'exptc_heading': 'Extract Thermo-calc Results',
-                'exptc_intro': (
-                    'Melting Range: extract liquidus/solidus and melting range.\n'
-                    'Miscibility Gap: extract phase boundary curves (XTEXT/YTEXT columns) vs temperature from .exp files.\n'
-                    'T-zero: extract w(*) and the corresponding T0 from *_T0.exp files.'
+                'exptc_mr_intro': 'Extract liquidus/solidus temperatures and melting range from .exp files.',
+                'exptc_lmg_intro': (
+                    'Extract phase boundary curves (XTEXT/YTEXT columns) vs temperature from .exp files.'
                 ),
+                'exptc_t0_intro': 'Extract w(*) and the corresponding T0 from *_T0.exp files.',
                 'exptc_tab_mr': 'Melting Range',
                 'exptc_tab_lmg': 'Miscibility Gap',
                 'exptc_tab_t0': 'T-zero',
@@ -2204,11 +2832,35 @@ class ThermoQGUI:
                 'iso_plot_button': 'Plot isocomposition',
                 'iso_need_o': 'Please enter O composition values (w(X), w(Y)).',
                 'iso_o_out_of_range': 'Selected alloy composition is outside the available data composition range.',
-                'iso_done': 'Done. Generated 2D projection and 3D plots for isocomposition.',
+                'iso_done': 'Done. Generated 2D projection, 3D plots and k vs T curves for isocomposition.',
                 'iso_2d_title': '2D Projection (isocomposition)',
                 'iso_3d_title': '3D Isocomposition (T as Z)',
                 'iso_dyn_title': '3D Dynamic (high -> low)',
                 'iso_plotly_3d_title': '3D Isocomposition Interactive (Plotly)',
+                'iso_k_curve_frame': 'Partition coefficient vs T',
+                'iso_k_curve_enable': 'Plot k vs T curves (k = w(*@solid)/w(*@LIQUID))',
+                'iso_k_curve_title': 'Partition coefficient k vs T (isocomposition O)',
+                'iso_k_curve_legend': 'k({el})',
+                'iso_k_curve_no_valid': 'No valid partition coefficient values to plot k vs T.',
+                'iso_comp_coord_frame': 'Coordinate Range (composition plots)',
+                'iso_comp_coord_hint': (
+                    'For 2D/3D composition plots: X = w(X) (wt%), Y = w(Y) (wt%). '
+                    'Leave blank for default square 0–100 range.'
+                ),
+                'iso_comp_coord_x_min': 'X Min:',
+                'iso_comp_coord_x_max': 'X Max:',
+                'iso_comp_coord_y_min': 'Y Min:',
+                'iso_comp_coord_y_max': 'Y Max:',
+                'iso_comp_coord_reset': 'Reset to default (0–100 square)',
+                'iso_k_coord_frame': 'Coordinate Range (k vs T)',
+                'iso_k_coord_hint': (
+                    'For k vs T curves: X = T (K), Y = k. Leave blank for auto range from data.'
+                ),
+                'iso_k_coord_x_min': 'T Min:',
+                'iso_k_coord_x_max': 'T Max:',
+                'iso_k_coord_y_min': 'k Min:',
+                'iso_k_coord_y_max': 'k Max:',
+                'iso_k_coord_reset': 'Reset to default (from data)',
                 # Solid-Liquid partition coefficient (k-vectors): same temperature page
                 'stp_target_temp': 'Target Temperature (K):',
                 'stp_all_table_lever': 'All table_Lever folder:',
@@ -2339,9 +2991,10 @@ class ThermoQGUI:
                 'plot_phase_solidus': '固相线',
                 'plot_phase_overlay': '固液截面叠加',
                 'plot_phase_iso_interval': '等温线间隔（K）：',
-                'plot_phase_iso_interval_hint': '叠加模式下等温线标注间隔',
+                'plot_phase_iso_interval_hint': '曲面上温度等温线的标注间隔',
                 'plot_phase_legend_liq': '液相线等温线',
                 'plot_phase_legend_sol': '固相线等温线',
+                'plot_phase_legend_isotherms': '温度等温线',
                 'plot_phase_overlay_saved': '叠加图已保存：{path}',
                 'plot_phase_overlay_need_both': '叠加模式需要同时具备液相线与固相线数据。',
                 'plot_phase_ready_pandat': '就绪（Pandat）',
@@ -2365,6 +3018,8 @@ class ThermoQGUI:
                 'qtrue_ds_equilibrium': '平衡/Lever',
                 'qtrue_ds_scheil': 'Scheil',
                 'qtrue_ready': '就绪，可绘图',
+                'qtrue_iso_interval': '等值线间隔：',
+                'qtrue_iso_interval_hint': '曲面上 Q 值等值线的标注间隔',
                 'liqvec_win_title': '绘制液相线矢量',
                 'liqvec_heading': '液相线矢量绘图',
                 'liqvec_intro': (
@@ -2385,8 +3040,56 @@ class ThermoQGUI:
                 'liqvec_plotly_arrow': 'Plotly 3D（交互）',
                 'liqvec_plotly_len': '箭头长度比例（相对）：',
                 'liqvec_plotly_head': '箭头头部占比：',
+                'liqvec_coord_frame': '坐标范围',
+                'liqvec_coord_hint': (
+                    '默认：数据从 w≈0–1 起时，正方形窗口为 (0, 0) 至 min(X 最大值, Y 最大值)+0.1；'
+                    '应用于全部 2D 向量图及 3D / 热图的 X、Y 轴。'
+                ),
+                'liqvec_x_min': 'X 最小值：',
+                'liqvec_x_max': 'X 最大值：',
+                'liqvec_y_min': 'Y 最小值：',
+                'liqvec_y_max': 'Y 最大值：',
+                'liqvec_coord_reset': '恢复默认（正方形）',
+                'liqvec_coord_invalid': '坐标范围无效：须满足 X 最小值 < X 最大值，Y 最小值 < Y 最大值。',
+                'liqvec_coord_partial': '请填写全部四个坐标字段，或全部留空以使用默认正方形范围。',
+                'liqvec_coord_reset_ok': '已恢复为默认正方形坐标范围。',
+                'liqvec_coord_reset_fail': '无法计算默认范围：{e}',
+                'plot_coord_frame': '坐标范围',
+                'plot_coord_hint': (
+                    '默认：数据从 w≈0–1 起时，正方形窗口为 (0, 0) 至 min(X 最大值, Y 最大值)+0.1；'
+                    '应用于 2D 图及 3D / 热图的 X、Y 轴。'
+                ),
+                'plot_coord_x_min': 'X 最小值：',
+                'plot_coord_x_max': 'X 最大值：',
+                'plot_coord_y_min': 'Y 最小值：',
+                'plot_coord_y_max': 'Y 最大值：',
+                'plot_coord_reset': '恢复默认（正方形）',
+                'plot_coord_invalid': '坐标范围无效：须满足 X 最小值 < X 最大值，Y 最小值 < Y 最大值。',
+                'plot_coord_partial': '请填写全部四个坐标字段，或全部留空以使用默认正方形范围。',
+                'plot_coord_reset_ok': '已恢复为默认正方形坐标范围。',
+                'plot_coord_reset_fail': '无法计算默认范围：{e}',
+                'plot_exp_frame': '实验点',
+                'plot_exp_enable': '在图上显示实验点',
+                'plot_exp_file': '批量文件（Excel/CSV/TSV）：',
+                'plot_exp_manual': '手动输入（每行：X, Y [, Z]）：',
+                'plot_exp_hint': (
+                    '可选：与实测数据对比。文件列应含 w(X)、w(Y)，3D 图可选 T / T0 / 数值列。'
+                    '手动 X/Y 为 wt% 下的 w(X)、w(Y)；可选 Z 为温度或与计算量相同单位的实测值。'
+                ),
+                'plot_exp_legend': '实验',
+                'plot_exp_browse': '浏览',
+                'plot_exp_fd': '选择实验数据文件',
+                'plot_exp_no_cols': '实验数据文件中未找到 w({ex}) 与 w({ey}) 列。',
+                'plot_exp_file_missing': '找不到实验点文件：{path}',
+                'plot_exp_read_fail': '读取实验数据文件失败：\n{e}',
+                'plot_data_export_xlsx': 'Excel (.xlsx)',
+                'plot_data_export_csv': 'CSV (.csv)',
+                'plot_data_export_tsv': 'TSV (.tsv)',
+                'plot_data_export_json': 'JSON (.json)',
+                'plot_data_export_unsupported': '不支持的导出格式：{ext}',
+                'plot_data_save_cleaned': '保存清洗后的数据文件',
                 'liqvec_no_pandat': '尚未导入 Pandat 数据。请先使用「导入 → Pandat到ThermoQ」。',
-                'liqvec_fd_clean': '保存清洗后的 Excel',
+                'liqvec_fd_clean': '保存清洗后的数据文件',
                 'liqvec_proc_export_title': '导出处理后数据',
                 'tzero_win_title': '绘制 T-zero 曲面',
                 'tzero_heading': 'T-zero 曲面绘图',
@@ -2400,6 +3103,8 @@ class ThermoQGUI:
                 'tzero_settings': '设置',
                 'tzero_fd_excel': '选择 T-zero Excel',
                 'tzero_ready': '就绪，可绘图',
+                'tzero_iso_interval': '等温线间隔（K）：',
+                'tzero_iso_interval_hint': '2D/3D 曲面上 T0 等温线的标注间隔',
                 'conv_win_title': '成分换算（wt% ↔ at%）',
                 'conv_heading': '成分换算',
                 'conv_intro': '输入各组元成分，在质量分数（wt%）与原子分数（at%）之间换算',
@@ -2453,6 +3158,12 @@ class ThermoQGUI:
                 'extp_import_btn': '导入到 ThermoQ',
                 'extp_t0_folder': 'T-zero 文件夹（All table_T0）',
                 'extp_fd_t0_folder': '选择 All table_T0 文件夹',
+                'extp_t0_intro': (
+                    '从 Pandat All table_T0 文件夹中的 CSV/DAT 提取 T-zero 数据。'
+                    '每个文件读取 w(*) 成分列，T 列导出为 T0 (K)。'
+                    '若文件名含固定成分（如 …5Cu…），则写入对应 w(元素) 常数列。'
+                    '输出：含 File、w(*) 与 T0 (K) 的 T0.xlsx。'
+                ),
                 'extp_t0_output_xlsx': '输出 Excel（T0）',
                 'extp_t0_extract_btn': '提取 T0',
                 'extp_t0_need_folder': '请选择有效的 T-zero 文件夹！',
@@ -2478,8 +3189,13 @@ class ThermoQGUI:
                 'extp_trist_colorbar_f': 'f (C0)（J/mol），切线–平面富余；Viridis 色标越低越深入 TriST 区',
                 'extp_trist_trace_smooth': 'TriST 边界 f=0（对 T、x、y 三次插值；来自 .npz 场）',
                 'extp_trist_viz_bnd_interval': '边界线温度间隔（K）：',
-                'extp_trist_viz_bnd_interval_hint': '0 = 所有温度都画线',
-                'extp_trist_viz_smooth_surf': '光滑 f=0 曲面（对 T 三次插值，需同目录 _trist_cube.npz）',
+                'extp_trist_viz_bnd_interval_hint': '0 = 所有温度都画线（2D 模式）',
+                'extp_trist_viz_smooth_surf': '高斯光滑曲面（3D：将边界线 / T0 线叠合为连续曲面）',
+                'extp_trist_viz_iso_interval': '等温线间隔（K）：',
+                'extp_trist_viz_iso_interval_hint': '光滑曲面上的温度等温线间距',
+                'extp_trist_legend_smooth_surf': 'TriST 边界（高斯光滑曲面）',
+                'extp_trist_legend_t0_smooth_surf': 'T0 线（高斯光滑曲面，dG=0）',
+                'extp_trist_legend_isotherms': '温度等温线',
                 'extp_trist_legend_mask_mesh': 'TriST 区内（网格）',
                 'extp_trist_legend_mask_pts': 'TriST 区内（点）',
                 'extp_trist_folder': 'Gibbs 文件夹（All table_Gibbs）',
@@ -2496,7 +3212,11 @@ class ThermoQGUI:
                 'extp_trist_viz_cols': '坐标轴（w 列）',
                 'extp_trist_viz_x': 'X：',
                 'extp_trist_viz_y': 'Y：',
-                'extp_trist_viz_mask_mesh': 'TriST_mask：按温度 Mesh3d 曲面',
+                'extp_trist_viz_mask_mesh': '连续 TriST 穹隆（f=0 等值面；需同目录 _trist_cube.npz）',
+                'extp_trist_legend_mask_dome': 'TriST 区域（连续穹隆，f=0 曲面）',
+                'extp_trist_legend_mask_vol': 'TriST 内部（体积）',
+                'extp_trist_legend_boundary': 'TriST 边界（f=0）',
+                'extp_trist_legend_t0': 'T0 线（dG=0）',
                 'extp_trist_viz_filter': '筛选',
                 'extp_trist_viz_only_trist': '仅 dG ≤ 0',
                 'extp_trist_viz_tmin': 'T 最小：',
@@ -2507,7 +3227,8 @@ class ThermoQGUI:
                 'extp_trist_viz_export_image': '静态图片',
                 'extp_trist_viz_img_fmt': '图片格式：',
                 'extp_trist_viz_need_kaleido': '导出静态图片需要 Plotly 图像引擎（kaleido）。请执行：pip install -U kaleido',
-                'extp_trist_viz_btn': '打开交互图',
+                'extp_trist_viz_btn': '绘图',
+                'extp_trist_viz_saved': 'TriST 图已保存：{path}',
                 'extp_trist_viz_need_plotly': '未安装 Plotly。请安装 plotly 以查看交互图。',
                 'extp_trist_viz_no_data': '没有可绘制数据。请先“生成 TriST 工作簿”。',
                 'extp_trist_settings': '设置',
@@ -2618,6 +3339,7 @@ class ThermoQGUI:
                 'batch_z_quantity': '物理量（Z）：',
                 'batch_viz': '可视化：',
                 'batch_viz_2d': '2D 热图',
+                'batch_viz_2d_curves': '2D 曲线',
                 'batch_viz_3d': '3D 静态',
                 'batch_viz_gif': '3D 旋转 GIF',
                 'batch_viz_plotly': 'Plotly 3D',
@@ -2648,6 +3370,41 @@ class ThermoQGUI:
                 'batch_no_rows': '没有有效行。请确认各行成分总和约 100 wt% 且在表格范围内。',
                 'batch_plot_x_el': 'X 组元：',
                 'batch_plot_y_el': 'Y 组元：',
+                'batch_iso_interval': '等值线间隔：',
+                'batch_iso_interval_hint': '2D/3D 曲面图上等值线的标注间隔',
+                'batch_curve_group': '绘制成分曲线',
+                'batch_curve_intro': (
+                    '固定一种组元的含量（可设多个固定值），绘制 ΔT、ΔTs、Qtrue 及各组元 Q/P/β '
+                    '随另一种组元含量变化的曲线（基于最近一次批量计算结果）。'
+                ),
+                'batch_curve_x_el': '变化组元（横轴）：',
+                'batch_curve_fixed_el': '固定组元：',
+                'batch_curve_fixed_val': '固定含量 (wt%)：',
+                'batch_curve_fixed_val_hint': '单个数值，或逗号分隔的多个数值以绘制多条曲线（如 5, 10, 15）。',
+                'batch_curve_plot_btn': '生成曲线图',
+                'batch_curve_saved': '曲线图已保存：{path}',
+                'batch_curve_same_x_fixed': '变化组元与固定组元不能相同。',
+                'batch_curve_need_fixed_val': '请输入固定组元的含量 (wt%)。',
+                'batch_curve_fixed_val_invalid': '固定含量须为数字，或多个数字（逗号分隔）。',
+                'batch_curve_no_match': '批量表中没有 w({el}) ≈ {val} wt%（±{tol:.3g}）的数据行。',
+                'batch_curve_all_done': '已生成 {n} 个曲线图文件。',
+                'batch_curve_title': '{z} 随 w({ex})；w({fixed})={fv} wt%',
+                'batch_curve_z_multi_label': '曲线物理量（可多选）：',
+                'batch_curve_z_multi_hint': '选择 ΔT、ΔTs、Qtrue、Q/P/β 等，随变化组元绘制曲线。',
+                'batch_curve_multi_title': '批量物理量随 w({ex})；w({fixed})={fv} wt%',
+                'batch_curve_multi_title_multi': '批量物理量随 w({ex})；固定 w({fixed})',
+                'batch_curve_multi_ylabel': '数值',
+                'batch_curve_multi_saved': '多物理量曲线图已保存：{path}',
+                'batch_curve_multi_need_z': '请在下方的列表中至少选择一个物理量。',
+                'batch_curve_coord_frame': '坐标范围',
+                'batch_curve_coord_hint': (
+                    '横轴：变化组元含量 (wt%)；纵轴：物理量。留空则按筛选后的曲线数据自动设置范围。'
+                ),
+                'batch_curve_coord_x_min': 'X 最小值：',
+                'batch_curve_coord_x_max': 'X 最大值：',
+                'batch_curve_coord_y_min': 'Y 最小值：',
+                'batch_curve_coord_y_max': 'Y 最大值：',
+                'batch_curve_coord_reset': '恢复默认（按数据）',
                 'batch_output_block': '输出文件',
                 'batch_max_rows_invalid': '最大行数不是有效整数。',
                 # Main window / element selector
@@ -2805,11 +3562,9 @@ class ThermoQGUI:
                 'exp_t0_no_data': '未能从文件中提取有效数据！',
                 'exptc_win_title': '提取 Thermo-calc 结果',
                 'exptc_heading': '提取 Thermo-calc 结果',
-                'exptc_intro': (
-                    '熔程：从 .exp 提取液相线/固相线温度与熔程。\n'
-                    '混溶隙：从各温度 .exp 提取相边界曲线（由 XTEXT/YTEXT 确定列名）并导出 Excel。\n'
-                    'T-zero：从 *_T0.exp 提取 w(*) 及对应 T0。'
-                ),
+                'exptc_mr_intro': '从 .exp 文件提取液相线/固相线温度与熔程。',
+                'exptc_lmg_intro': '从各温度 .exp 文件提取相边界曲线（由 XTEXT/YTEXT 确定列名）并导出 Excel。',
+                'exptc_t0_intro': '从 *_T0.exp 文件提取 w(*) 及对应 T0。',
                 'exptc_tab_mr': '熔程',
                 'exptc_tab_lmg': '混溶隙',
                 'exptc_tab_t0': 'T-zero',
@@ -2922,11 +3677,34 @@ class ThermoQGUI:
                 'iso_plot_button': '绘制等成分曲线',
                 'iso_need_o': '请输入 O 合金成分（w(X)、w(Y)）！',
                 'iso_o_out_of_range': '请检查：所选合金成分超出数据可用的成分范围！',
-                'iso_done': '完成：已生成等成分的2D投影与3D图。',
+                'iso_done': '完成：已生成等成分的 2D 投影、3D 图与 k–T 曲线。',
                 'iso_2d_title': '2D投影（等成分）',
                 'iso_3d_title': '3D等成分（T作Z轴）',
                 'iso_dyn_title': '3D动态（高温到低温）',
                 'iso_plotly_3d_title': '等成分3D交互图（Plotly）',
+                'iso_k_curve_frame': '配分系数随温度变化',
+                'iso_k_curve_enable': '绘制 k–T 曲线（k = w(*@固相)/w(*@LIQUID)）',
+                'iso_k_curve_title': '配分系数 k 随温度 T 变化（等成分 O）',
+                'iso_k_curve_legend': 'k({el})',
+                'iso_k_curve_no_valid': '无有效配分系数数据，无法绘制 k–T 曲线。',
+                'iso_comp_coord_frame': '坐标范围（成分图）',
+                'iso_comp_coord_hint': (
+                    '用于 2D/3D 成分图：横轴 w(X)（wt%），纵轴 w(Y)（wt%）。留空则使用默认 0–100 正方形范围。'
+                ),
+                'iso_comp_coord_x_min': 'X 最小值：',
+                'iso_comp_coord_x_max': 'X 最大值：',
+                'iso_comp_coord_y_min': 'Y 最小值：',
+                'iso_comp_coord_y_max': 'Y 最大值：',
+                'iso_comp_coord_reset': '恢复默认（0–100 正方形）',
+                'iso_k_coord_frame': '坐标范围（k–T 曲线）',
+                'iso_k_coord_hint': (
+                    '用于 k–T 曲线：横轴 T（K），纵轴 k。留空则按数据自动设置范围。'
+                ),
+                'iso_k_coord_x_min': 'T 最小值：',
+                'iso_k_coord_x_max': 'T 最大值：',
+                'iso_k_coord_y_min': 'k 最小值：',
+                'iso_k_coord_y_max': 'k 最大值：',
+                'iso_k_coord_reset': '恢复默认（按数据）',
                 # Solid-Liquid partition coefficient (k-vectors): same temperature page
                 'stp_target_temp': '目标温度 (K)：',
                 'stp_all_table_lever': 'All table_Lever 文件夹：',
@@ -3121,6 +3899,35 @@ class ThermoQGUI:
             self._refresh_batch_z_combo_values()
         except Exception:
             pass
+        try:
+            self._refresh_batch_curve_z_listbox()
+        except Exception:
+            pass
+        bw = getattr(self, '_batch_exp_widgets', None)
+        if bw:
+            try:
+                self._refresh_plot_exp_lang(bw)
+            except Exception:
+                pass
+        bcw = getattr(self, '_batch_coord_widgets', None)
+        if bcw:
+            try:
+                self._refresh_plot_coord_lang(bcw)
+            except Exception:
+                pass
+        bccw = getattr(self, '_batch_curve_coord_widgets', None)
+        if bccw:
+            try:
+                self._refresh_plot_coord_lang(bccw)
+            except Exception:
+                pass
+        if hasattr(self, 'batch_curve_x_combo'):
+            try:
+                ev = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
+                self.batch_curve_x_combo['values'] = ev
+                self.batch_curve_fixed_el_combo['values'] = ev
+            except tk.TclError:
+                pass
 
     def _setup_calculate_batch_tab(self, tab_batch):
         """Build the batch export / plot sub-UI on the Calculate notebook."""
@@ -3132,13 +3939,15 @@ class ThermoQGUI:
 
         canvas = tk.Canvas(outer, highlightthickness=0, takefocus=1)
         vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        hsb = ttk.Scrollbar(outer, orient="horizontal", command=canvas.xview)
         canvas.grid(row=0, column=0, sticky="nsew")
         vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
 
         scrollable_frame = ttk.Frame(canvas)
         self._batch_scroll_canvas = canvas
         _batch_cw = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=vsb.set)
+        canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
         def _batch_on_inner_configure(_event=None):
             canvas.configure(scrollregion=canvas.bbox("all"))
@@ -3239,16 +4048,63 @@ class ThermoQGUI:
 
         btn_fr = ttk.Frame(scrollable_frame)
         btn_fr.pack(fill=tk.X, pady=6)
-        self.batch_compute_btn = ttk.Button(btn_fr, text=self.tr('batch_compute', 'Compute batch'), command=self.run_batch_compute_for_space)
-        self.batch_compute_btn.pack(side=tk.LEFT, padx=4)
+        btn_left_sp = ttk.Frame(btn_fr)
+        btn_left_sp.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        btn_center = ttk.Frame(btn_fr)
+        btn_center.pack(side=tk.LEFT)
+        self.batch_compute_btn = ttk.Button(
+            btn_center, text=self.tr('batch_compute', 'Compute batch'), command=self.run_batch_compute_for_space,
+        )
+        self.batch_compute_btn.pack()
         self._batch_lang_widgets.append((self.batch_compute_btn, 'batch_compute'))
+        btn_right_sp = ttk.Frame(btn_fr)
+        btn_right_sp.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         self.batch_compute_status_label = ttk.Label(
             scrollable_frame,
             text=self.tr('batch_status_ready', 'Run “Compute batch” first.'),
             foreground="blue",
         )
-        self.batch_compute_status_label.pack(anchor='w', pady=4)
+        self.batch_compute_status_label.pack(anchor='w', pady=(0, 4))
+
+        out_fr = ttk.LabelFrame(scrollable_frame, text=self.tr('batch_output_block', 'Output files'), padding=6)
+        out_fr.pack(fill=tk.X, pady=4)
+        self._batch_lang_widgets.append((out_fr, 'batch_output_block'))
+        out_row = ttk.Frame(out_fr)
+        out_row.pack(fill=tk.X, pady=2)
+        lod = ttk.Label(out_row, text=self.tr('batch_output_dir', 'Output Directory:'))
+        lod.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lod, 'batch_output_dir'))
+        self.batch_output_dir_var = tk.StringVar()
+        ttk.Entry(out_row, textvariable=self.batch_output_dir_var, width=36).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+
+        def _browse_batch_out():
+            d = filedialog.askdirectory(title=self.tr('batch_output_dir', 'Output Directory:'))
+            if d:
+                self.batch_output_dir_var.set(d)
+
+        bb = ttk.Button(out_row, text=self.tr('batch_browse', 'Browse'), command=_browse_batch_out)
+        bb.pack(side=tk.RIGHT, padx=4)
+        self._batch_lang_widgets.append((bb, 'batch_browse'))
+
+        pfx_fr = ttk.Frame(out_fr)
+        pfx_fr.pack(fill=tk.X, pady=2)
+        lpfx = ttk.Label(pfx_fr, text=self.tr('batch_prefix', 'Output Prefix:'))
+        lpfx.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lpfx, 'batch_prefix'))
+        self.batch_output_prefix_var = tk.StringVar(value="batch_calc")
+        ttk.Entry(pfx_fr, textvariable=self.batch_output_prefix_var, width=30).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+
+        fmt_fr = ttk.Frame(out_fr)
+        fmt_fr.pack(fill=tk.X, pady=2)
+        lfmt = ttk.Label(fmt_fr, text=self.tr('batch_image_fmt', 'Image Format (2D/3D Static):'))
+        lfmt.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lfmt, 'batch_image_fmt'))
+        self.batch_image_format_var = tk.StringVar(value="PNG")
+        fmt_opts = ["PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "PDF"]
+        ttk.Combobox(fmt_fr, textvariable=self.batch_image_format_var, values=fmt_opts, state="readonly", width=12).pack(
+            side=tk.LEFT, padx=4
+        )
 
         plot_fr = ttk.LabelFrame(scrollable_frame, text=self.tr('batch_plot_group', 'Plot (2D / 3D)'), padding=8)
         plot_fr.pack(fill=tk.X, pady=6)
@@ -3298,6 +4154,7 @@ class ThermoQGUI:
         self._batch_viz_lang = []
         viz_specs = [
             ('batch_viz_2d', '2D Heatmap'),
+            ('batch_viz_2d_curves', '2D Curves'),
             ('batch_viz_3d', '3D Static'),
             ('batch_viz_gif', '3D Rotation GIF'),
             ('batch_viz_plotly', 'Plotly 3D'),
@@ -3331,6 +4188,56 @@ class ThermoQGUI:
             command=_on_batch_smooth,
         ).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
+        iso_fr = ttk.Frame(plot_fr)
+        iso_fr.pack(fill=tk.X, pady=4)
+        lbl_batch_iso = ttk.Label(iso_fr, text=self.tr('batch_iso_interval', 'Contour interval:'))
+        lbl_batch_iso.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lbl_batch_iso, 'batch_iso_interval'))
+        self.batch_iso_interval_var = tk.StringVar(value="1")
+        ttk.Entry(iso_fr, textvariable=self.batch_iso_interval_var, width=8).pack(side=tk.LEFT, padx=4)
+        lbl_batch_iso_hint = ttk.Label(
+            iso_fr,
+            text=self.tr('batch_iso_interval_hint', 'Spacing for isocontours on 2D/3D surface plots'),
+        )
+        lbl_batch_iso_hint.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lbl_batch_iso_hint, 'batch_iso_interval_hint'))
+
+        def _batch_reset_coord():
+            try:
+                ex = (self.batch_plot_x_var.get() or "").strip()
+                ey = (self.batch_plot_y_var.get() or "").strip()
+                if not ex or not ey:
+                    raise ValueError(self.tr('plot_select_xy', ''))
+                df = getattr(self, 'last_batch_results_df', None)
+                if df is None or len(df) == 0:
+                    raise ValueError(self.tr('batch_need_compute', ''))
+                cx, cy = f"w_{ex}", f"w_{ey}"
+                if cx not in df.columns or cy not in df.columns:
+                    raise ValueError(self.tr('batch_missing_wxy', '').format(wx=cx, wy=cy))
+                x = pd.to_numeric(df[cx], errors='coerce')
+                y = pd.to_numeric(df[cy], errors='coerce')
+                ok = x.notna() & y.notna()
+                if not ok.any():
+                    raise ValueError(self.tr('plot_no_valid', ''))
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(
+                    float(x.loc[ok].min()), float(x.loc[ok].max()),
+                    float(y.loc[ok].min()), float(y.loc[ok].max()),
+                )
+                self.batch_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        self.batch_coord_ui = self._build_plot_coord_range_ui(plot_fr, reset_command=_batch_reset_coord)
+        self.batch_coord_ui['frame'].pack(fill=tk.X, pady=4)
+        self._batch_coord_widgets = self.batch_coord_ui['widgets']
+
+        self.batch_exp_ui = self._build_plot_experimental_points_ui(plot_fr, self.root)
+        self.batch_exp_ui['frame'].pack(fill=tk.X, pady=4)
+        self._batch_exp_widgets = self.batch_exp_ui['widgets']
+
         view_fr = ttk.LabelFrame(plot_fr, text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'), padding=6)
         view_fr.pack(fill=tk.X, pady=4)
         self._batch_lang_widgets.append((view_fr, 'batch_view_3d'))
@@ -3348,45 +4255,6 @@ class ThermoQGUI:
         la.pack(side=tk.LEFT, padx=4)
         self._batch_lang_widgets.append((la, 'batch_azim'))
         ttk.Entry(ar, textvariable=self.batch_azim_var, width=8).pack(side=tk.LEFT, padx=4)
-
-        out_fr = ttk.LabelFrame(plot_fr, text=self.tr('batch_output_block', 'Output files'), padding=6)
-        out_fr.pack(fill=tk.X, pady=4)
-        self._batch_lang_widgets.append((out_fr, 'batch_output_block'))
-        out_row = ttk.Frame(out_fr)
-        out_row.pack(fill=tk.X, pady=2)
-        lod = ttk.Label(out_row, text=self.tr('batch_output_dir', 'Output Directory:'))
-        lod.pack(side=tk.LEFT, padx=4)
-        self._batch_lang_widgets.append((lod, 'batch_output_dir'))
-        self.batch_output_dir_var = tk.StringVar()
-        ttk.Entry(out_row, textvariable=self.batch_output_dir_var, width=36).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
-
-        def _browse_batch_out():
-            d = filedialog.askdirectory(title=self.tr('batch_output_dir', 'Output Directory:'))
-            if d:
-                self.batch_output_dir_var.set(d)
-
-        bb = ttk.Button(out_row, text=self.tr('batch_browse', 'Browse'), command=_browse_batch_out)
-        bb.pack(side=tk.RIGHT, padx=4)
-        self._batch_lang_widgets.append((bb, 'batch_browse'))
-
-        pfx_fr = ttk.Frame(plot_fr)
-        pfx_fr.pack(fill=tk.X, pady=2)
-        lpfx = ttk.Label(pfx_fr, text=self.tr('batch_prefix', 'Output Prefix:'))
-        lpfx.pack(side=tk.LEFT, padx=4)
-        self._batch_lang_widgets.append((lpfx, 'batch_prefix'))
-        self.batch_output_prefix_var = tk.StringVar(value="batch_calc")
-        ttk.Entry(pfx_fr, textvariable=self.batch_output_prefix_var, width=30).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
-
-        fmt_fr = ttk.Frame(plot_fr)
-        fmt_fr.pack(fill=tk.X, pady=2)
-        lfmt = ttk.Label(fmt_fr, text=self.tr('batch_image_fmt', 'Image Format (2D/3D Static):'))
-        lfmt.pack(side=tk.LEFT, padx=4)
-        self._batch_lang_widgets.append((lfmt, 'batch_image_fmt'))
-        self.batch_image_format_var = tk.StringVar(value="PNG")
-        fmt_opts = ["PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "PDF"]
-        ttk.Combobox(fmt_fr, textvariable=self.batch_image_format_var, values=fmt_opts, state="readonly", width=12).pack(
-            side=tk.LEFT, padx=4
-        )
 
         gif_fr = ttk.LabelFrame(plot_fr, text=self.tr('batch_gif_params', '3D Rotation GIF Parameters'), padding=6)
         gif_fr.pack(fill=tk.X, pady=4)
@@ -3416,6 +4284,125 @@ class ThermoQGUI:
         self.batch_plot_btn = ttk.Button(plot_fr, text=self.tr('batch_plot_btn', 'Generate plot'), command=self.run_batch_plot_for_space)
         self.batch_plot_btn.pack(pady=10)
         self._batch_lang_widgets.append((self.batch_plot_btn, 'batch_plot_btn'))
+
+        curve_fr = ttk.LabelFrame(scrollable_frame, text=self.tr('batch_curve_group', 'Plot curves (composition)'), padding=8)
+        curve_fr.pack(fill=tk.X, pady=6)
+        self._batch_lang_widgets.append((curve_fr, 'batch_curve_group'))
+        curve_intro = ttk.Label(
+            curve_fr,
+            text=self.tr('batch_curve_intro', ''),
+            wraplength=680,
+            justify='left',
+        )
+        curve_intro.pack(anchor='w', pady=(0, 6))
+        self._batch_lang_widgets.append((curve_intro, 'batch_curve_intro'))
+
+        curve_z_fr = ttk.Frame(curve_fr)
+        curve_z_fr.pack(fill=tk.X, pady=4)
+        lbl_curve_z_multi = ttk.Label(
+            curve_z_fr, text=self.tr('batch_curve_z_multi_label', 'Quantities for curve overlay (multi-select):'),
+        )
+        lbl_curve_z_multi.pack(anchor='w', padx=4)
+        self._batch_lang_widgets.append((lbl_curve_z_multi, 'batch_curve_z_multi_label'))
+        curve_z_list_row = ttk.Frame(curve_z_fr)
+        curve_z_list_row.pack(fill=tk.X, pady=2)
+        self.batch_curve_z_listbox = tk.Listbox(
+            curve_z_list_row, selectmode=tk.EXTENDED, height=6, exportselection=False,
+        )
+        self.batch_curve_z_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        curve_z_scroll = ttk.Scrollbar(curve_z_list_row, orient='vertical', command=self.batch_curve_z_listbox.yview)
+        curve_z_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.batch_curve_z_listbox.configure(yscrollcommand=curve_z_scroll.set)
+        lbl_curve_z_hint = ttk.Label(
+            curve_z_fr,
+            text=self.tr('batch_curve_z_multi_hint', ''),
+            wraplength=660,
+            justify='left',
+            font=('Arial', 8),
+            foreground='gray',
+        )
+        lbl_curve_z_hint.pack(anchor='w', padx=4, pady=(2, 0))
+        self._batch_lang_widgets.append((lbl_curve_z_hint, 'batch_curve_z_multi_hint'))
+
+        curve_xy_fr = ttk.Frame(curve_fr)
+        curve_xy_fr.pack(fill=tk.X, pady=4)
+        lbl_cx = ttk.Label(curve_xy_fr, text=self.tr('batch_curve_x_el', 'Varying element (X axis):'))
+        lbl_cx.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lbl_cx, 'batch_curve_x_el'))
+        self.batch_curve_x_var = tk.StringVar()
+        self.batch_curve_x_combo = ttk.Combobox(curve_xy_fr, textvariable=self.batch_curve_x_var, values=elem_vals, width=8)
+        self.batch_curve_x_combo.pack(side=tk.LEFT, padx=4)
+        lbl_cfixed = ttk.Label(curve_xy_fr, text=self.tr('batch_curve_fixed_el', 'Fixed element:'))
+        lbl_cfixed.pack(side=tk.LEFT, padx=12)
+        self._batch_lang_widgets.append((lbl_cfixed, 'batch_curve_fixed_el'))
+        self.batch_curve_fixed_el_var = tk.StringVar()
+        self.batch_curve_fixed_el_combo = ttk.Combobox(
+            curve_xy_fr, textvariable=self.batch_curve_fixed_el_var, values=elem_vals, width=8,
+        )
+        self.batch_curve_fixed_el_combo.pack(side=tk.LEFT, padx=4)
+
+        curve_fixed_fr = ttk.Frame(curve_fr)
+        curve_fixed_fr.pack(fill=tk.X, pady=4)
+        lbl_cfixed_val = ttk.Label(curve_fixed_fr, text=self.tr('batch_curve_fixed_val', 'Fixed content (wt%):'))
+        lbl_cfixed_val.pack(side=tk.LEFT, padx=4)
+        self._batch_lang_widgets.append((lbl_cfixed_val, 'batch_curve_fixed_val'))
+        self.batch_curve_fixed_val_var = tk.StringVar()
+        ttk.Entry(curve_fixed_fr, textvariable=self.batch_curve_fixed_val_var, width=24).pack(side=tk.LEFT, padx=4)
+        lbl_cfixed_hint = ttk.Label(
+            curve_fixed_fr,
+            text=self.tr('batch_curve_fixed_val_hint', ''),
+            wraplength=480,
+            justify='left',
+            font=('Arial', 8),
+            foreground='gray',
+        )
+        lbl_cfixed_hint.pack(side=tk.LEFT, padx=8)
+        self._batch_lang_widgets.append((lbl_cfixed_hint, 'batch_curve_fixed_val_hint'))
+
+        def _batch_curve_reset_coord():
+            try:
+                ex = (self.batch_curve_x_var.get() or "").strip()
+                fixed_el = (self.batch_curve_fixed_el_var.get() or "").strip()
+                fixed_values = self._batch_parse_fixed_values(self.batch_curve_fixed_val_var.get())
+                if not ex or not fixed_el:
+                    raise ValueError(self.tr('plot_select_xy', ''))
+                if not fixed_values:
+                    raise ValueError(self.tr('batch_curve_need_fixed_val', ''))
+                df = getattr(self, 'last_batch_results_df', None)
+                if df is None or len(df) == 0:
+                    raise ValueError(self.tr('batch_need_compute', ''))
+                zcols = self._batch_get_selected_curve_z_columns(df)
+                if not zcols:
+                    zcols = self._batch_numeric_z_columns(df)
+                if not zcols:
+                    raise ValueError(self.tr('batch_curve_multi_need_z', ''))
+                xs, ys = self._batch_curve_collect_plot_xy(df, ex, fixed_el, fixed_values, zcols)
+                if len(xs) < 1 or len(ys) < 1:
+                    raise ValueError(self.tr('plot_no_valid', ''))
+                px0, px1, py0, py1 = _extp_trist_default_coord_limits(
+                    float(np.min(xs)), float(np.max(xs)),
+                    float(np.min(ys)), float(np.max(ys)),
+                )
+                self.batch_curve_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        self.batch_curve_coord_ui = self._build_plot_coord_range_ui(
+            curve_fr, reset_command=_batch_curve_reset_coord, key_prefix='batch_curve_coord',
+        )
+        self.batch_curve_coord_ui['frame'].pack(fill=tk.X, pady=4)
+        self._batch_curve_coord_widgets = self.batch_curve_coord_ui['widgets']
+
+        self.batch_curve_plot_btn = ttk.Button(
+            curve_fr,
+            text=self.tr('batch_curve_plot_btn', 'Generate curves'),
+            command=self.run_batch_curve_plot_for_space,
+        )
+        self.batch_curve_plot_btn.pack(pady=10)
+        self._batch_lang_widgets.append((self.batch_curve_plot_btn, 'batch_curve_plot_btn'))
 
         export_fr = ttk.Frame(scrollable_frame)
         export_fr.pack(fill=tk.X, pady=(0, 10))
@@ -3916,6 +4903,50 @@ class ThermoQGUI:
                         break
             self.batch_z_var.set(pick if pick else (num_cols[0] if num_cols else all_lbl))
 
+    def _refresh_batch_curve_z_listbox(self):
+        """Populate multi-select quantity list for 2D curve overlay plots."""
+        if not hasattr(self, 'batch_curve_z_listbox'):
+            return
+        lb = self.batch_curve_z_listbox
+        df = getattr(self, 'last_batch_results_df', None)
+        prev = []
+        try:
+            prev = [lb.get(i) for i in lb.curselection()]
+        except tk.TclError:
+            prev = []
+        lb.delete(0, tk.END)
+        if df is None or len(df) == 0:
+            return
+        opts = self._batch_numeric_z_columns(df)
+        for c in opts:
+            lb.insert(tk.END, c)
+        to_sel = [c for c in prev if c in opts]
+        if not to_sel and opts:
+            for prefer in ('ΔT', 'ΔTs', 'Qtrue (Lever)', 'Qtrue (Scheil)'):
+                if prefer in opts:
+                    to_sel = [prefer]
+                    break
+        if not to_sel and len(opts) >= 2:
+            to_sel = opts[:2]
+        elif not to_sel and opts:
+            to_sel = [opts[0]]
+        for i, c in enumerate(opts):
+            if c in to_sel:
+                try:
+                    lb.selection_set(i)
+                except tk.TclError:
+                    pass
+
+    def _batch_get_selected_curve_z_columns(self, df):
+        if df is None or not hasattr(self, 'batch_curve_z_listbox'):
+            return []
+        lb = self.batch_curve_z_listbox
+        try:
+            sel = [lb.get(i) for i in lb.curselection()]
+        except tk.TclError:
+            sel = []
+        return [c for c in sel if c in df.columns]
+
     def run_batch_compute_for_space(self):
         """Fill last_batch_results_df from each row of P, P-S, or both (same formulas as Calculate)."""
         if self.pandat_p_data is None or self.pandat_ts_data is None:
@@ -4080,6 +5111,7 @@ class ThermoQGUI:
         self.last_batch_n_limit = int(len(rows_out))
         self.last_batch_results_df = pd.DataFrame(rows_out)
         self._refresh_batch_z_combo_values()
+        self._refresh_batch_curve_z_listbox()
         self._refresh_batch_export_cols_listbox()
 
         msg = self.tr('batch_done', 'Batch done: {n} rows ({skipped} skipped).').format(
@@ -4146,6 +5178,953 @@ class ThermoQGUI:
             )
 
     @staticmethod
+    def _liquidus_square_axis_limits(x_min, x_max, y_min, y_max):
+        """
+        Default square axis limits for Liquidus Vector Plotter.
+
+        When both axes start at w≈0–1 (typical Pandat grids), use [0, min(X max, Y max)+0.1].
+        Otherwise anchor at the data minimum with side = min(span)+0.1.
+        """
+        x_min = float(x_min)
+        x_max = float(x_max)
+        y_min = float(y_min)
+        y_max = float(y_max)
+        if x_min <= 1.0 and y_min <= 1.0:
+            side = min(x_max, y_max) + 0.1
+            if side <= 0:
+                side = max(x_max, y_max, 1.0) + 0.1
+            return 0.0, side, 0.0, side
+        x_span = max(x_max - x_min, 0.0)
+        y_span = max(y_max - y_min, 0.0)
+        if x_span <= 0 and y_span <= 0:
+            side = 0.1
+        else:
+            side = (min(x_span, y_span) if min(x_span, y_span) > 0 else max(x_span, y_span)) + 0.1
+        if side <= 0:
+            side = 0.1
+        return x_min, x_min + side, y_min, y_min + side
+
+    @staticmethod
+    def _liquidus_apply_axis_ticks(ax, step=1.0):
+        """Major tick spacing for liquidus composition axes."""
+        try:
+            from matplotlib.ticker import MultipleLocator
+            loc = MultipleLocator(step)
+            ax.xaxis.set_major_locator(loc)
+            ax.yaxis.set_major_locator(loc)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _format_temperature_tick(t):
+        return f"{float(t):.4g}"
+
+    @staticmethod
+    def _apply_sampled_temperature_xticks(ax, temperatures, rotate_threshold=6):
+        """Place x-axis ticks at sampled temperature values (for k vs T plots)."""
+        try:
+            temps = np.array(
+                sorted({float(t) for t in np.asarray(temperatures, dtype=float).flat if np.isfinite(t)}),
+                dtype=float,
+            )
+            if temps.size == 0:
+                return
+            rotate = temps.size >= rotate_threshold
+            ax.set_xticks(temps)
+            ax.set_xticklabels(
+                [ThermoQGUI._format_temperature_tick(t) for t in temps],
+                rotation=30 if rotate else 0,
+                ha='right' if rotate else 'center',
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _apply_k_value_axis_ticks(ax, nbins=6):
+        """Sensible y-axis ticks for partition coefficient k (not wt% spacing)."""
+        try:
+            from matplotlib.ticker import MaxNLocator
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=nbins, prune='both'))
+        except Exception:
+            pass
+
+    PLOT_IMAGE_FORMAT_OPTIONS = (
+        "PNG", "JPEG", "GIF", "BMP", "TIFF", "WebP", "SVG", "PDF", "EPS", "AI",
+    )
+
+    @staticmethod
+    def _format_plot_coord_value(v):
+        return f"{float(v):.6g}"
+
+    @staticmethod
+    def _dataframe_xy_extents(df, ex, ey):
+        """Return (x_min, x_max, y_min, y_max) from w(ex)/w(ey) columns."""
+        if df is None or len(df) == 0:
+            raise ValueError("empty dataframe")
+        col_x_pattern = f"w({ex})"
+        col_y_pattern = f"w({ey})"
+        col_x_found = col_y_found = None
+        for col in df.columns:
+            if not isinstance(col, str):
+                continue
+            col_upper = col.upper()
+            if col_upper == col_x_pattern.upper():
+                col_x_found = col
+            elif col_upper == col_y_pattern.upper():
+                col_y_found = col
+        if col_x_found is None or col_y_found is None:
+            raise ValueError(f"missing w({ex}) or w({ey})")
+        x_vals = pd.to_numeric(df[col_x_found], errors='coerce')
+        y_vals = pd.to_numeric(df[col_y_found], errors='coerce')
+        mask = x_vals.notna() & y_vals.notna()
+        if not mask.any():
+            raise ValueError("no valid points")
+        x_vals = x_vals.loc[mask]
+        y_vals = y_vals.loc[mask]
+        return float(x_vals.min()), float(x_vals.max()), float(y_vals.min()), float(y_vals.max())
+
+    def _plot_image_ext_and_save_kwargs(self, img_format):
+        img_format = (img_format or "PNG").upper()
+        format_ext_map = {
+            "PNG": "png", "JPEG": "jpg", "JPG": "jpg", "GIF": "gif", "BMP": "bmp",
+            "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "AI": "pdf", "EPS": "eps", "PDF": "pdf",
+        }
+        ext = format_ext_map.get(img_format, "png")
+        save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
+        mpl_fmt_map = {
+            "PDF": "pdf", "EPS": "eps", "SVG": "svg", "AI": "pdf",
+            "JPEG": "jpeg", "JPG": "jpeg", "TIFF": "tiff", "WEBP": "webp", "PNG": "png",
+        }
+        # Matplotlib savefig cannot write GIF/BMP; animated GIFs use FuncAnimation + pillow.
+        if img_format in ("GIF", "BMP"):
+            save_kwargs["format"] = "png"
+            save_kwargs["_pillow_format"] = img_format
+        else:
+            save_kwargs["format"] = mpl_fmt_map.get(img_format, "png")
+        return ext, save_kwargs
+
+    def _save_figure_image(self, fig, out_path, img_format=None):
+        """Save a matplotlib figure using the app's image format settings (PIL for GIF/BMP)."""
+        ext, save_kwargs = self._plot_image_ext_and_save_kwargs(img_format)
+        pillow_fmt = save_kwargs.pop("_pillow_format", None)
+        if pillow_fmt:
+            import io
+            buf = io.BytesIO()
+            fig.savefig(buf, **save_kwargs)
+            buf.seek(0)
+            img = Image.open(buf)
+            if pillow_fmt == "BMP" and img.mode in ("RGBA", "LA", "P"):
+                img = img.convert("RGB")
+            img.save(out_path, format=pillow_fmt)
+        else:
+            fig.savefig(out_path, **save_kwargs)
+        return out_path
+
+    def _resolve_plot_coord_limits(
+        self, data_x_min, data_x_max, data_y_min, data_y_max, coord_vars,
+        set_fields_cb=None, square_default=True,
+    ):
+        xmin_var, xmax_var, ymin_var, ymax_var = coord_vars
+        raw = [v.get().strip() for v in (xmin_var, xmax_var, ymin_var, ymax_var)]
+        filled = [bool(s) for s in raw]
+        if not any(filled):
+            if square_default:
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(
+                    data_x_min, data_x_max, data_y_min, data_y_max,
+                )
+            else:
+                px0, px1, py0, py1 = _extp_trist_default_coord_limits(
+                    data_x_min, data_x_max, data_y_min, data_y_max,
+                )
+            if set_fields_cb:
+                set_fields_cb(px0, px1, py0, py1)
+            return px0, px1, py0, py1
+        if not all(filled):
+            raise ValueError(self.tr('plot_coord_partial', ''))
+        try:
+            px0, px1, py0, py1 = (float(s) for s in raw)
+        except ValueError as exc:
+            raise ValueError(self.tr('plot_coord_invalid', '')) from exc
+        if px0 >= px1 or py0 >= py1:
+            raise ValueError(self.tr('plot_coord_invalid', ''))
+        return px0, px1, py0, py1
+
+    def _apply_plot_xy_limits(self, ax, plot_x_min, plot_x_max, plot_y_min, plot_y_max, tick_step=1.0, aspect_square=False):
+        ax.set_xlim(plot_x_min, plot_x_max)
+        ax.set_ylim(plot_y_min, plot_y_max)
+        self._liquidus_apply_axis_ticks(ax, step=tick_step)
+        if aspect_square:
+            try:
+                ax.set_box_aspect(1)
+            except Exception:
+                pass
+
+    def _build_plot_coord_range_ui(self, parent, reset_command, key_prefix='plot_coord'):
+        coord_frame = ttk.LabelFrame(
+            parent, text=self.tr(f'{key_prefix}_frame', 'Coordinate Range'), padding="10",
+        )
+        lbl_hint = ttk.Label(
+            coord_frame, text=self.tr(f'{key_prefix}_hint', ''), wraplength=650, justify='left',
+        )
+        lbl_hint.pack(anchor=tk.W, pady=(0, 8))
+        xmin_var = tk.StringVar(value="")
+        xmax_var = tk.StringVar(value="")
+        ymin_var = tk.StringVar(value="")
+        ymax_var = tk.StringVar(value="")
+        coord_vars = (xmin_var, xmax_var, ymin_var, ymax_var)
+
+        def set_fields(x0, x1, y0, y1):
+            xmin_var.set(self._format_plot_coord_value(x0))
+            xmax_var.set(self._format_plot_coord_value(x1))
+            ymin_var.set(self._format_plot_coord_value(y0))
+            ymax_var.set(self._format_plot_coord_value(y1))
+
+        coord_row1 = ttk.Frame(coord_frame)
+        coord_row1.pack(fill=tk.X, pady=2)
+        lbl_xmin = ttk.Label(coord_row1, text=self.tr(f'{key_prefix}_x_min', 'X Min:'))
+        lbl_xmin.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(coord_row1, textvariable=xmin_var, width=12).pack(side=tk.LEFT, padx=5)
+        lbl_xmax = ttk.Label(coord_row1, text=self.tr(f'{key_prefix}_x_max', 'X Max:'))
+        lbl_xmax.pack(side=tk.LEFT, padx=15)
+        ttk.Entry(coord_row1, textvariable=xmax_var, width=12).pack(side=tk.LEFT, padx=5)
+        coord_row2 = ttk.Frame(coord_frame)
+        coord_row2.pack(fill=tk.X, pady=2)
+        lbl_ymin = ttk.Label(coord_row2, text=self.tr(f'{key_prefix}_y_min', 'Y Min:'))
+        lbl_ymin.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(coord_row2, textvariable=ymin_var, width=12).pack(side=tk.LEFT, padx=5)
+        lbl_ymax = ttk.Label(coord_row2, text=self.tr(f'{key_prefix}_y_max', 'Y Max:'))
+        lbl_ymax.pack(side=tk.LEFT, padx=15)
+        ttk.Entry(coord_row2, textvariable=ymax_var, width=12).pack(side=tk.LEFT, padx=5)
+        btn_reset = ttk.Button(
+            coord_frame,
+            text=self.tr(f'{key_prefix}_reset', 'Reset to default (square)'),
+            command=reset_command,
+        )
+        btn_reset.pack(anchor=tk.W, pady=(8, 0))
+
+        def resolve(data_x_min, data_x_max, data_y_min, data_y_max, square_default=True):
+            return self._resolve_plot_coord_limits(
+                data_x_min, data_x_max, data_y_min, data_y_max,
+                coord_vars, set_fields_cb=set_fields, square_default=square_default,
+            )
+
+        widgets = {
+            'frame': coord_frame,
+            'hint': lbl_hint,
+            'x_min': lbl_xmin,
+            'x_max': lbl_xmax,
+            'y_min': lbl_ymin,
+            'y_max': lbl_ymax,
+            'reset_btn': btn_reset,
+            'key_prefix': key_prefix,
+        }
+        return {
+            'frame': coord_frame,
+            'vars': coord_vars,
+            'widgets': widgets,
+            'set_fields': set_fields,
+            'resolve': resolve,
+        }
+
+    def _build_plot_output_settings_ui(self, parent, default_prefix='plot', default_format='PNG'):
+        output_settings_frame = ttk.LabelFrame(
+            parent, text=self.tr('plot_phase_output_settings', 'Output Settings'), padding="10",
+        )
+        output_dir_var = tk.StringVar()
+        output_dir_frame = ttk.Frame(output_settings_frame)
+        output_dir_frame.pack(fill=tk.X, pady=3)
+        lbl_outdir = ttk.Label(output_dir_frame, text=self.tr('batch_output_dir', 'Output Directory:'))
+        lbl_outdir.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(output_dir_frame, textvariable=output_dir_var, width=35).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True,
+        )
+
+        def browse_output_dir():
+            dir_path = filedialog.askdirectory(title=self.tr('batch_output_dir', 'Output Directory:'))
+            if dir_path:
+                output_dir_var.set(dir_path)
+
+        btn_browse_out = ttk.Button(
+            output_dir_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_output_dir,
+        )
+        btn_browse_out.pack(side=tk.RIGHT, padx=5)
+        output_prefix_var = tk.StringVar(value=default_prefix)
+        output_prefix_frame = ttk.Frame(output_settings_frame)
+        output_prefix_frame.pack(fill=tk.X, pady=3)
+        lbl_prefix = ttk.Label(output_prefix_frame, text=self.tr('batch_prefix', 'Output Prefix:'))
+        lbl_prefix.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(output_prefix_frame, textvariable=output_prefix_var, width=35).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True,
+        )
+        image_format_var = tk.StringVar(value=default_format)
+        format_frame = ttk.Frame(output_settings_frame)
+        format_frame.pack(fill=tk.X, pady=3)
+        lbl_fmt = ttk.Label(format_frame, text=self.tr('batch_image_fmt', 'Image Format (2D/3D Static):'))
+        lbl_fmt.pack(side=tk.LEFT, padx=5)
+        ttk.Combobox(
+            format_frame,
+            textvariable=image_format_var,
+            values=list(self.PLOT_IMAGE_FORMAT_OPTIONS),
+            state="readonly",
+            width=15,
+        ).pack(side=tk.LEFT, padx=5)
+
+        def get_base_path():
+            output_dir = output_dir_var.get().strip()
+            if output_dir and os.path.exists(output_dir):
+                return output_dir
+            return "."
+
+        widgets = {
+            'frame': output_settings_frame,
+            'outdir_lbl': lbl_outdir,
+            'browse_btn': btn_browse_out,
+            'prefix_lbl': lbl_prefix,
+            'fmt_lbl': lbl_fmt,
+        }
+        return {
+            'frame': output_settings_frame,
+            'output_dir_var': output_dir_var,
+            'output_prefix_var': output_prefix_var,
+            'image_format_var': image_format_var,
+            'get_base_path': get_base_path,
+            'widgets': widgets,
+        }
+
+    def _plot_data_export_filetypes(self):
+        return [
+            (self.tr('plot_data_export_xlsx', 'Excel (.xlsx)'), "*.xlsx"),
+            (self.tr('plot_data_export_csv', 'CSV (.csv)'), "*.csv"),
+            (self.tr('plot_data_export_tsv', 'TSV (.tsv)'), "*.tsv"),
+            (self.tr('plot_data_export_json', 'JSON (.json)'), "*.json"),
+            (self.tr('filetype_all', 'All files'), "*.*"),
+        ]
+
+    def _ask_save_data_path(self, parent, title, initialfile=None, default_ext='.xlsx'):
+        return filedialog.asksaveasfilename(
+            parent=parent,
+            title=title,
+            defaultextension=default_ext,
+            filetypes=self._plot_data_export_filetypes(),
+            initialfile=initialfile,
+        )
+
+    def _export_dataframe_to_path(self, df, path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext in ('.xlsx', '.xls'):
+            df.to_excel(path, index=False, engine='openpyxl')
+        elif ext == '.csv':
+            df.to_csv(path, index=False, encoding='utf-8-sig')
+        elif ext == '.tsv':
+            df.to_csv(path, index=False, sep='\t', encoding='utf-8-sig')
+        elif ext == '.json':
+            df.to_json(path, orient='records', indent=2, force_ascii=False)
+        else:
+            raise ValueError(
+                self.tr('plot_data_export_unsupported', 'Unsupported export format: {ext}').format(ext=ext),
+            )
+
+    def _refresh_plot_coord_lang(self, widgets):
+        kp = widgets.get('key_prefix', 'plot_coord')
+        widgets['frame'].config(text=self.tr(f'{kp}_frame', 'Coordinate Range'))
+        widgets['hint'].config(text=self.tr(f'{kp}_hint', ''))
+        widgets['x_min'].config(text=self.tr(f'{kp}_x_min', 'X Min:'))
+        widgets['x_max'].config(text=self.tr(f'{kp}_x_max', 'X Max:'))
+        widgets['y_min'].config(text=self.tr(f'{kp}_y_min', 'Y Min:'))
+        widgets['y_max'].config(text=self.tr(f'{kp}_y_max', 'Y Max:'))
+        widgets['reset_btn'].config(text=self.tr(f'{kp}_reset', 'Reset to default (square)'))
+
+    def _refresh_plot_output_lang(self, widgets):
+        widgets['frame'].config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
+        widgets['outdir_lbl'].config(text=self.tr('batch_output_dir', 'Output Directory:'))
+        widgets['browse_btn'].config(text=self.tr('pandat_browse', 'Browse'))
+        widgets['prefix_lbl'].config(text=self.tr('batch_prefix', 'Output Prefix:'))
+        widgets['fmt_lbl'].config(text=self.tr('batch_image_fmt', 'Image Format:'))
+
+    def _refresh_plot_exp_lang(self, widgets):
+        widgets['frame'].config(text=self.tr('plot_exp_frame', 'Experimental Points'))
+        widgets['enable_cb'].config(text=self.tr('plot_exp_enable', 'Show experimental points on plot'))
+        widgets['file_lbl'].config(text=self.tr('plot_exp_file', 'Batch file (Excel/CSV/TSV):'))
+        widgets['browse_btn'].config(text=self.tr('plot_exp_browse', 'Browse'))
+        widgets['manual_lbl'].config(text=self.tr('plot_exp_manual', 'Manual points (one per line: X, Y [, Z]):'))
+        widgets['hint'].config(text=self.tr('plot_exp_hint', ''))
+
+    def _read_tabular_data_file(self, path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext in ('.xlsx', '.xls'):
+            return pd.read_excel(path, engine='openpyxl')
+        if ext == '.csv':
+            return pd.read_csv(path, encoding='utf-8-sig')
+        if ext in ('.tsv', '.txt', '.dat'):
+            return pd.read_csv(path, sep='\t', encoding='utf-8-sig', engine='python')
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    def _match_exp_column(self, df, ex, ey, axis):
+        """Resolve column name for element ex or ey in experimental dataframe."""
+        el = canonical_element_symbol(axis)
+        cols_map = {str(c).strip(): c for c in df.columns}
+        cols_upper = {str(c).strip().upper(): c for c in df.columns if isinstance(c, str)}
+        patterns = [
+            f"w({el})",
+            f"w({el.upper()})",
+            f"w_{el}",
+            f"W({el})",
+            el,
+            f"w({el.lower()})",
+        ]
+        for p in patterns:
+            pu = p.upper()
+            if pu in cols_upper:
+                return cols_upper[pu]
+        for c in df.columns:
+            if not isinstance(c, str):
+                continue
+            m = re.match(r'^\s*w\s*\(\s*([A-Za-z]{1,3})\s*\)\s*$', c.strip(), re.I)
+            if m and canonical_element_symbol(m.group(1)) == el:
+                return c
+        return None
+
+    def _match_exp_z_column(self, df, z_hint=None):
+        if z_hint and z_hint in df.columns:
+            return z_hint
+        cols_upper = {str(c).strip().upper(): c for c in df.columns if isinstance(c, str)}
+        for cand in (
+            'T0 (K)', 'T0(K)', 'T0', 'T (K)', 'T', 'TEMPERATURE', 'TEMPERATURE_K',
+            'LIQUIDUS_TEMPERATURE', 'SOLIDUS_TEMPERATURE', 'VALUE', 'Z',
+        ):
+            if cand in cols_upper:
+                return cols_upper[cand]
+        if z_hint:
+            zh = str(z_hint).strip().upper()
+            if zh in cols_upper:
+                return cols_upper[zh]
+        return None
+
+    def _parse_manual_experimental_points(self, text):
+        rows = []
+        for line in (text or '').splitlines():
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            parts = [p.strip() for p in re.split(r'[,;\t]+', s) if p.strip()]
+            if len(parts) < 2:
+                continue
+            try:
+                x = float(parts[0])
+                y = float(parts[1])
+                z = float(parts[2]) if len(parts) >= 3 else np.nan
+            except ValueError:
+                continue
+            rows.append({'__exp_x__': x, '__exp_y__': y, '__exp_z__': z})
+        if not rows:
+            return None
+        return pd.DataFrame(rows)
+
+    def _collect_experimental_points(self, exp_ui, ex, ey, z_hint=None, parent=None):
+        if exp_ui is None or not exp_ui['enabled_var'].get():
+            return None
+        parts = []
+        file_path = exp_ui['file_var'].get().strip()
+        if file_path:
+            if not os.path.isfile(file_path):
+                messagebox.showwarning(
+                    self.tr('dlg_warning', 'Warning'),
+                    self.tr('plot_exp_file_missing', 'Experimental points file not found: {path}').format(path=file_path),
+                    parent=parent,
+                )
+            else:
+                try:
+                    parts.append(self._read_tabular_data_file(file_path))
+                except Exception as e:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('plot_exp_read_fail', 'Failed to read experimental data file:\n{e}').format(e=str(e)),
+                        parent=parent,
+                    )
+                    return None
+        manual_df = self._parse_manual_experimental_points(exp_ui['manual_text'].get('1.0', tk.END))
+        if manual_df is not None:
+            parts.append(manual_df)
+        if not parts:
+            return None
+        df = pd.concat(parts, ignore_index=True)
+        if '__exp_x__' in df.columns:
+            x_col, y_col = '__exp_x__', '__exp_y__'
+            z_col = '__exp_z__' if df['__exp_z__'].notna().any() else None
+        else:
+            x_col = self._match_exp_column(df, ex, ey, ex)
+            y_col = self._match_exp_column(df, ex, ey, ey)
+            if x_col is None or y_col is None:
+                messagebox.showwarning(
+                    self.tr('dlg_warning', 'Warning'),
+                    self.tr('plot_exp_no_cols', 'Could not find w({ex}) and w({ey}) in the experimental data file.').format(
+                        ex=ex, ey=ey,
+                    ),
+                    parent=parent,
+                )
+                return None
+            z_col = self._match_exp_z_column(df, z_hint=z_hint)
+        out = pd.DataFrame({
+            x_col: pd.to_numeric(df[x_col], errors='coerce'),
+            y_col: pd.to_numeric(df[y_col], errors='coerce'),
+        })
+        if z_col and z_col in df.columns:
+            out[z_col] = pd.to_numeric(df[z_col], errors='coerce')
+        elif '__exp_z__' in df.columns:
+            out['__exp_z__'] = pd.to_numeric(df['__exp_z__'], errors='coerce')
+            z_col = '__exp_z__'
+        mask = out[x_col].notna() & out[y_col].notna()
+        out = out.loc[mask]
+        if out.empty:
+            return None
+        zp = z_col if (z_col and z_col in out.columns and out[z_col].notna().any()) else None
+        return {'df': out, 'x_col': x_col, 'y_col': y_col, 'z_col': zp}
+
+    def _build_plot_experimental_points_ui(self, parent, browse_parent=None):
+        frame = ttk.LabelFrame(parent, text=self.tr('plot_exp_frame', 'Experimental Points'), padding="8")
+        enabled_var = tk.BooleanVar(value=False)
+        enable_cb = ttk.Checkbutton(
+            frame,
+            text=self.tr('plot_exp_enable', 'Show experimental points on plot'),
+            variable=enabled_var,
+        )
+        enable_cb.pack(anchor=tk.W, pady=(0, 4))
+        file_row = ttk.Frame(frame)
+        file_row.pack(fill=tk.X, pady=2)
+        file_lbl = ttk.Label(file_row, text=self.tr('plot_exp_file', 'Batch file (Excel/CSV/TSV):'))
+        file_lbl.pack(side=tk.LEFT, padx=(0, 4))
+        file_var = tk.StringVar()
+        ttk.Entry(file_row, textvariable=file_var, width=40).pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+
+        def browse_exp_file():
+            p = filedialog.askopenfilename(
+                parent=browse_parent or parent,
+                title=self.tr('plot_exp_fd', 'Select experimental data file'),
+                filetypes=[
+                    (self.tr('plot_data_export_xlsx', 'Excel (.xlsx)'), "*.xlsx"),
+                    (self.tr('plot_data_export_csv', 'CSV (.csv)'), "*.csv"),
+                    (self.tr('plot_data_export_tsv', 'TSV (.tsv)'), "*.tsv"),
+                    (self.tr('filetype_all', 'All files'), "*.*"),
+                ],
+            )
+            if p:
+                file_var.set(p)
+
+        browse_btn = ttk.Button(file_row, text=self.tr('plot_exp_browse', 'Browse'), command=browse_exp_file)
+        browse_btn.pack(side=tk.RIGHT, padx=4)
+        manual_lbl = ttk.Label(frame, text=self.tr('plot_exp_manual', 'Manual points (one per line: X, Y [, Z]):'))
+        manual_lbl.pack(anchor=tk.W, pady=(6, 2))
+        manual_text = tk.Text(frame, height=4, width=60, wrap=tk.NONE, font=('Consolas', 9))
+        manual_text.pack(fill=tk.X, pady=2)
+        hint = ttk.Label(frame, text=self.tr('plot_exp_hint', ''), wraplength=640, justify='left', font=('Arial', 8))
+        hint.pack(anchor=tk.W, pady=(4, 0))
+        widgets = {
+            'frame': frame,
+            'enable_cb': enable_cb,
+            'file_lbl': file_lbl,
+            'browse_btn': browse_btn,
+            'manual_lbl': manual_lbl,
+            'hint': hint,
+        }
+
+        def get_points(ex, ey, z_hint=None):
+            return self._collect_experimental_points(
+                {'enabled_var': enabled_var, 'file_var': file_var, 'manual_text': manual_text},
+                ex, ey, z_hint=z_hint, parent=browse_parent or parent,
+            )
+
+        return {
+            'frame': frame,
+            'enabled_var': enabled_var,
+            'file_var': file_var,
+            'manual_text': manual_text,
+            'widgets': widgets,
+            'get_points': get_points,
+        }
+
+    def _overlay_experimental_points_mpl_2d(self, ax, exp_points, show_legend=True):
+        if not exp_points or exp_points.get('df') is None:
+            return
+        df = exp_points['df']
+        xc, yc = exp_points['x_col'], exp_points['y_col']
+        x = pd.to_numeric(df[xc], errors='coerce').to_numpy(dtype=float)
+        y = pd.to_numeric(df[yc], errors='coerce').to_numpy(dtype=float)
+        ok = np.isfinite(x) & np.isfinite(y)
+        x, y = x[ok], y[ok]
+        if len(x) == 0:
+            return
+        leg = self.tr('plot_exp_legend', 'Experimental')
+        scatter_kwargs = dict(
+            s=90, marker='D', facecolors='white', edgecolors='black',
+            linewidths=1.4, zorder=12,
+        )
+        if show_legend:
+            scatter_kwargs['label'] = leg
+        ax.scatter(x, y, **scatter_kwargs)
+        if show_legend:
+            handles, labels = ax.get_legend_handles_labels()
+            if leg not in labels:
+                ax.legend(loc='best', fontsize=8)
+
+    def _overlay_experimental_points_mpl_3d(self, ax, exp_points):
+        if not exp_points or exp_points.get('df') is None:
+            return
+        df = exp_points['df']
+        xc, yc = exp_points['x_col'], exp_points['y_col']
+        zc = exp_points.get('z_col')
+        x = pd.to_numeric(df[xc], errors='coerce').to_numpy(dtype=float)
+        y = pd.to_numeric(df[yc], errors='coerce').to_numpy(dtype=float)
+        if zc and zc in df.columns:
+            z = pd.to_numeric(df[zc], errors='coerce').to_numpy(dtype=float)
+            ok = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+            x, y, z = x[ok], y[ok], z[ok]
+            if len(x) == 0:
+                return
+            ax.scatter(
+                x, y, z, s=55, marker='D', facecolors='white', edgecolors='black',
+                linewidths=1.2, depthshade=True, zorder=12,
+                label=self.tr('plot_exp_legend', 'Experimental'),
+            )
+        else:
+            ok = np.isfinite(x) & np.isfinite(y)
+            x, y = x[ok], y[ok]
+            if len(x) == 0:
+                return
+            zlo, zhi = ax.get_zlim()
+            zmid = 0.5 * (zlo + zhi)
+            ax.scatter(
+                x, y, np.full(len(x), zmid), s=55, marker='D',
+                facecolors='white', edgecolors='black', linewidths=1.2,
+                depthshade=True, zorder=12,
+                label=self.tr('plot_exp_legend', 'Experimental'),
+            )
+
+    def _overlay_experimental_points_plotly(self, fig, exp_points, ex, ey, show_legend=True):
+        if not PLOTLY_AVAILABLE or not exp_points or exp_points.get('df') is None:
+            return
+        df = exp_points['df']
+        xc, yc = exp_points['x_col'], exp_points['y_col']
+        zc = exp_points.get('z_col')
+        x = pd.to_numeric(df[xc], errors='coerce')
+        y = pd.to_numeric(df[yc], errors='coerce')
+        if zc and zc in df.columns:
+            z = pd.to_numeric(df[zc], errors='coerce')
+            ok = x.notna() & y.notna() & z.notna()
+        else:
+            z = pd.Series([None] * len(df))
+            ok = x.notna() & y.notna()
+        if not ok.any():
+            return
+        fig.add_trace(
+            go.Scatter3d(
+                x=x.loc[ok], y=y.loc[ok], z=z.loc[ok] if zc else [0] * int(ok.sum()),
+                mode='markers',
+                name=self.tr('plot_exp_legend', 'Experimental'),
+                showlegend=show_legend,
+                marker=dict(size=6, color='white', line=dict(width=2, color='black'), symbol='diamond'),
+            )
+        )
+
+    def _plot_xyz_surface_render(
+        self, x, y, z, ex, ey, base, label_z, viz,
+        smoothness, image_format, elev, azim,
+        gif_speed, gif_interval, gif_fps,
+        status_widget, parent_window,
+        plot_limits=None, exp_points=None,
+        iso_interval=None,
+        iso_line_color="#2c3e50", iso_text_color="#1a252f",
+        iso_clabel_fmt="%d", iso_level_fmt=".0f",
+        show_legend=True, suppress_smooth_warn=False, open_after=True,
+    ):
+        """Shared 2D/3D/GIF/Plotly surface renderer with optional experimental point overlay."""
+        status_widget.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
+        parent_window.update()
+
+        px0 = px1 = py0 = py1 = None
+        x_bounds = y_bounds = None
+        if plot_limits:
+            px0, px1, py0, py1 = plot_limits
+            x_bounds = (px0, px1)
+            y_bounds = (py0, py1)
+
+        iso_levels = None
+        if iso_interval is not None:
+            try:
+                dk = float(str(iso_interval).strip() or "0")
+            except (TypeError, ValueError):
+                dk = 0.0
+            if dk > 0:
+                iso_levels = _lmg_iso_levels(z, iso_interval)
+                zmin = float(np.nanmin(z))
+                if iso_levels.size:
+                    iso_levels = iso_levels[iso_levels >= zmin - 1e-6]
+
+        def _mpl_clabel_2d(ax, cs):
+            if cs is None:
+                return
+            try:
+                labels = ax.clabel(cs, inline=True, fontsize=9, fmt=iso_clabel_fmt)
+                for lb in labels:
+                    lb.set_color(iso_text_color)
+                    lb.set_fontweight("bold")
+            except Exception:
+                pass
+
+        xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
+            x, y, z, grid_resolution=100, smoothness=smoothness,
+            x_bounds=x_bounds, y_bounds=y_bounds,
+        )
+        if xi_grid is None:
+            if not suppress_smooth_warn:
+                messagebox.showwarning(
+                    self.tr('plot_smooth_title', 'Smoothing Failed'),
+                    self.tr(
+                        'plot_smooth_msg',
+                        'Could not create smooth surface. Using scatter/triangulated surface instead. Please install scikit-learn and scipy for smooth surfaces.',
+                    ),
+                    parent=parent_window,
+                )
+            xi_grid, yi_grid, zi_grid = None, None, None
+
+        if viz == "2D Heatmap":
+            if not MATPLOTLIB_AVAILABLE:
+                messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'), parent=parent_window)
+                return None
+            fig_hm, ax_hm = plt.subplots(figsize=(10, 8))
+            ax_hm.set_xlabel(format_w_element_label(ex))
+            ax_hm.set_ylabel(format_w_element_label(ey))
+            if xi_grid is not None:
+                contour = ax_hm.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
+                fig_hm.colorbar(contour, label=label_z)
+                if iso_levels is not None and iso_levels.size:
+                    cs_iso = ax_hm.contour(
+                        xi_grid, yi_grid, zi_grid, levels=iso_levels,
+                        colors=iso_line_color, linewidths=1.4,
+                    )
+                    _mpl_clabel_2d(ax_hm, cs_iso)
+            else:
+                scatter = ax_hm.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
+                fig_hm.colorbar(scatter, label=label_z)
+            ax_hm.grid(False)
+            if plot_limits:
+                self._apply_plot_xy_limits(ax_hm, px0, px1, py0, py1)
+            self._overlay_experimental_points_mpl_2d(ax_hm, exp_points, show_legend=show_legend)
+            fig_hm.tight_layout()
+            ext, _ = self._plot_image_ext_and_save_kwargs(image_format)
+            out_path = f"{base}_Heatmap.{ext}"
+            self._save_figure_image(fig_hm, out_path, image_format)
+            plt.close(fig_hm)
+            status_widget.config(text=f"Heatmap saved: {out_path}", foreground="green")
+            if open_after:
+                self.open_file_and_offer_save_as(out_path, parent_window)
+            return out_path
+
+        if viz == "3D Static":
+            if not MATPLOTLIB_AVAILABLE:
+                messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'), parent=parent_window)
+                return None
+            fig = plt.figure(figsize=(12, 10))
+            ax = fig.add_subplot(111, projection='3d')
+            if xi_grid is not None:
+                surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True)
+                fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                if iso_levels is not None and iso_levels.size:
+                    _extp_trist_draw_iso_3d_mpl(
+                        ax, xi_grid, yi_grid, zi_grid, iso_levels,
+                        iso_line_color, iso_text_color, mid_frac=0.5,
+                        level_fmt=iso_level_fmt,
+                    )
+            else:
+                trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
+            ax.set_xlabel(format_w_element_label(ex))
+            ax.set_ylabel(format_w_element_label(ey))
+            ax.set_zlabel(label_z)
+            if plot_limits:
+                ax.set_xlim(px0, px1)
+                ax.set_ylim(py0, py1)
+            try:
+                ax.view_init(elev=float(elev), azim=float(azim))
+            except Exception:
+                pass
+            self._overlay_experimental_points_mpl_3d(ax, exp_points)
+            ext, _ = self._plot_image_ext_and_save_kwargs(image_format)
+            out_path = f"{base}_3d.{ext}"
+            self._save_figure_image(fig, out_path, image_format)
+            plt.close()
+            status_widget.config(text=f"3D plot saved: {out_path}", foreground="green")
+            if open_after:
+                self.open_file_and_offer_save_as(out_path, parent_window)
+            return out_path
+
+        if viz == "3D Rotation GIF":
+            if not MATPLOTLIB_AVAILABLE:
+                messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_gif', 'Matplotlib is not installed. Cannot generate GIF.'), parent=parent_window)
+                return None
+            fig = plt.figure(figsize=(12, 10))
+            ax = fig.add_subplot(111, projection='3d')
+            if xi_grid is not None:
+                surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True)
+                fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                if iso_levels is not None and iso_levels.size:
+                    _extp_trist_draw_iso_3d_mpl(
+                        ax, xi_grid, yi_grid, zi_grid, iso_levels,
+                        iso_line_color, iso_text_color, mid_frac=0.5,
+                        level_fmt=iso_level_fmt,
+                    )
+            else:
+                trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
+                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
+            ax.set_xlabel(format_w_element_label(ex))
+            ax.set_ylabel(format_w_element_label(ey))
+            ax.set_zlabel(label_z)
+            if plot_limits:
+                ax.set_xlim(px0, px1)
+                ax.set_ylim(py0, py1)
+            self._overlay_experimental_points_mpl_3d(ax, exp_points)
+
+            def _rotate(angle):
+                ax.view_init(azim=angle)
+                return [ax]
+
+            try:
+                rotation_step = int(float(gif_speed))
+            except Exception:
+                rotation_step = 5
+            try:
+                interval_ms = int(float(gif_interval))
+            except Exception:
+                interval_ms = 50
+            try:
+                fps_val = int(float(gif_fps))
+            except Exception:
+                fps_val = 20
+            ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
+            out_path = f"{base}_3d_rotation.gif"
+            ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
+            plt.close()
+            status_widget.config(text=f"GIF saved: {out_path}", foreground="green")
+            if open_after:
+                self.open_file_and_offer_save_as(out_path, parent_window)
+            return out_path
+
+        if PLOTLY_AVAILABLE:
+            traces = []
+            if xi_grid is not None:
+                traces.append(go.Surface(
+                    x=xi_grid, y=yi_grid, z=zi_grid,
+                    colorscale='RdBu', reversescale=True, opacity=0.98,
+                    colorbar=dict(title=label_z),
+                ))
+                if iso_levels is not None and iso_levels.size:
+                    for lvl, seg in _lmg_contour_segments(xi_grid, yi_grid, zi_grid, iso_levels):
+                        _extp_trist_plotly_iso_traces(
+                            traces, lvl, seg, iso_line_color, iso_text_color, mid_frac=0.5,
+                            level_fmt=iso_level_fmt,
+                        )
+            else:
+                traces.append(go.Scatter3d(
+                    x=x, y=y, z=z, mode='markers',
+                    marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85, colorbar=dict(title=label_z)),
+                ))
+            fig_plotly = go.Figure(data=traces)
+            self._overlay_experimental_points_plotly(fig_plotly, exp_points, ex, ey, show_legend=show_legend)
+            fig_plotly.update_layout(
+                scene=dict(
+                    xaxis_title=format_w_element_label(ex),
+                    yaxis_title=format_w_element_label(ey),
+                    zaxis_title=label_z,
+                ),
+                width=900, height=700,
+                showlegend=show_legend,
+            )
+            out_path = f"{base}_3d_interactive.html"
+            fig_plotly.write_html(out_path)
+            status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+            if open_after:
+                self.open_file_and_offer_save_as(out_path, parent_window)
+            return out_path
+
+        out_path = f"{base}_3d_interactive.html"
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write('<html><head><title>3D Interactive Plot</title></head><body>\n')
+            f.write('<h2>3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
+            f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
+            f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
+            f.write('<script>\n')
+            f.write('var data = [{\n')
+            f.write('  type: "scatter3d",\n')
+            f.write('  mode: "markers",\n')
+            f.write('  x: ' + str(x.tolist()) + ',\n')
+            f.write('  y: ' + str(y.tolist()) + ',\n')
+            f.write('  z: ' + str(z.tolist()) + ',\n')
+            f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "RdBu", reversescale: true, opacity: 0.85, colorbar: {title: "' + label_z + '"} }\n')
+            f.write('}];\n')
+            f.write('var layout = {\n')
+            f.write('  scene: {\n')
+            f.write('    xaxis: {title: "w(' + ex + ') (%)"},\n')
+            f.write('    yaxis: {title: "w(' + ey + ') (%)"},\n')
+            f.write('    zaxis: {title: "' + label_z + '"}\n')
+            f.write('  }\n')
+            f.write('};\n')
+            f.write('Plotly.newPlot("plot", data, layout);\n')
+            f.write('</script>\n')
+            f.write('</body></html>')
+        status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
+        if open_after:
+            self.open_file_and_offer_save_as(out_path, parent_window)
+        return out_path
+
+    @staticmethod
+    def _liquidus_crop_surface_grid(xi_grid, yi_grid, zi_grid, x0, x1, y0, y1):
+        """Crop a smooth-surface grid to the plot coordinate window."""
+        if xi_grid is None or yi_grid is None or zi_grid is None:
+            return None, None, None
+        x1d = xi_grid[0, :]
+        y1d = yi_grid[:, 0]
+        x_mask = (x1d >= x0) & (x1d <= x1)
+        y_mask = (y1d >= y0) & (y1d <= y1)
+        if not x_mask.any() or not y_mask.any():
+            return xi_grid, yi_grid, zi_grid
+        return (
+            xi_grid[np.ix_(y_mask, x_mask)],
+            yi_grid[np.ix_(y_mask, x_mask)],
+            zi_grid[np.ix_(y_mask, x_mask)],
+        )
+
+    @staticmethod
+    def _liquidus_t_limits_in_view(wx, wy, t, x0, x1, y0, y1, zi_grid=None, xi_grid=None, yi_grid=None):
+        """Temperature color limits from data points and grid cells inside the plot window."""
+        wx_arr = np.asarray(wx, dtype=float)
+        wy_arr = np.asarray(wy, dtype=float)
+        t_arr = np.asarray(t, dtype=float)
+        vals = []
+        in_view = (
+            (wx_arr >= x0) & (wx_arr <= x1)
+            & (wy_arr >= y0) & (wy_arr <= y1)
+            & np.isfinite(t_arr)
+        )
+        if in_view.any():
+            vals.append(t_arr[in_view])
+        if zi_grid is not None and xi_grid is not None and yi_grid is not None:
+            x1d = xi_grid[0, :]
+            y1d = yi_grid[:, 0]
+            x_ok = (x1d >= x0) & (x1d <= x1)
+            y_ok = (y1d >= y0) & (y1d <= y1)
+            if x_ok.any() and y_ok.any():
+                zi_sub = zi_grid[np.ix_(y_ok, x_ok)]
+                zv = zi_sub[np.isfinite(zi_sub)]
+                if zv.size:
+                    vals.append(zv.ravel())
+        if not vals:
+            fin = t_arr[np.isfinite(t_arr)]
+            if fin.size:
+                return float(np.min(fin)), float(np.max(fin))
+            return None, None
+        allv = np.concatenate(vals)
+        return float(np.min(allv)), float(np.max(allv))
+
+    @staticmethod
     def _liquidus_newton_forward_interpolation(f1, f2, f3):
         """Newton forward difference at x=0 from samples at x=1,2,3 (Liquidus Vector Plotter)."""
         if pd.isna(f1) or pd.isna(f2) or pd.isna(f3):
@@ -4153,46 +6132,33 @@ class ThermoQGUI:
         return 2.5 * f1 - 2.0 * f2 + 0.5 * f3
 
     @staticmethod
-    def _liquidus_newton_from_axis_samples(w_samples, f_samples, w1_max=12.0, ap_rtol=0.025):
+    def _liquidus_newton_at_zero_from_w123(w_samples, f_samples, w_atol=1e-4):
         """
-        Extrapolate f(0) from the first three samples along a composition axis that lie on a uniform grid
-        (same spacing), with the smallest w <= w1_max (wt% near a pure corner). Returns NaN if not found.
+        Extrapolate f(0) from Newton forward difference using samples at w=1, 2, 3 (wt%)
+        on the varying composition axis.
         """
         w_samples = np.asarray(w_samples, dtype=float)
         f_samples = np.asarray(f_samples, dtype=float)
-        mask = np.isfinite(w_samples) & np.isfinite(f_samples) & (w_samples > 1e-9)
-        w_samples = w_samples[mask]
-        f_samples = f_samples[mask]
-        if w_samples.size < 3:
-            return np.nan
-        order = np.argsort(w_samples)
-        w_samples = w_samples[order]
-        f_samples = f_samples[order]
-        uw, uf = [], []
-        i = 0
-        while i < len(w_samples):
-            w0 = w_samples[i]
-            uw.append(w0)
-            uf.append(f_samples[i])
-            i += 1
-            while i < len(w_samples) and abs(w_samples[i] - w0) < 1e-6:
-                i += 1
-        if len(uw) < 3:
-            return np.nan
-        uw = np.array(uw, dtype=float)
-        uf = np.array(uf, dtype=float)
-        for j in range(len(uw) - 2):
-            w1, w2, w3 = uw[j], uw[j + 1], uw[j + 2]
-            f1, f2, f3 = uf[j], uf[j + 1], uf[j + 2]
-            if w1 > float(w1_max):
-                break
-            d1, d2 = w2 - w1, w3 - w2
-            if d1 <= 0 or d2 <= 0:
-                continue
-            if abs(d1 - d2) > ap_rtol * max(abs(w2), 1.0):
-                continue
-            return ThermoQGUI._liquidus_newton_forward_interpolation(f1, f2, f3)
-        return np.nan
+        f_vals = []
+        for wt in (1.0, 2.0, 3.0):
+            mask = (
+                np.isfinite(w_samples)
+                & np.isfinite(f_samples)
+                & np.isclose(w_samples, wt, atol=w_atol, rtol=0.0)
+            )
+            if not mask.any():
+                return np.nan
+            f_vals.append(float(np.nanmean(f_samples[mask])))
+        return ThermoQGUI._liquidus_newton_forward_interpolation(f_vals[0], f_vals[1], f_vals[2])
+
+    @staticmethod
+    def _liquidus_mask_w_at_123(w_series, w_atol=1e-4):
+        w = pd.to_numeric(w_series, errors='coerce')
+        return (
+            np.isclose(w, 1.0, atol=w_atol, rtol=0.0)
+            | np.isclose(w, 2.0, atol=w_atol, rtol=0.0)
+            | np.isclose(w, 3.0, atol=w_atol, rtol=0.0)
+        )
 
     @staticmethod
     def _liquidus_rows_match_composition(df, idx, cols, atol=1e-4):
@@ -4204,13 +6170,34 @@ class ThermoQGUI:
             m &= np.isclose(vc, v, rtol=0.0, atol=atol, equal_nan=True)
         return m
 
+    def _liquidus_newton_extrapolate_at_w0(self, df, idx, fix_cols, col_w_axis, col_inv, w_atol=1e-4):
+        """Newton f(w=0) from w=1,2,3 samples at fixed peer composition(s)."""
+        mfix = (
+            self._liquidus_rows_match_composition(df, idx, fix_cols, atol=w_atol)
+            if fix_cols
+            else pd.Series(True, index=df.index)
+        )
+        w123 = self._liquidus_mask_w_at_123(df[col_w_axis], w_atol=w_atol)
+        sub = df.loc[mfix & w123]
+        if sub.empty:
+            return np.nan
+        return self._liquidus_newton_at_zero_from_w123(
+            pd.to_numeric(sub[col_w_axis], errors='coerce').values,
+            pd.to_numeric(sub[col_inv], errors='coerce').values,
+            w_atol=w_atol,
+        )
+
     def _liquidus_clean_fill_dataframe(self, source_df, ex, ey):
         """
-        Replicate 'Clean and fill data before plotting' from Liquidus Vector Plotter export path:
-        T, all w(EL), 1/dwdT_L(EL@LIQUID) from dwdT_L (or use existing 1/dwdT columns);
-        Newton steps at w≈0 edges using uniform triplets near zero; then fill each 1/dwdT_L column
-        by linear interpolation along its own w(element) axis (fixed other compositions), with bfill/ffill
-        inside each group so row order in P/batch tables does not matter.
+        Clean and fill 1/dwdT_L(*@LIQUID) for Liquidus Vector Plotter (w=0 edges only).
+
+        Step 1: w(ex)=0, w(ey)≠0 — fill 1/dwdT_L(ex@LIQUID) from w(ex)=1,2,3 at fixed w(ey).
+        Step 2: w(ey)=0, w(ex)≠0 — fill 1/dwdT_L(ey@LIQUID) from w(ey)=1,2,3 at fixed w(ex).
+        Step 3: w(ex)=w(ey)=0 — fill ex column from w(ey)=0 & w(ex)=1,2,3; fill ey column from
+                w(ex)=0 & w(ey)=1,2,3 (Newton forward difference at 0 from samples at 1,2,3).
+
+        Example (Al-Mg-Si, ex=Mg, ey=Si): step 1 fixes w(Si) and uses w(Mg)=1,2,3; step 2 fixes
+        w(Mg) and uses w(Si)=1,2,3; step 3 uses the w(Si)=0 and w(Mg)=0 slices respectively.
         Returns cleaned DataFrame. Raises ValueError on missing columns.
         """
         ex = (ex or "").strip()
@@ -4218,8 +6205,9 @@ class ThermoQGUI:
         if not ex or not ey:
             raise ValueError("need_xy")
 
-        df = source_df.copy()
-        df = df.rename(columns={c: c.strip() for c in df.columns})
+        df = standardize_dataframe_element_columns(
+            source_df.copy().rename(columns={c: c.strip() for c in source_df.columns})
+        )
 
         col_t = None
         for col in df.columns:
@@ -4235,7 +6223,7 @@ class ThermoQGUI:
                 col_upper = col.strip().upper()
                 match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
                 if match:
-                    element = match.group(1).capitalize()
+                    element = canonical_element_symbol(match.group(1))
                     if element in PERIODIC_TABLE:
                         w_cols[element] = col
 
@@ -4247,12 +6235,12 @@ class ThermoQGUI:
             col_upper = col.strip().upper()
             m_inv = re.match(r'^1/DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
             if m_inv:
-                element = m_inv.group(1).capitalize()
+                element = canonical_element_symbol(m_inv.group(1))
                 if element in PERIODIC_TABLE:
                     inv_dwdt_cols[element] = col
             m_dw = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
             if m_dw:
-                element = m_dw.group(1).capitalize()
+                element = canonical_element_symbol(m_dw.group(1))
                 if element in PERIODIC_TABLE:
                     dwdt_cols[element] = col
 
@@ -4275,12 +6263,12 @@ class ThermoQGUI:
         selected_cols = [c for c in selected_cols if c not in seen and not seen.add(c)]
         df = df[selected_cols].copy()
         df = df.replace(r"^\s*$", np.nan, regex=True).dropna(how="all")
+        df = df.reset_index(drop=True)
 
         col_wx = w_cols[ex]
         col_wy = w_cols[ey]
         col_inv_x = inv_dwdt_cols[ex]
         col_inv_y = inv_dwdt_cols[ey]
-        other_w_cols = [w_cols[e] for e in sorted(w_cols.keys()) if e not in (ex, ey)]
         w_atol = 1e-4
 
         wx_vals = pd.to_numeric(df[col_wx], errors='coerce')
@@ -4288,121 +6276,77 @@ class ThermoQGUI:
         inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
         inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
 
-        w1_max_x = 12.0
-        pos_wx = wx_vals[np.isfinite(wx_vals) & (wx_vals > w_atol)]
-        if len(pos_wx) > 0:
-            w1_max_x = float(min(12.0, max(5.0, 0.35 * float(np.percentile(pos_wx, 15)))))
-        w1_max_y = 12.0
-        pos_wy = wy_vals[np.isfinite(wy_vals) & (wy_vals > w_atol)]
-        if len(pos_wy) > 0:
-            w1_max_y = float(min(12.0, max(5.0, 0.35 * float(np.percentile(pos_wy, 15)))))
-
+        # Step 1: w(ex)=0, w(ey)≠0 → 1/dwdT_L(ex@LIQUID) from w(ex)=1,2,3 at fixed w(ey)
         mask_step1 = (
             np.isclose(wx_vals, 0.0, atol=w_atol, rtol=0.0)
             & ~np.isclose(wy_vals, 0.0, atol=w_atol, rtol=0.0)
             & pd.isna(inv_x_vals)
         )
         for idx in df[mask_step1].index:
-            fix_cols = [col_wy] + other_w_cols
-            mfix = self._liquidus_rows_match_composition(df, idx, fix_cols, atol=w_atol)
-            sub = df.loc[mfix & (wx_vals > w_atol)]
-            if len(sub) < 3:
-                continue
-            w_s = pd.to_numeric(sub[col_wx], errors='coerce').values
-            f_s = pd.to_numeric(sub[col_inv_x], errors='coerce').values
-            interpolated = self._liquidus_newton_from_axis_samples(w_s, f_s, w1_max=w1_max_x)
+            interpolated = self._liquidus_newton_extrapolate_at_w0(
+                df, idx, [col_wy], col_wx, col_inv_x, w_atol=w_atol,
+            )
             if not pd.isna(interpolated):
                 df.loc[idx, col_inv_x] = interpolated
 
         inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
 
+        # Step 2: w(ey)=0, w(ex)≠0 → 1/dwdT_L(ey@LIQUID) from w(ey)=1,2,3 at fixed w(ex)
         mask_step2 = (
             np.isclose(wy_vals, 0.0, atol=w_atol, rtol=0.0)
             & ~np.isclose(wx_vals, 0.0, atol=w_atol, rtol=0.0)
             & pd.isna(inv_y_vals)
         )
         for idx in df[mask_step2].index:
-            fix_cols = [col_wx] + other_w_cols
-            mfix = self._liquidus_rows_match_composition(df, idx, fix_cols, atol=w_atol)
-            sub = df.loc[mfix & (wy_vals > w_atol)]
-            if len(sub) < 3:
-                continue
-            w_s = pd.to_numeric(sub[col_wy], errors='coerce').values
-            f_s = pd.to_numeric(sub[col_inv_y], errors='coerce').values
-            interpolated = self._liquidus_newton_from_axis_samples(w_s, f_s, w1_max=w1_max_y)
+            interpolated = self._liquidus_newton_extrapolate_at_w0(
+                df, idx, [col_wx], col_wy, col_inv_y, w_atol=w_atol,
+            )
             if not pd.isna(interpolated):
                 df.loc[idx, col_inv_y] = interpolated
 
         inv_y_vals = pd.to_numeric(df[col_inv_y], errors='coerce')
 
+        # Step 3a: w(ex)=w(ey)=0 → 1/dwdT_L(ex@LIQUID) at w(ey)=0 from w(ex)=1,2,3
         mask_step3a = (
             np.isclose(wx_vals, 0.0, atol=w_atol, rtol=0.0)
             & np.isclose(wy_vals, 0.0, atol=w_atol, rtol=0.0)
             & pd.isna(inv_x_vals)
         )
         for idx in df[mask_step3a].index:
-            mfix = self._liquidus_rows_match_composition(df, idx, other_w_cols, atol=w_atol) if other_w_cols else pd.Series(True, index=df.index)
-            sub = df.loc[mfix & np.isclose(wy_vals, 0.0, atol=w_atol, rtol=0.0) & (wx_vals > w_atol)]
-            if len(sub) < 3:
-                continue
-            w_s = pd.to_numeric(sub[col_wx], errors='coerce').values
-            f_s = pd.to_numeric(sub[col_inv_x], errors='coerce').values
-            interpolated = self._liquidus_newton_from_axis_samples(w_s, f_s, w1_max=w1_max_x)
+            interpolated = self._liquidus_newton_extrapolate_at_w0(
+                df, idx, [col_wy], col_wx, col_inv_x, w_atol=w_atol,
+            )
             if not pd.isna(interpolated):
                 df.loc[idx, col_inv_x] = interpolated
 
         inv_x_vals = pd.to_numeric(df[col_inv_x], errors='coerce')
 
+        # Step 3b: w(ex)=w(ey)=0 → 1/dwdT_L(ey@LIQUID) at w(ex)=0 from w(ey)=1,2,3
         mask_step3b = (
             np.isclose(wx_vals, 0.0, atol=w_atol, rtol=0.0)
             & np.isclose(wy_vals, 0.0, atol=w_atol, rtol=0.0)
             & pd.isna(inv_y_vals)
         )
         for idx in df[mask_step3b].index:
-            mfix = self._liquidus_rows_match_composition(df, idx, other_w_cols, atol=w_atol) if other_w_cols else pd.Series(True, index=df.index)
-            sub = df.loc[mfix & np.isclose(wx_vals, 0.0, atol=w_atol, rtol=0.0) & (wy_vals > w_atol)]
-            if len(sub) < 3:
-                continue
-            w_s = pd.to_numeric(sub[col_wy], errors='coerce').values
-            f_s = pd.to_numeric(sub[col_inv_y], errors='coerce').values
-            interpolated = self._liquidus_newton_from_axis_samples(w_s, f_s, w1_max=w1_max_y)
+            interpolated = self._liquidus_newton_extrapolate_at_w0(
+                df, idx, [col_wx], col_wy, col_inv_y, w_atol=w_atol,
+            )
             if not pd.isna(interpolated):
                 df.loc[idx, col_inv_y] = interpolated
 
-        def _fill_inv_along_element_axis(frame, elem, inv_col):
-            col_w = w_cols[elem]
-            gcols = [w_cols[ot] for ot in sorted(w_cols.keys()) if ot != elem]
-            sort_order = gcols + [col_w]
-            work = frame.sort_values(by=sort_order).reset_index(drop=True)
-            if not gcols:
-                s = pd.to_numeric(work[inv_col], errors='coerce')
-                work[inv_col] = s.interpolate(method='linear', limit_direction='both').bfill().ffill()
-                return work
-            work[inv_col] = (
-                work.groupby(gcols, sort=False, dropna=False)[inv_col]
-                .transform(
-                    lambda s: pd.to_numeric(s, errors='coerce')
-                    .interpolate(method='linear', limit_direction='both')
-                    .bfill()
-                    .ffill()
-                )
-            )
-            return work
-
-        out = df
-        for elem in sorted(inv_dwdt_cols.keys()):
-            out = _fill_inv_along_element_axis(out, elem, inv_dwdt_cols[elem])
-
-        return out
+        return df
 
     def _batch_safe_fname_part(self, s, max_len=72):
         t = str(s).replace("/", "_").replace("\\", "_").replace(":", "_")
         return "".join(c if (c.isalnum() or c in " ._-+()[]%") else "_" for c in t)[:max_len]
 
-    def _batch_plot_export_surface_file(self, df, ex, ey, zcol, viz, open_after=True, suppress_smooth_warn=False):
+    def _batch_plot_export_surface_file(
+        self, df, ex, ey, zcol, viz, open_after=True, suppress_smooth_warn=False,
+        plot_limits=None, iso_interval=None,
+    ):
         """
         Write one batch surface/scatter plot for quantity zcol and visualization viz.
-        Returns (out_path_or_None, err_code_or_None) where err_code is 'few_points', 'missing_xy', 'no_mpl', 'no_plotly', or exception text.
+        Returns (out_path_or_None, err_code_or_None).
         """
         cx, cy = f"w_{ex}", f"w_{ey}"
         if cx not in df.columns or cy not in df.columns:
@@ -4417,6 +6361,10 @@ class ThermoQGUI:
         if len(x) < 2:
             return None, 'few_points'
 
+        exp_pts = None
+        if hasattr(self, 'batch_exp_ui') and self.batch_exp_ui:
+            exp_pts = self.batch_exp_ui['get_points'](ex, ey, z_hint=zcol)
+
         out_dir = self.batch_output_dir_var.get().strip()
         base_path = out_dir if out_dir and os.path.isdir(out_dir) else "."
         prefix = self.batch_output_prefix_var.get().strip() or "batch_calc"
@@ -4424,162 +6372,499 @@ class ThermoQGUI:
         sz = self._batch_safe_fname_part(zcol)
         base = os.path.join(base_path, f"{prefix}_{mode}_{sz}")
         label_z = zcol
-        smooth = float(self.batch_smoothness_var.get())
 
-        self.batch_compute_status_label.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
-        self.root.update_idletasks()
-        xi_grid, yi_grid, zi_grid = self.create_smooth_surface(x, y, z, grid_resolution=100, smoothness=smooth)
-        if xi_grid is None and not suppress_smooth_warn:
-            messagebox.showwarning(
-                self.tr('plot_smooth_title', 'Smoothing Failed'),
-                self.tr(
-                    'plot_smooth_msg',
-                    'Could not create smooth surface. Using triangulated surface instead.',
-                ),
+        if plot_limits is None and hasattr(self, 'batch_coord_ui'):
+            plot_limits = self.batch_coord_ui['resolve'](
+                float(x.min()), float(x.max()), float(y.min()), float(y.max()),
             )
 
-        fmt = (self.batch_image_format_var.get() or "PNG").upper()
-        ext_map = {"PNG": "png", "JPEG": "jpg", "JPG": "jpg", "GIF": "gif", "BMP": "bmp", "TIFF": "tif", "WEBP": "webp", "SVG": "svg", "PDF": "pdf"}
-        ext = ext_map.get(fmt, "png")
+        if iso_interval is None and hasattr(self, 'batch_iso_interval_var'):
+            iso_interval = self.batch_iso_interval_var.get()
 
         try:
-            if viz == "2D Heatmap":
-                if not MATPLOTLIB_AVAILABLE:
-                    return None, 'no_mpl'
-                plt.figure(figsize=(10, 8))
-                plt.xlabel(f"w({ex}) (%)")
-                plt.ylabel(f"w({ey}) (%)")
-                if xi_grid is not None:
-                    cf = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap="coolwarm", alpha=1.0)
-                    plt.colorbar(cf, label=label_z)
-                else:
-                    sc = plt.scatter(x, y, c=z, cmap="coolwarm", s=40, alpha=0.9)
-                    plt.colorbar(sc, label=label_z)
-                plt.grid(False)
-                out_path = f"{base}_Heatmap.{ext}"
-                plt.savefig(out_path, dpi=300, bbox_inches="tight")
-                plt.close()
-                if open_after:
-                    self.batch_compute_status_label.config(text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path), foreground="green")
-                    self.open_file_and_offer_save_as(out_path, self.root)
-                return out_path, None
-            if viz == "3D Static":
-                if not MATPLOTLIB_AVAILABLE:
-                    return None, 'no_mpl'
-                fig = plt.figure(figsize=(12, 10))
-                ax = fig.add_subplot(111, projection="3d")
-                if xi_grid is not None:
-                    surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap="coolwarm", alpha=0.98, linewidth=0, antialiased=True, shade=True)
-                    fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                else:
-                    trisurf = ax.plot_trisurf(x, y, z, cmap="coolwarm", linewidth=0.0, antialiased=True, alpha=0.98)
-                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                ax.set_xlabel(f"w({ex}) (%)")
-                ax.set_ylabel(f"w({ey}) (%)")
-                ax.set_zlabel(label_z)
-                try:
-                    ax.view_init(elev=float(self.batch_elev_var.get()), azim=float(self.batch_azim_var.get()))
-                except Exception:
-                    pass
-                out_path = f"{base}_3d.{ext}"
-                plt.savefig(out_path, dpi=300, bbox_inches="tight")
-                plt.close()
-                if open_after:
-                    self.batch_compute_status_label.config(text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path), foreground="green")
-                    self.open_file_and_offer_save_as(out_path, self.root)
-                return out_path, None
-            if viz == "3D Rotation GIF":
-                if not MATPLOTLIB_AVAILABLE:
-                    return None, 'no_mpl'
-                fig = plt.figure(figsize=(12, 10))
-                ax = fig.add_subplot(111, projection="3d")
-                if xi_grid is not None:
-                    surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap="coolwarm", alpha=0.98, linewidth=0, antialiased=True, shade=True)
-                    fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                else:
-                    trisurf = ax.plot_trisurf(x, y, z, cmap="coolwarm", linewidth=0.0, antialiased=True, alpha=0.98)
-                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                ax.set_xlabel(f"w({ex}) (%)")
-                ax.set_ylabel(f"w({ey}) (%)")
-                ax.set_zlabel(label_z)
-
-                def _rotate(angle):
-                    ax.view_init(azim=angle)
-                    return [ax]
-
-                try:
-                    rotation_step = int(float(self.batch_gif_speed_var.get()))
-                except Exception:
-                    rotation_step = 5
-                try:
-                    interval_ms = int(float(self.batch_gif_interval_var.get()))
-                except Exception:
-                    interval_ms = 50
-                try:
-                    fps_val = int(float(self.batch_gif_fps_var.get()))
-                except Exception:
-                    fps_val = 20
-                ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
-                out_path = f"{base}_3d_rotation.gif"
-                ani.save(out_path, writer="pillow", fps=fps_val, dpi=100)
-                plt.close()
-                if open_after:
-                    self.batch_compute_status_label.config(text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path), foreground="green")
-                    self.open_file_and_offer_save_as(out_path, self.root)
-                return out_path, None
-            # Plotly 3D
-            out_path = f"{base}_3d_interactive.html"
-            if not PLOTLY_AVAILABLE:
-                return None, 'no_plotly'
-            if xi_grid is not None:
-                fig_plotly = go.Figure(
-                    data=[
-                        go.Surface(
-                            x=xi_grid,
-                            y=yi_grid,
-                            z=zi_grid,
-                            colorscale="RdBu",
-                            reversescale=True,
-                            opacity=0.98,
-                            colorbar=dict(title=label_z),
-                        )
-                    ]
-                )
-            else:
-                fig_plotly = go.Figure(
-                    data=[
-                        go.Scatter3d(
-                            x=x,
-                            y=y,
-                            z=z,
-                            mode="markers",
-                            marker=dict(
-                                size=3,
-                                color=z,
-                                colorscale="RdBu",
-                                reversescale=True,
-                                opacity=0.85,
-                                colorbar=dict(title=label_z),
-                            ),
-                        )
-                    ]
-                )
-            fig_plotly.update_layout(
-                scene=dict(
-                    xaxis_title=f"w({ex})",
-                    yaxis_title=f"w({ey})",
-                    zaxis_title=label_z,
-                ),
-                width=900,
-                height=700,
+            out_path = self._plot_xyz_surface_render(
+                x, y, z, ex, ey, base, label_z, viz,
+                float(self.batch_smoothness_var.get()),
+                self.batch_image_format_var.get(),
+                float(self.batch_elev_var.get()),
+                float(self.batch_azim_var.get()),
+                self.batch_gif_speed_var.get(),
+                self.batch_gif_interval_var.get(),
+                self.batch_gif_fps_var.get(),
+                self.batch_compute_status_label,
+                self.root,
+                plot_limits=plot_limits,
+                exp_points=exp_pts,
+                iso_interval=iso_interval,
+                iso_clabel_fmt="%g",
+                iso_level_fmt=".3g",
+                show_legend=False,
+                suppress_smooth_warn=suppress_smooth_warn,
+                open_after=open_after,
             )
-            fig_plotly.write_html(out_path)
+            if out_path is None:
+                if viz == "Plotly 3D" and not PLOTLY_AVAILABLE:
+                    return None, 'no_plotly'
+                if viz != "Plotly 3D" and not MATPLOTLIB_AVAILABLE:
+                    return None, 'no_mpl'
+                return None, 'render_failed'
             if open_after:
-                self.batch_compute_status_label.config(text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path), foreground="green")
-                self.open_file_and_offer_save_as(out_path, self.root)
+                self.batch_compute_status_label.config(
+                    text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path),
+                    foreground="green",
+                )
             return out_path, None
         except Exception as e:
             return None, str(e)
+
+    def _batch_resolve_w_column(self, df, element):
+        """Return the w(element) column name in df (case-insensitive), or None."""
+        el = (element or '').strip()
+        if not el:
+            return None
+        target = f"w_{el}".lower()
+        for c in df.columns:
+            if isinstance(c, str) and c.lower() == target:
+                return c
+        return None
+
+    def _batch_parse_fixed_values(self, raw):
+        """Parse one or more fixed wt% values from user input."""
+        vals = []
+        for part in re.split(r'[,;\s]+', (raw or '').strip()):
+            if not part:
+                continue
+            try:
+                vals.append(float(part))
+            except (TypeError, ValueError):
+                return None
+        return vals
+
+    def _batch_fixed_composition_tolerance(self, df, fixed_col):
+        """Half of the smallest spacing in w(fixed), for matching batch rows."""
+        w = pd.to_numeric(df[fixed_col], errors='coerce').dropna()
+        if len(w) < 2:
+            return 0.5
+        uniq = np.sort(w.unique())
+        if len(uniq) < 2:
+            return 0.5
+        diffs = np.diff(uniq)
+        diffs = diffs[diffs > 1e-9]
+        if len(diffs) == 0:
+            return 0.5
+        return max(0.05, 0.51 * float(np.min(diffs)))
+
+    def _batch_rows_at_fixed_composition(self, df, fixed_el, fixed_val, tol=None):
+        """Return rows where w(fixed_el) is near fixed_val, plus tolerance used."""
+        fixed_el = (fixed_el or '').strip()
+        cf = self._batch_resolve_w_column(df, fixed_el)
+        if cf is None:
+            return None, None, 'missing_fixed'
+        if tol is None:
+            tol = self._batch_fixed_composition_tolerance(df, cf)
+        w = pd.to_numeric(df[cf], errors='coerce')
+        mask = np.isfinite(w) & (np.abs(w - float(fixed_val)) <= float(tol))
+        sub = df.loc[mask].copy()
+        return sub, tol, None
+
+    def _batch_curve_collect_plot_xy(self, df, ex, fixed_el, fixed_values, zcols):
+        """Collect x (w varying element) and y (quantities) values for curve plots."""
+        cx = self._batch_resolve_w_column(df, ex)
+        if cx is None:
+            return np.array([]), np.array([])
+        zcols = [z for z in (zcols or []) if z in df.columns]
+        if not zcols:
+            return np.array([]), np.array([])
+        xs, ys = [], []
+        for fv in (fixed_values or []):
+            sub, _tol, err = self._batch_rows_at_fixed_composition(df, fixed_el, fv)
+            if err or sub is None or len(sub) == 0:
+                continue
+            x = pd.to_numeric(sub[cx], errors='coerce')
+            for zcol in zcols:
+                z = pd.to_numeric(sub[zcol], errors='coerce')
+                ok = x.notna() & z.notna()
+                if ok.any():
+                    xs.extend(x.loc[ok].tolist())
+                    ys.extend(z.loc[ok].tolist())
+        return np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)
+
+    def _batch_curve_resolve_plot_limits(self, df, ex, fixed_el, fixed_values, zcols):
+        """Resolve axis limits for batch curve plots (square_default=False)."""
+        if not hasattr(self, 'batch_curve_coord_ui'):
+            return None
+        xs, ys = self._batch_curve_collect_plot_xy(df, ex, fixed_el, fixed_values, zcols)
+        if len(xs) < 1 or len(ys) < 1:
+            return None
+        return self.batch_curve_coord_ui['resolve'](
+            float(np.min(xs)), float(np.max(xs)),
+            float(np.min(ys)), float(np.max(ys)),
+            square_default=False,
+        )
+
+    def _batch_apply_curve_plot_limits(self, ax, plot_limits):
+        if plot_limits:
+            px0, px1, py0, py1 = plot_limits
+            ax.set_xlim(px0, px1)
+            ax.set_ylim(py0, py1)
+
+    def _batch_plot_export_curve_file(self, df, ex, fixed_el, fixed_values, zcol, open_after=True):
+        """2D line plot: quantity vs w(ex) at fixed w(fixed_el)."""
+        if not MATPLOTLIB_AVAILABLE:
+            return None, 'no_mpl'
+        ex = (ex or '').strip()
+        fixed_el = (fixed_el or '').strip()
+        if ex.strip().title() == fixed_el.strip().title():
+            return None, 'same_x_fixed'
+        cx = self._batch_resolve_w_column(df, ex)
+        cf = self._batch_resolve_w_column(df, fixed_el)
+        if cx is None or cf is None or zcol not in df.columns:
+            return None, 'missing_xy'
+        fixed_values = [float(v) for v in (fixed_values or [])]
+        if not fixed_values:
+            return None, 'need_fixed_val'
+
+        try:
+            plot_limits = self._batch_curve_resolve_plot_limits(
+                df, ex, fixed_el, fixed_values, [zcol],
+            )
+        except ValueError as exc:
+            return None, str(exc)
+
+        out_dir = self.batch_output_dir_var.get().strip()
+        base_path = out_dir if out_dir and os.path.isdir(out_dir) else "."
+        prefix = self.batch_output_prefix_var.get().strip() or "batch_calc"
+        mode = self.batch_source_var.get()
+        sz = self._batch_safe_fname_part(zcol)
+        ftag = self._batch_safe_fname_part(fixed_el)
+        if len(fixed_values) == 1:
+            vtag = self._batch_safe_fname_part(f"{fixed_values[0]:g}")
+            base = os.path.join(base_path, f"{prefix}_{mode}_{sz}_curve_{ex}_fix_{ftag}_{vtag}")
+        else:
+            base = os.path.join(base_path, f"{prefix}_{mode}_{sz}_curve_{ex}_fix_{ftag}")
+
+        fmt = (self.batch_image_format_var.get() or "PNG").upper()
+        ext, _ = self._plot_image_ext_and_save_kwargs(fmt)
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.set_xlabel(format_w_element_label(ex, ' (%)'))
+        ax.set_ylabel(zcol)
+        cmap = plt.cm.tab10
+        plotted = False
+        no_match_msgs = []
+
+        for fi, fv in enumerate(fixed_values):
+            sub, tol, err = self._batch_rows_at_fixed_composition(df, fixed_el, fv)
+            if err or sub is None or len(sub) == 0:
+                no_match_msgs.append((fv, tol if tol is not None else 0.5))
+                continue
+            plot_df = pd.DataFrame({
+                '_x': pd.to_numeric(sub[cx], errors='coerce'),
+                '_z': pd.to_numeric(sub[zcol], errors='coerce'),
+            }).dropna()
+            if len(plot_df) < 2:
+                no_match_msgs.append((fv, tol))
+                continue
+            plot_df = plot_df.sort_values('_x')
+            label = f"w({fixed_el})={fv:g} wt%"
+            if len(fixed_values) == 1:
+                title = self.tr(
+                    'batch_curve_title',
+                    '{z} vs w({ex}); w({fixed})={fv} wt%',
+                ).format(z=zcol, ex=ex, fixed=fixed_el, fv=fv)
+            else:
+                title = self.tr(
+                    'batch_curve_multi_title_multi',
+                    'Batch quantities vs w({ex}); fixed w({fixed})',
+                ).format(ex=ex, fixed=fixed_el)
+            ax.set_title(title)
+            ax.plot(
+                plot_df['_x'], plot_df['_z'], marker='o', linewidth=1.4, markersize=4,
+                color=cmap(fi % 10), label=label,
+            )
+            plotted = True
+
+        if not plotted:
+            plt.close(fig)
+            if no_match_msgs:
+                fv0, tol0 = no_match_msgs[0]
+                return None, ('no_match', fixed_el, fv0, tol0)
+            return None, 'few_points'
+
+        if len(fixed_values) > 1:
+            ax.legend(loc='best', fontsize=8)
+        self._batch_apply_curve_plot_limits(ax, plot_limits)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = f"{base}.{ext}"
+        self._save_figure_image(fig, out_path, fmt)
+        plt.close(fig)
+        if open_after:
+            self.batch_compute_status_label.config(
+                text=self.tr('batch_curve_saved', 'Curve plot saved: {path}').format(path=out_path),
+                foreground="green",
+            )
+            self.open_file_and_offer_save_as(out_path, self.root)
+        return out_path, None
+
+    def _batch_plot_export_multi_curve_file(
+        self, df, ex, fixed_el, fixed_values, zcols, open_after=True,
+    ):
+        """Overlay multiple quantities on one 2D curve plot vs w(ex) at fixed w(fixed_el)."""
+        if not MATPLOTLIB_AVAILABLE:
+            return None, 'no_mpl'
+        ex = (ex or '').strip()
+        fixed_el = (fixed_el or '').strip()
+        zcols = [z for z in (zcols or []) if z in df.columns]
+        if not zcols:
+            return None, 'no_z'
+        if ex.strip().title() == fixed_el.strip().title():
+            return None, 'same_x_fixed'
+        cx = self._batch_resolve_w_column(df, ex)
+        cf = self._batch_resolve_w_column(df, fixed_el)
+        if cx is None or cf is None:
+            return None, 'missing_xy'
+        fixed_values = [float(v) for v in (fixed_values or [])]
+        if not fixed_values:
+            return None, 'need_fixed_val'
+
+        try:
+            plot_limits = self._batch_curve_resolve_plot_limits(
+                df, ex, fixed_el, fixed_values, zcols,
+            )
+        except ValueError as exc:
+            return None, str(exc)
+
+        out_dir = self.batch_output_dir_var.get().strip()
+        base_path = out_dir if out_dir and os.path.isdir(out_dir) else "."
+        prefix = self.batch_output_prefix_var.get().strip() or "batch_calc"
+        mode = self.batch_source_var.get()
+        ztag = self._batch_safe_fname_part("_".join(zcols[:3]) + ("_etc" if len(zcols) > 3 else ""))
+        ftag = self._batch_safe_fname_part(fixed_el)
+        if len(fixed_values) == 1:
+            vtag = self._batch_safe_fname_part(f"{fixed_values[0]:g}")
+            base = os.path.join(base_path, f"{prefix}_{mode}_curves_multi_{ztag}_{ex}_fix_{ftag}_{vtag}")
+        else:
+            base = os.path.join(base_path, f"{prefix}_{mode}_curves_multi_{ztag}_{ex}_fix_{ftag}")
+
+        fmt = (self.batch_image_format_var.get() or "PNG").upper()
+        ext, _ = self._plot_image_ext_and_save_kwargs(fmt)
+
+        fig, ax = plt.subplots(figsize=(11, 6.5))
+        ax.set_xlabel(format_w_element_label(ex, ' (%)'))
+        ax.set_ylabel(self.tr('batch_curve_multi_ylabel', 'Value'))
+        if len(fixed_values) == 1:
+            ax.set_title(
+                self.tr('batch_curve_multi_title', 'Batch quantities vs w({ex}); w({fixed})={fv} wt%').format(
+                    ex=ex, fixed=fixed_el, fv=fixed_values[0],
+                )
+            )
+        else:
+            ax.set_title(
+                self.tr('batch_curve_multi_title_multi', 'Batch quantities vs w({ex}); fixed w({fixed})').format(
+                    ex=ex, fixed=fixed_el,
+                )
+            )
+
+        cmap = plt.cm.tab10
+        linestyles = ['-', '--', '-.', ':']
+        plotted = False
+        no_match_msgs = []
+
+        for fi, fv in enumerate(fixed_values):
+            sub, tol, err = self._batch_rows_at_fixed_composition(df, fixed_el, fv)
+            if err or sub is None or len(sub) == 0:
+                no_match_msgs.append((fv, tol if tol is not None else 0.5))
+                continue
+            base_x = pd.to_numeric(sub[cx], errors='coerce')
+            for zi, zcol in enumerate(zcols):
+                plot_df = pd.DataFrame({
+                    '_x': base_x,
+                    '_z': pd.to_numeric(sub[zcol], errors='coerce'),
+                }).dropna()
+                if len(plot_df) < 2:
+                    continue
+                plot_df = plot_df.sort_values('_x')
+                ls = linestyles[fi % len(linestyles)]
+                if len(fixed_values) == 1:
+                    label = zcol
+                else:
+                    label = f"{zcol} | w({fixed_el})={fv:g}"
+                ax.plot(
+                    plot_df['_x'], plot_df['_z'], marker='o', linewidth=1.4, markersize=3,
+                    color=cmap(zi % 10), linestyle=ls, label=label,
+                )
+                plotted = True
+
+        if not plotted:
+            plt.close(fig)
+            if no_match_msgs:
+                fv0, tol0 = no_match_msgs[0]
+                return None, ('no_match', fixed_el, fv0, tol0)
+            return None, 'few_points'
+
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc='best', fontsize=7, ncol=1 if len(labels) <= 8 else 2)
+        self._batch_apply_curve_plot_limits(ax, plot_limits)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = f"{base}.{ext}"
+        self._save_figure_image(fig, out_path, fmt)
+        plt.close(fig)
+        if open_after:
+            self.batch_compute_status_label.config(
+                text=self.tr('batch_curve_multi_saved', 'Multi-quantity curve plot saved: {path}').format(path=out_path),
+                foreground="green",
+            )
+            self.open_file_and_offer_save_as(out_path, self.root)
+        return out_path, None
+
+    def _batch_curve_plot_fixed_params(self):
+        """Read and validate varying/fixed element settings for composition curve plots."""
+        ex = (self.batch_curve_x_var.get() or "").strip()
+        fixed_el = (self.batch_curve_fixed_el_var.get() or "").strip()
+        if not ex or not fixed_el:
+            messagebox.showerror(
+                self.tr('plot_elem_title', 'Element Selection'),
+                self.tr('plot_select_xy', 'Please select X and Y elements first.'),
+            )
+            return None
+        if ex.strip().title() == fixed_el.strip().title():
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_curve_same_x_fixed', 'Varying and fixed element must differ.'),
+            )
+            return None
+        fixed_values = self._batch_parse_fixed_values(self.batch_curve_fixed_val_var.get())
+        if fixed_values is None:
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_curve_fixed_val_invalid', 'Fixed content must be a number or comma-separated numbers.'),
+            )
+            return None
+        if not fixed_values:
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_curve_need_fixed_val', 'Enter fixed content (wt%) for the fixed element.'),
+            )
+            return None
+        return ex, fixed_el, fixed_values
+
+    def _batch_handle_curve_plot_error(self, err, ex, fixed_el):
+        if not err:
+            return
+        if err == 'few_points':
+            messagebox.showerror(self.tr('plot_no_data_title', 'No Data'), self.tr('plot_no_valid', ''))
+        elif err == 'same_x_fixed':
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_curve_same_x_fixed', 'Varying and fixed element must differ.'),
+            )
+        elif err == 'need_fixed_val':
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_curve_need_fixed_val', 'Enter fixed content (wt%) for the fixed element.'),
+            )
+        elif err == 'missing_xy' or err == 'missing_fixed':
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('batch_missing_wxy', '').format(wx=f"w_{ex}", wy=f"w_{fixed_el}"),
+            )
+        elif isinstance(err, tuple) and err[0] == 'no_match':
+            _tag, el, val, tol = err
+            messagebox.showerror(
+                self.tr('plot_no_data_title', 'No Data'),
+                self.tr(
+                    'batch_curve_no_match',
+                    'No batch rows with w({el}) near {val} wt% (±{tol:.3g}).',
+                ).format(el=el, val=val, tol=tol),
+            )
+        elif err == 'no_mpl':
+            messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', ''))
+        elif err == 'no_z':
+            messagebox.showwarning(
+                self.tr('dlg_warning', 'Warning'),
+                self.tr('batch_curve_multi_need_z', ''),
+            )
+        else:
+            messagebox.showerror(self.tr('plot_failed', 'Plotting Failed'), str(err))
+
+    def run_batch_curve_plot_for_space(self):
+        """Line plots of batch quantities vs one element at fixed w(fixed element)."""
+        df = self.last_batch_results_df
+        if df is None or len(df) == 0:
+            messagebox.showwarning(
+                self.tr('dlg_warning', 'Warning'),
+                self.tr('batch_need_compute', 'Please run “Compute batch” first.'),
+            )
+            return
+
+        params = self._batch_curve_plot_fixed_params()
+        if params is None:
+            return
+        ex, fixed_el, fixed_values = params
+        zraw = (self.batch_z_var.get() or "").strip()
+
+        zcols_multi = self._batch_get_selected_curve_z_columns(df)
+        if len(zcols_multi) >= 2:
+            path, err = self._batch_plot_export_multi_curve_file(
+                df, ex, fixed_el, fixed_values, zcols_multi, open_after=True,
+            )
+            self._batch_handle_curve_plot_error(err, ex, fixed_el)
+            return
+        if len(zcols_multi) == 1:
+            path, err = self._batch_plot_export_curve_file(
+                df, ex, fixed_el, fixed_values, zcols_multi[0], open_after=True,
+            )
+            self._batch_handle_curve_plot_error(err, ex, fixed_el)
+            return
+
+        if self._batch_is_z_all(zraw):
+            zcols = self._batch_numeric_z_columns(df)
+            if not zcols:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('batch_no_numeric_z', ''))
+                return
+            n_ok = 0
+            errs = []
+            for zc in zcols:
+                path, err = self._batch_plot_export_curve_file(
+                    df, ex, fixed_el, fixed_values, zc, open_after=False,
+                )
+                if path:
+                    n_ok += 1
+                elif err and err not in ('few_points',):
+                    if isinstance(err, tuple) and err[0] == 'no_match':
+                        _tag, el, val, tol = err
+                        errs.append(
+                            f"{zc}: "
+                            + self.tr(
+                                'batch_curve_no_match',
+                                'No batch rows with w({el}) near {val} wt% (±{tol:.3g}).',
+                            ).format(el=el, val=val, tol=tol)
+                        )
+                    else:
+                        errs.append(f"{zc}: {err}")
+            self.batch_compute_status_label.config(
+                text=self.tr('batch_curve_all_done', 'Generated {n} curve plot file(s).').format(n=n_ok),
+                foreground="green",
+            )
+            body = self.tr('batch_curve_all_done', 'Generated {n} curve plot file(s).').format(n=n_ok)
+            if errs:
+                body += "\n\n" + "\n".join(errs[:8])
+                messagebox.showwarning(self.tr('dlg_success', 'Success'), body)
+            else:
+                messagebox.showinfo(self.tr('dlg_success', 'Success'), body)
+            return
+
+        zcol = zraw
+        if not zcol or zcol not in df.columns:
+            messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('batch_no_numeric_z', ''))
+            return
+        path, err = self._batch_plot_export_curve_file(
+            df, ex, fixed_el, fixed_values, zcol, open_after=True,
+        )
+        self._batch_handle_curve_plot_error(err, ex, fixed_el)
 
     def run_batch_plot_for_space(self):
         """2D/3D output from last_batch_results_df; Quantity (Z) = All runs every visualization for every numeric column."""
@@ -4604,6 +6889,34 @@ class ThermoQGUI:
                     'Missing composition columns in batch table (expected "{wx}" and "{wy}").',
                 ).format(wx=cx, wy=cy),
             )
+            return
+
+        viz = self.batch_viz_var.get()
+        if viz == "2D Curves":
+            zcols = self._batch_get_selected_curve_z_columns(df)
+            if not zcols:
+                zraw = (self.batch_z_var.get() or "").strip()
+                if not self._batch_is_z_all(zraw) and zraw in df.columns:
+                    zcols = [zraw]
+            if not zcols:
+                messagebox.showwarning(
+                    self.tr('dlg_warning', 'Warning'),
+                    self.tr('batch_curve_multi_need_z', 'Select at least one quantity in the list below.'),
+                )
+                return
+            params = self._batch_curve_plot_fixed_params()
+            if params is None:
+                return
+            ex, fixed_el, fixed_values = params
+            if len(zcols) == 1:
+                path, err = self._batch_plot_export_curve_file(
+                    df, ex, fixed_el, fixed_values, zcols[0], open_after=True,
+                )
+            else:
+                path, err = self._batch_plot_export_multi_curve_file(
+                    df, ex, fixed_el, fixed_values, zcols, open_after=True,
+                )
+            self._batch_handle_curve_plot_error(err, ex, fixed_el)
             return
 
         if self._batch_is_z_all(zraw):
@@ -4952,9 +7265,17 @@ class ThermoQGUI:
 
     @staticmethod
     def _present_tool_window(win, master):
-        """Show a tool Toplevel on top without grab_set().
-        On Windows, grab_set() modal grab often blocks minimizing the window."""
-        win.lift(master)
+        """Show a tool Toplevel above the main window without raising the main window."""
+        try:
+            win.transient(master)
+        except tk.TclError:
+            pass
+        win.lift()
+        try:
+            master.lower(win)
+        except tk.TclError:
+            pass
+
         def _focus():
             try:
                 if win.winfo_exists():
@@ -4962,6 +7283,105 @@ class ThermoQGUI:
             except tk.TclError:
                 pass
         win.after(80, _focus)
+
+    def _refocus_tool_window(self, win):
+        """Return focus to a tool window after a dialog (messagebox / filedialog)."""
+        if win is None:
+            return
+        try:
+            if not win.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        try:
+            win.lift()
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.lower(win)
+            win.focus_set()
+        except tk.TclError:
+            pass
+
+    def _build_tool_window_scroll_area(self, parent, padding="0", padx=0, pady=0):
+        """Scrollable inner frame with vertical and horizontal scrollbars."""
+        container = ttk.Frame(parent)
+        pack_kw = {'fill': tk.BOTH, 'expand': True}
+        if padx or pady:
+            pack_kw['padx'] = padx
+            pack_kw['pady'] = pady
+        container.pack(**pack_kw)
+
+        canvas = tk.Canvas(container, highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
+        hsb = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=canvas.xview)
+        canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        inner = ttk.Frame(canvas, padding=padding)
+        cwin = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _sync_scrollregion(_event=None):
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if bbox:
+                canvas.configure(scrollregion=bbox)
+
+        def _on_canvas_configure(event):
+            if event.width > 1:
+                canvas.itemconfigure(cwin, width=event.width)
+            _sync_scrollregion()
+
+        inner.bind("<Configure>", _sync_scrollregion)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        canvas.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+
+        def _on_wheel(event):
+            try:
+                if not canvas.winfo_exists():
+                    return
+            except tk.TclError:
+                return
+            shift = getattr(event, 'state', 0) & 0x0001
+            if platform.system() == "Windows":
+                delta = int(-1 * (event.delta / 120))
+            elif platform.system() == "Darwin":
+                delta = int(-1 * event.delta)
+            else:
+                if event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    delta = 0
+            if shift and delta:
+                canvas.xview_scroll(delta, "units")
+            elif delta:
+                canvas.yview_scroll(delta, "units")
+
+        def _bind_wheel(_event=None):
+            if platform.system() == "Linux":
+                canvas.bind_all("<Button-4>", _on_wheel)
+                canvas.bind_all("<Button-5>", _on_wheel)
+            else:
+                canvas.bind_all("<MouseWheel>", _on_wheel)
+
+        def _unbind_wheel(_event=None):
+            try:
+                if platform.system() == "Linux":
+                    canvas.unbind_all("<Button-4>")
+                    canvas.unbind_all("<Button-5>")
+                else:
+                    canvas.unbind_all("<MouseWheel>")
+            except tk.TclError:
+                pass
+
+        canvas.bind("<Enter>", _bind_wheel)
+        canvas.bind("<Leave>", _unbind_wheel)
+
+        return inner, canvas, _unbind_wheel
 
     def open_example_folder(self):
         try:
@@ -5324,9 +7744,8 @@ class ThermoQGUI:
         results_window.title(self.tr('res_win_title', 'Calculation Results'))
         results_window.geometry("640x520")
         self._present_tool_window(results_window, self.root)
-        
-        main_frame = ttk.Frame(results_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        main_frame, _, _res_scroll_unbind = self._build_tool_window_scroll_area(results_window, padding="20")
         
         title_label = ttk.Label(
             main_frame,
@@ -5422,6 +7841,7 @@ class ThermoQGUI:
         p_s_file=None,
         ts_s_file=None,
         auto_import=False,
+        refocus_after=None,
     ):
         # Create a new window for Pandat import
         import_window = tk.Toplevel(self.root)
@@ -5435,23 +7855,9 @@ class ThermoQGUI:
                 pass
         self._present_tool_window(import_window, self.root)
 
-        # Create main frame with scrollable area
-        canvas = tk.Canvas(import_window)
-        scrollbar = ttk.Scrollbar(import_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        main_frame, _, _import_scroll_unbind = self._build_tool_window_scroll_area(
+            import_window, padx=10, pady=10
         )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-        scrollbar.pack(side="right", fill="y")
-        
-        main_frame = scrollable_frame
         
         # Information label
         info_label = ttk.Label(
@@ -5776,6 +8182,11 @@ class ThermoQGUI:
                     self.pandat_p_s_data = _clean_numeric(self.pandat_p_s_data)
                 if self.pandat_ts_s_data is not None:
                     self.pandat_ts_s_data = _clean_numeric(self.pandat_ts_s_data)
+
+                for attr in ('pandat_p_data', 'pandat_ts_data', 'pandat_p_s_data', 'pandat_ts_s_data'):
+                    df_attr = getattr(self, attr, None)
+                    if df_attr is not None:
+                        setattr(self, attr, standardize_dataframe_element_columns(df_attr))
                 
                 # Process 1/dwdT_L columns - divide by 100 (for all P files)
                 for df in [self.pandat_p_data, self.pandat_p_s_data]:
@@ -5803,7 +8214,7 @@ class ThermoQGUI:
                                     m = re.match(r"^w\(\s*([A-Za-z]{1,3})\s*\)$", col_str)
                                     if m:
                                         raw = m.group(1)
-                                        symbol = raw[:1].upper() + raw[1:].lower()
+                                        symbol = canonical_element_symbol(raw)
                                         if symbol in PERIODIC_TABLE:
                                             self.available_elements.append(symbol)
                             except (TypeError, AttributeError):
@@ -5854,9 +8265,15 @@ class ThermoQGUI:
                     foreground="green",
                 )
                 
-                messagebox.showinfo(self.tr('dlg_success', 'Success'), success_msg)
-                
+                messagebox.showinfo(
+                    self.tr('dlg_success', 'Success'),
+                    success_msg,
+                    parent=refocus_after if (auto_import and refocus_after) else import_window,
+                )
+
                 import_window.destroy()
+                if refocus_after:
+                    self.root.after(50, lambda w=refocus_after: self._refocus_tool_window(w))
                 
             except Exception as e:
                 messagebox.showerror(
@@ -5927,6 +8344,12 @@ class ThermoQGUI:
                 self.batch_plot_y_combo['values'] = elem_vals
             except tk.TclError:
                 pass
+        if hasattr(self, 'batch_curve_x_combo'):
+            try:
+                self.batch_curve_x_combo['values'] = elem_vals
+                self.batch_curve_fixed_el_combo['values'] = elem_vals
+            except tk.TclError:
+                pass
             
     def open_phase_surface_plotter(self):
         """Open phase surface plotter window (Pandat + Thermo-calc)."""
@@ -5935,65 +8358,13 @@ class ThermoQGUI:
         plot_window.minsize(720, 480)
         self._present_tool_window(plot_window, self.root)
 
-        # Scrollable body: content can exceed window height (settings below tabs).
-        ps_canvas = tk.Canvas(plot_window, highlightthickness=0)
-        ps_scroll = ttk.Scrollbar(plot_window, orient="vertical", command=ps_canvas.yview)
-        ps_canvas.configure(yscrollcommand=ps_scroll.set)
-
-        ps_scrollable = ttk.Frame(ps_canvas)
-        ps_cwin = ps_canvas.create_window((0, 0), window=ps_scrollable, anchor="nw")
-
-        def _ps_on_canvas_configure(event):
-            w = event.width
-            if w > 1:
-                ps_canvas.itemconfigure(ps_cwin, width=w)
-
-        def _ps_on_scrollable_configure(_event=None):
-            ps_canvas.configure(scrollregion=ps_canvas.bbox("all"))
-
-        ps_canvas.bind("<Configure>", _ps_on_canvas_configure)
-        ps_scrollable.bind("<Configure>", _ps_on_scrollable_configure)
-
-        ps_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        ps_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        def _unbind_phase_surface_scroll():
-            try:
-                if platform.system() == "Linux":
-                    plot_window.unbind_all("<Button-4>")
-                    plot_window.unbind_all("<Button-5>")
-                else:
-                    plot_window.unbind_all("<MouseWheel>")
-            except tk.TclError:
-                pass
+        ps_scrollable, ps_canvas, _unbind_phase_surface_scroll = self._build_tool_window_scroll_area(plot_window)
 
         def _on_phase_surface_destroy(event):
             if event.widget is plot_window:
                 _unbind_phase_surface_scroll()
 
         plot_window.bind("<Destroy>", _on_phase_surface_destroy)
-
-        def _on_ps_mousewheel(event):
-            try:
-                if not plot_window.winfo_exists() or not ps_canvas.winfo_exists():
-                    return
-            except tk.TclError:
-                return
-            if platform.system() == "Windows":
-                ps_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            elif platform.system() == "Darwin":
-                ps_canvas.yview_scroll(int(-1 * event.delta), "units")
-            else:
-                if event.num == 4:
-                    ps_canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    ps_canvas.yview_scroll(1, "units")
-
-        if platform.system() == "Linux":
-            ps_canvas.bind_all("<Button-4>", _on_ps_mousewheel)
-            ps_canvas.bind_all("<Button-5>", _on_ps_mousewheel)
-        else:
-            ps_canvas.bind_all("<MouseWheel>", _on_ps_mousewheel)
 
         main_frame = ttk.Frame(ps_scrollable, padding="20")
         main_frame.pack(fill=tk.X, expand=False)
@@ -6021,215 +8392,6 @@ class ThermoQGUI:
         tab_tc = ttk.Frame(notebook, padding="10")
         notebook.add(tab_pandat, text=self.tr('plot_phase_tab_pandat', 'Pandat'))
         notebook.add(tab_tc, text=self.tr('plot_phase_tab_tc', 'Thermo-calc'))
-
-        # ------------------------------------------------------------------
-        # Common plotting helper (reuses existing surface creation + outputs)
-        # ------------------------------------------------------------------
-        def _plot_xyz_surface(x, y, z, ex, ey, base, label_z, status_widget):
-            viz = viz_var.get()
-            status_widget.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
-            plot_window.update()
-
-            xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
-                x, y, z,
-                grid_resolution=100,
-                smoothness=smoothness_var.get(),
-            )
-            if xi_grid is None:
-                messagebox.showwarning(
-                    self.tr('plot_smooth_title', 'Smoothing Failed'),
-                    self.tr(
-                        'plot_smooth_msg',
-                        'Could not create smooth surface. Using scatter/triangulated surface instead. Please install scikit-learn and scipy for smooth surfaces.',
-                    ),
-                )
-                xi_grid, yi_grid, zi_grid = None, None, None
-
-            if viz == "2D Heatmap":
-                if not MATPLOTLIB_AVAILABLE:
-                    messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'))
-                    return
-                fig_hm, ax_hm = plt.subplots(figsize=(10, 8))
-                ax_hm.set_xlabel(f"w({ex})")
-                ax_hm.set_ylabel(f"w({ey})")
-                if xi_grid is not None:
-                    contour = ax_hm.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
-                    fig_hm.colorbar(contour, label=label_z)
-                else:
-                    scatter = ax_hm.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
-                    fig_hm.colorbar(scatter, label=label_z)
-                ax_hm.grid(False)
-                fig_hm.tight_layout()
-                out_path = f"{base}_Heatmap.png"
-                fig_hm.savefig(out_path, dpi=300, bbox_inches='tight')
-                plt.close(fig_hm)
-                status_widget.config(text=f"Heatmap saved: {out_path}", foreground="green")
-                self.open_file_and_offer_save_as(out_path, plot_window)
-            elif viz == "3D Static":
-                if not MATPLOTLIB_AVAILABLE:
-                    messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'))
-                    return
-                fig = plt.figure(figsize=(12, 10))
-                ax = fig.add_subplot(111, projection='3d')
-                if xi_grid is not None:
-                    surf = ax.plot_surface(
-                        xi_grid, yi_grid, zi_grid,
-                        cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True
-                    )
-                    fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                else:
-                    trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                ax.set_xlabel(f"w({ex})")
-                ax.set_ylabel(f"w({ey})")
-                ax.set_zlabel(label_z)
-                try:
-                    ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
-                except Exception:
-                    pass
-
-                img_format = image_format_var.get().upper()
-                format_ext_map = {
-                    "PNG": "png", "JPEG": "jpg", "GIF": "gif", "BMP": "bmp",
-                    "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "AI": "ai",
-                    "EPS": "eps", "PDF": "pdf"
-                }
-                ext = format_ext_map.get(img_format, "png")
-                save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
-                if img_format == "PDF":
-                    save_kwargs["format"] = "pdf"
-                elif img_format == "EPS":
-                    save_kwargs["format"] = "eps"
-                elif img_format == "SVG":
-                    save_kwargs["format"] = "svg"
-                elif img_format == "AI":
-                    save_kwargs["format"] = "pdf"
-                elif img_format in ["JPEG", "JPG"]:
-                    save_kwargs["format"] = "jpeg"
-                elif img_format == "TIFF":
-                    save_kwargs["format"] = "tiff"
-                elif img_format == "WEBP":
-                    save_kwargs["format"] = "webp"
-                elif img_format == "BMP":
-                    save_kwargs["format"] = "bmp"
-                elif img_format == "GIF":
-                    save_kwargs["format"] = "gif"
-                else:
-                    save_kwargs["format"] = "png"
-
-                out_path = f"{base}_3d.{ext}"
-                plt.savefig(out_path, **save_kwargs)
-                plt.close()
-                status_widget.config(text=f"3D plot saved: {out_path}", foreground="green")
-                self.open_file_and_offer_save_as(out_path, plot_window)
-            elif viz == "3D Rotation GIF":
-                if not MATPLOTLIB_AVAILABLE:
-                    messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_gif', 'Matplotlib is not installed. Cannot generate GIF.'))
-                    return
-                fig = plt.figure(figsize=(12, 10))
-                ax = fig.add_subplot(111, projection='3d')
-                if xi_grid is not None:
-                    surf = ax.plot_surface(
-                        xi_grid, yi_grid, zi_grid,
-                        cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True
-                    )
-                    fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                else:
-                    trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                ax.set_xlabel(f"w({ex})")
-                ax.set_ylabel(f"w({ey})")
-                ax.set_zlabel(label_z)
-
-                def _rotate(angle):
-                    ax.view_init(azim=angle)
-                    return [ax]
-
-                try:
-                    rotation_step = int(float(gif_speed_var.get()))
-                except Exception:
-                    rotation_step = 5
-                try:
-                    interval_ms = int(float(gif_interval_var.get()))
-                except Exception:
-                    interval_ms = 50
-                try:
-                    fps_val = int(float(gif_fps_var.get()))
-                except Exception:
-                    fps_val = 20
-
-                ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
-                out_path = f"{base}_3d_rotation.gif"
-                ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
-                plt.close()
-                status_widget.config(text=f"GIF saved: {out_path}", foreground="green")
-                self.open_file_and_offer_save_as(out_path, plot_window)
-            else:
-                if PLOTLY_AVAILABLE:
-                    if xi_grid is not None:
-                        fig_plotly = go.Figure(
-                            data=[
-                                go.Surface(
-                                    x=xi_grid, y=yi_grid, z=zi_grid,
-                                    colorscale='RdBu', reversescale=True, opacity=0.98,
-                                    colorbar=dict(title=label_z)
-                                )
-                            ]
-                        )
-                    else:
-                        fig_plotly = go.Figure(
-                            data=[
-                                go.Scatter3d(
-                                    x=x, y=y, z=z,
-                                    mode='markers',
-                                    marker=dict(
-                                        size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85,
-                                        colorbar=dict(title=label_z)
-                                    )
-                                )
-                            ]
-                        )
-                    fig_plotly.update_layout(
-                        scene=dict(
-                            xaxis_title=f"w({ex})",
-                            yaxis_title=f"w({ey})",
-                            zaxis_title=label_z,
-                        ),
-                        width=900,
-                        height=700,
-                    )
-                    out_path = f"{base}_3d_interactive.html"
-                    fig_plotly.write_html(out_path)
-                    status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                else:
-                    out_path = f"{base}_3d_interactive.html"
-                    with open(out_path, 'w', encoding='utf-8') as f:
-                        f.write('<html><head><title>3D Interactive Plot</title></head><body>\n')
-                        f.write('<h2>3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
-                        f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
-                        f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
-                        f.write('<script>\n')
-                        f.write('var data = [{\n')
-                        f.write('  type: "scatter3d",\n')
-                        f.write('  mode: "markers",\n')
-                        f.write('  x: ' + str(x.tolist()) + ',\n')
-                        f.write('  y: ' + str(y.tolist()) + ',\n')
-                        f.write('  z: ' + str(z.tolist()) + ',\n')
-                        f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "RdBu", reversescale: true, opacity: 0.85, colorbar: {title: "' + label_z + '"} }\n')
-                        f.write('}];\n')
-                        f.write('var layout = {\n')
-                        f.write('  scene: {\n')
-                        f.write('    xaxis: {title: "w(' + ex + ') (%)"},\n')
-                        f.write('    yaxis: {title: "w(' + ey + ') (%)"},\n')
-                        f.write('    zaxis: {title: "' + label_z + '"}\n')
-                        f.write('  }\n')
-                        f.write('};\n')
-                        f.write('Plotly.newPlot("plot", data, layout);\n')
-                        f.write('</script>\n')
-                        f.write('</body></html>')
-                    status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
 
         # ------------------------------------------------------------------
         # Controls (shared across both tabs to keep behavior consistent)
@@ -6296,9 +8458,22 @@ class ThermoQGUI:
         ttk.Entry(iso_interval_frame, textvariable=iso_interval_var, width=8).pack(side=tk.LEFT, padx=5)
         lbl_ps_iso_hint = ttk.Label(
             iso_interval_frame,
-            text=self.tr('plot_phase_iso_interval_hint', 'Contour spacing for overlay isotherms'),
+            text=self.tr('plot_phase_iso_interval_hint', 'Contour spacing for temperature isotherms on the surface'),
         )
         lbl_ps_iso_hint.pack(side=tk.LEFT, padx=5)
+
+        def _plot_xyz_surface(x, y, z, ex, ey, base, label_z, status_widget, plot_limits=None):
+            exp_pts = exp_ui['get_points'](ex, ey, z_hint='T')
+            self._plot_xyz_surface_render(
+                x, y, z, ex, ey, base, label_z, viz_var.get(),
+                smoothness_var.get(), image_format_var.get(),
+                elev_var.get(), azim_var.get(),
+                gif_speed_var.get(), gif_interval_var.get(), gif_fps_var.get(),
+                status_widget, plot_window,
+                plot_limits=plot_limits, exp_points=exp_pts,
+                iso_interval=iso_interval_var.get(),
+                show_legend=False,
+            )
 
         elements_frame = ttk.Frame(controls)
         elements_frame.pack(fill=tk.X, pady=5)
@@ -6376,6 +8551,60 @@ class ThermoQGUI:
         ttk.Entry(azim_row, textvariable=azim_var, width=8).pack(side=tk.LEFT, padx=5)
         lbl_ps_azim_rng = ttk.Label(azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
         lbl_ps_azim_rng.pack(side=tk.LEFT, padx=5)
+
+        def _phase_datasets_for_extents():
+            ds = dataset_var.get()
+            sf = surface_var.get()
+            if sf == "Overlay":
+                if ds == "Equilibrium":
+                    return [self.pandat_p_data, self.pandat_ts_data]
+                return [self.pandat_p_s_data, self.pandat_ts_s_data]
+            if ds == "Equilibrium":
+                if sf == "Liquidus":
+                    return [self.pandat_p_data]
+                if sf == "Solidus":
+                    return [self.pandat_ts_data]
+                return [self.pandat_p_data]
+            if sf == "Liquidus":
+                return [self.pandat_p_s_data]
+            if sf == "Solidus":
+                return [self.pandat_ts_s_data]
+            return [self.pandat_p_s_data]
+
+        def _phase_reset_coord():
+            try:
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    raise ValueError(self.tr('plot_select_xy', 'Please select X and Y elements first.'))
+                xmins, xmaxs, ymins, ymaxs = [], [], [], []
+                for df in _phase_datasets_for_extents():
+                    if df is None or len(df) == 0:
+                        continue
+                    xm, xM, ym, yM = self._dataframe_xy_extents(df, ex, ey)
+                    xmins.append(xm)
+                    xmaxs.append(xM)
+                    ymins.append(ym)
+                    ymaxs.append(yM)
+                if not xmins:
+                    raise ValueError(self.tr('plot_no_valid', 'No valid data points after filtering.'))
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(
+                    min(xmins), max(xmaxs), min(ymins), max(ymaxs),
+                )
+                coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', 'Could not compute default range: {e}').format(e=str(e)),
+                )
+
+        coord_ui = self._build_plot_coord_range_ui(controls, reset_command=_phase_reset_coord)
+        coord_ui['frame'].pack(fill=tk.X, pady=5)
+        ps_coord_widgets = coord_ui['widgets']
+
+        exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
+        exp_ui['frame'].pack(fill=tk.X, pady=5)
+        ps_exp_widgets = exp_ui['widgets']
 
         output_settings_frame = ttk.LabelFrame(
             controls,
@@ -6628,22 +8857,28 @@ class ThermoQGUI:
                     )
                 )
 
-        def _plot_liq_sol_overlay(x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, status_widget):
-            from matplotlib.lines import Line2D
-
+        def _plot_liq_sol_overlay(x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, status_widget, plot_limits=None):
             viz = viz_var.get()
-            liq_lbl = self.tr("plot_phase_legend_liq", "Liquidus isotherms")
-            sol_lbl = self.tr("plot_phase_legend_sol", "Solidus isotherms")
+            exp_pts = exp_ui['get_points'](ex, ey, z_hint='T')
             levels = _phase_iso_levels(z_l, z_s)
 
             status_widget.config(text=self.tr("plot_status_smooth", "Creating smooth surface..."), foreground="orange")
             plot_window.update()
 
+            x_bounds = y_bounds = None
+            px0 = px1 = py0 = py1 = None
+            if plot_limits:
+                px0, px1, py0, py1 = plot_limits
+                x_bounds = (px0, px1)
+                y_bounds = (py0, py1)
+
             xi_l, yi_l, zi_l = self.create_smooth_surface(
-                x_l, y_l, z_l, grid_resolution=100, smoothness=smoothness_var.get()
+                x_l, y_l, z_l, grid_resolution=100, smoothness=smoothness_var.get(),
+                x_bounds=x_bounds, y_bounds=y_bounds,
             )
             xi_s, yi_s, zi_s = self.create_smooth_surface(
-                x_s, y_s, z_s, grid_resolution=100, smoothness=smoothness_var.get()
+                x_s, y_s, z_s, grid_resolution=100, smoothness=smoothness_var.get(),
+                x_bounds=x_bounds, y_bounds=y_bounds,
             )
             if xi_l is None or xi_s is None:
                 messagebox.showwarning(
@@ -6662,8 +8897,8 @@ class ThermoQGUI:
                     )
                     return
                 fig, ax = plt.subplots(figsize=(10, 8))
-                ax.set_xlabel(f"w({ex})")
-                ax.set_ylabel(f"w({ey})")
+                ax.set_xlabel(format_w_element_label(ex))
+                ax.set_ylabel(format_w_element_label(ey))
                 if xi_l is not None and zi_l is not None:
                     cs_l = ax.contour(xi_l, yi_l, zi_l, levels=levels, colors="#c0392b", linewidths=1.6)
                     _phase_clabel_2d(ax, cs_l, "#922b21")
@@ -6684,18 +8919,15 @@ class ThermoQGUI:
                         _phase_clabel_2d(ax, cs_s, "#1a5276")
                     except Exception:
                         pass
-                ax.legend(
-                    handles=[
-                        Line2D([0], [0], color="#c0392b", lw=2, label=liq_lbl),
-                        Line2D([0], [0], color="#2980b9", lw=2, linestyle="--", label=sol_lbl),
-                    ],
-                    loc="best",
-                )
                 ax.set_title(self.tr("plot_phase_overlay", "Liquidus + Solidus overlay"))
                 ax.grid(False)
+                if plot_limits:
+                    self._apply_plot_xy_limits(ax, px0, px1, py0, py1)
+                self._overlay_experimental_points_mpl_2d(ax, exp_pts, show_legend=False)
                 fig.tight_layout()
-                out_path = f"{base}_Overlay_2d.png"
-                fig.savefig(out_path, dpi=300, bbox_inches="tight")
+                ext, save_kwargs = self._plot_image_ext_and_save_kwargs(image_format_var.get())
+                out_path = f"{base}_Overlay_2d.{ext}"
+                fig.savefig(out_path, **save_kwargs)
                 plt.close(fig)
                 status_widget.config(
                     text=self.tr("plot_phase_overlay_saved", "Overlay plot saved: {path}").format(path=out_path),
@@ -6723,20 +8955,17 @@ class ThermoQGUI:
                     _phase_draw_iso_3d(ax, xi_s, yi_s, zi_s, levels, "#1a5276", "#1a5276", mid_frac=0.55)
                 elif len(x_s) >= 3:
                     ax.plot_trisurf(x_s, y_s, z_s, color="#3498db", alpha=0.42, linewidth=0.0)
-                ax.set_xlabel(f"w({ex})")
-                ax.set_ylabel(f"w({ey})")
+                ax.set_xlabel(format_w_element_label(ex))
+                ax.set_ylabel(format_w_element_label(ey))
                 ax.set_zlabel("T (K)")
-                ax.legend(
-                    handles=[
-                        Line2D([0], [0], color="#e74c3c", lw=4, label=liq_lbl),
-                        Line2D([0], [0], color="#3498db", lw=4, label=sol_lbl),
-                    ],
-                    loc="upper left",
-                )
+                if plot_limits:
+                    ax.set_xlim(px0, px1)
+                    ax.set_ylim(py0, py1)
                 try:
                     ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
                 except Exception:
                     pass
+                self._overlay_experimental_points_mpl_3d(ax, exp_pts)
                 if viz == "3D Rotation GIF":
 
                     def _rotate(angle):
@@ -6782,8 +9011,8 @@ class ThermoQGUI:
                             z=zi_l,
                             colorscale="Reds",
                             opacity=0.65,
-                            name=liq_lbl,
                             showscale=False,
+                            showlegend=False,
                         )
                     )
                     for lvl, seg in _phase_contour_segments(xi_l, yi_l, zi_l, levels):
@@ -6796,8 +9025,8 @@ class ThermoQGUI:
                             z=zi_s,
                             colorscale="Blues",
                             opacity=0.65,
-                            name=sol_lbl,
                             showscale=False,
+                            showlegend=False,
                         )
                     )
                     for lvl, seg in _phase_contour_segments(xi_s, yi_s, zi_s, levels):
@@ -6806,15 +9035,17 @@ class ThermoQGUI:
                     messagebox.showerror(self.tr("plot_no_data_title", "No Data"), self.tr("plot_no_valid", ""))
                     return
                 fig_plotly = go.Figure(data=traces)
+                self._overlay_experimental_points_plotly(fig_plotly, exp_pts, ex, ey, show_legend=False)
                 fig_plotly.update_layout(
                     title=self.tr("plot_phase_overlay", "Liquidus + Solidus overlay"),
                     scene=dict(
-                        xaxis_title=f"w({ex})",
-                        yaxis_title=f"w({ey})",
+                        xaxis_title=format_w_element_label(ex),
+                        yaxis_title=format_w_element_label(ey),
                         zaxis_title="T (K)",
                     ),
                     width=900,
                     height=700,
+                    showlegend=False,
                 )
                 out_path = f"{base}_Overlay_3d_interactive.html"
                 fig_plotly.write_html(out_path)
@@ -6906,7 +9137,13 @@ class ThermoQGUI:
                     x_l, y_l, z_l = pts_l
                     x_s, y_s, z_s = pts_s
                     base = os.path.join(base_path, f"{prefix}_Overlay_{ds}_{ex}_{ey}")
-                    _plot_liq_sol_overlay(x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, pandat_status_label)
+                    plot_limits = coord_ui['resolve'](
+                        float(min(x_l.min(), x_s.min())), float(max(x_l.max(), x_s.max())),
+                        float(min(y_l.min(), y_s.min())), float(max(y_l.max(), y_s.max())),
+                    )
+                    _plot_liq_sol_overlay(
+                        x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, pandat_status_label, plot_limits=plot_limits,
+                    )
                     return
 
                 df = get_df()
@@ -6960,7 +9197,10 @@ class ThermoQGUI:
                 base = os.path.join(base_path, f"{prefix}_{sf}_{ds}_{ex}_{ey}")
                 label_z = f"{sf.lower()} line (K)" if sf in ("Liquidus", "Solidus") else "Temperature (K)"
 
-                _plot_xyz_surface(x, y, z, ex, ey, base, label_z, pandat_status_label)
+                plot_limits = coord_ui['resolve'](
+                    float(x.min()), float(x.max()), float(y.min()), float(y.max()),
+                )
+                _plot_xyz_surface(x, y, z, ex, ey, base, label_z, pandat_status_label, plot_limits=plot_limits)
 
             except Exception as e:
                 messagebox.showerror(
@@ -7099,7 +9339,12 @@ class ThermoQGUI:
                     y_s = y_l.copy()
                     z_s = z_sol.loc[mask].to_numpy(dtype=np.float64)
                     base = os.path.join(base_path, f"{prefix}_Overlay_ThermoCalc_{ex}_{ey}")
-                    _plot_liq_sol_overlay(x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, tc_status_label)
+                    plot_limits = coord_ui['resolve'](
+                        float(x_l.min()), float(x_l.max()), float(y_l.min()), float(y_l.max()),
+                    )
+                    _plot_liq_sol_overlay(
+                        x_l, y_l, z_l, x_s, y_s, z_s, ex, ey, base, tc_status_label, plot_limits=plot_limits,
+                    )
                     return
 
                 z_col = "Liquidus_Temperature" if sf == "Liquidus" else "Solidus_Temperature"
@@ -7124,7 +9369,10 @@ class ThermoQGUI:
                 base = os.path.join(base_path, f"{prefix}_{sf}_ThermoCalc_{ex}_{ey}")
                 label_z = f"{sf} Temperature (K)"
 
-                _plot_xyz_surface(x, y, z, ex, ey, base, label_z, tc_status_label)
+                plot_limits = coord_ui['resolve'](
+                    float(x.min()), float(x.max()), float(y.min()), float(y.max()),
+                )
+                _plot_xyz_surface(x, y, z, ex, ey, base, label_z, tc_status_label, plot_limits=plot_limits)
 
             except Exception as e:
                 messagebox.showerror(
@@ -7132,38 +9380,43 @@ class ThermoQGUI:
                     self.tr('plot_err_simple', 'An error occurred: {e}').format(e=str(e)),
                 )
 
-        pandat_btns = ttk.Frame(tab_pandat)
-        pandat_btns.pack(pady=10)
-        btn_ps_plot_pd = ttk.Button(
-            pandat_btns,
-            text=self.tr('plot_phase_plot_pandat', 'Plot (Pandat)'),
-            command=run_plot_pandat,
-        )
-        btn_ps_plot_pd.pack(side=tk.LEFT, padx=10)
-
-        tc_btns = ttk.Frame(tab_tc)
-        tc_btns.pack(pady=10)
-        btn_ps_plot_tc = ttk.Button(
-            tc_btns,
-            text=self.tr('plot_phase_plot_tc', 'Plot (Thermo-calc)'),
-            command=run_plot_thermocalc,
-        )
-        btn_ps_plot_tc.pack(side=tk.LEFT, padx=10)
-
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(pady=10)
-
         def _close_phase_surface():
             self._unregister_tool_lang_refresh(_refresh_phase_surface_lang)
             _unbind_phase_surface_scroll()
             plot_window.destroy()
 
-        btn_ps_close = ttk.Button(
-            buttons_frame,
-            text=self.tr('ui_close', 'Close'),
-            command=_close_phase_surface,
+        def _make_centered_tab_buttons(plot_text, plot_command):
+            outer = ttk.Frame(main_frame)
+            inner = ttk.Frame(outer)
+            inner.pack(anchor='center', pady=10)
+            plot_btn = ttk.Button(inner, text=plot_text, command=plot_command)
+            plot_btn.pack(side=tk.LEFT, padx=10)
+            close_btn = ttk.Button(inner, text=self.tr('ui_close', 'Close'), command=_close_phase_surface)
+            close_btn.pack(side=tk.LEFT, padx=10)
+            return outer, plot_btn, close_btn
+
+        pandat_bottom_outer, btn_ps_plot_pd, btn_ps_close_pd = _make_centered_tab_buttons(
+            self.tr('plot_phase_plot_pandat', 'Plot (Pandat)'),
+            run_plot_pandat,
         )
-        btn_ps_close.pack(side=tk.LEFT, padx=10)
+        tc_bottom_outer, btn_ps_plot_tc, btn_ps_close_tc = _make_centered_tab_buttons(
+            self.tr('plot_phase_plot_tc', 'Plot (Thermo-calc)'),
+            run_plot_thermocalc,
+        )
+
+        def _sync_phase_surface_tab_buttons(_event=None):
+            try:
+                if notebook.index(notebook.select()) == 0:
+                    pandat_bottom_outer.pack(fill=tk.X, pady=10)
+                    tc_bottom_outer.pack_forget()
+                else:
+                    tc_bottom_outer.pack(fill=tk.X, pady=10)
+                    pandat_bottom_outer.pack_forget()
+            except tk.TclError:
+                pass
+
+        notebook.bind('<<NotebookTabChanged>>', _sync_phase_surface_tab_buttons)
+        _sync_phase_surface_tab_buttons()
 
         def _refresh_phase_surface_lang():
             try:
@@ -7188,7 +9441,7 @@ class ThermoQGUI:
             rb_ps_sol.config(text=self.tr('plot_phase_solidus', 'Solidus'))
             rb_ps_overlay.config(text=self.tr('plot_phase_overlay', 'Liquidus + Solidus overlay'))
             lbl_ps_iso.config(text=self.tr('plot_phase_iso_interval', 'Isotherm interval (K):'))
-            lbl_ps_iso_hint.config(text=self.tr('plot_phase_iso_interval_hint', 'Contour spacing for overlay isotherms'))
+            lbl_ps_iso_hint.config(text=self.tr('plot_phase_iso_interval_hint', 'Contour spacing for temperature isotherms on the surface'))
             lbl_ps_x.config(text=self.tr('batch_plot_x_el', 'X element:'))
             lbl_ps_y.config(text=self.tr('batch_plot_y_el', 'Y element:'))
             lbl_ps_viz.config(text=self.tr('plot_vis_label', 'Visualization:'))
@@ -7202,6 +9455,8 @@ class ThermoQGUI:
             lbl_ps_elev_rng.config(text=self.tr('plot_elev_range', '(0–90)'))
             lbl_ps_azim.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_ps_azim_rng.config(text=self.tr('plot_azim_range', '(-180–180)'))
+            self._refresh_plot_coord_lang(ps_coord_widgets)
+            self._refresh_plot_exp_lang(ps_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_ps_outdir.config(text=self.tr('batch_output_dir', 'Output Directory:'))
             btn_ps_browse_out.config(text=self.tr('pandat_browse', 'Browse'))
@@ -7215,7 +9470,8 @@ class ThermoQGUI:
             btn_ps_browse_tc.config(text=self.tr('pandat_browse', 'Browse'))
             btn_ps_plot_pd.config(text=self.tr('plot_phase_plot_pandat', 'Plot (Pandat)'))
             btn_ps_plot_tc.config(text=self.tr('plot_phase_plot_tc', 'Plot (Thermo-calc)'))
-            btn_ps_close.config(text=self.tr('ui_close', 'Close'))
+            btn_ps_close_pd.config(text=self.tr('ui_close', 'Close'))
+            btn_ps_close_tc.config(text=self.tr('ui_close', 'Close'))
             pandat_note.config(text=self.tr('plot_phase_note_pandat', ''))
             cur_pd = pandat_status_label.cget('text')
             if 'Ready' in cur_pd or '就绪' in cur_pd or 'Pandat' in cur_pd:
@@ -7231,8 +9487,12 @@ class ThermoQGUI:
         self._register_tool_lang_refresh(_refresh_phase_surface_lang)
         _refresh_phase_surface_lang()
 
-    def create_smooth_surface(self, x, y, z, grid_resolution=100, smoothness=100):
+    def create_smooth_surface(self, x, y, z, grid_resolution=100, smoothness=100, x_bounds=None, y_bounds=None):
         """Create smooth surface using Gaussian Process Regression or interpolation"""
+        use_bounds = x_bounds is not None and y_bounds is not None
+        if use_bounds:
+            x_lo, x_hi = float(x_bounds[0]), float(x_bounds[1])
+            y_lo, y_hi = float(y_bounds[0]), float(y_bounds[1])
         if SKLEARN_AVAILABLE and len(x) >= 3:
             try:
                 # Prepare training data
@@ -7303,20 +9563,29 @@ class ThermoQGUI:
                     warnings.filterwarnings("ignore", category=UserWarning)
                     gp.fit(X_train_norm, z_norm)
                 
-                # Create grid for prediction (in normalized space) with higher resolution
-                x_min_norm, x_max_norm = x_norm.min(), x_norm.max()
-                y_min_norm, y_max_norm = y_norm.min(), y_norm.max()
-                x_range_norm = x_max_norm - x_min_norm
-                y_range_norm = y_max_norm - y_min_norm
-                x_pad_norm = x_range_norm * 0.05
-                y_pad_norm = y_range_norm * 0.05
-                xi_norm = np.linspace(x_min_norm - x_pad_norm, x_max_norm + x_pad_norm, grid_resolution)
-                yi_norm = np.linspace(y_min_norm - y_pad_norm, y_max_norm + y_pad_norm, grid_resolution)
-                xi_grid_norm, yi_grid_norm = np.meshgrid(xi_norm, yi_norm)
-                
-                # Predict on grid (in normalized space)
-                X_grid_norm = np.column_stack([xi_grid_norm.ravel(), yi_grid_norm.ravel()])
-                zi_grid_norm = gp.predict(X_grid_norm).reshape(xi_grid_norm.shape)
+                # Create grid for prediction
+                if use_bounds:
+                    xi = np.linspace(x_lo, x_hi, grid_resolution)
+                    yi = np.linspace(y_lo, y_hi, grid_resolution)
+                    xi_grid, yi_grid = np.meshgrid(xi, yi)
+                    xi_grid_norm = (xi_grid - x_mean) / x_std if x_std > 0 else xi_grid - x_mean
+                    yi_grid_norm = (yi_grid - y_mean) / y_std if y_std > 0 else yi_grid - y_mean
+                    X_grid_norm = np.column_stack([xi_grid_norm.ravel(), yi_grid_norm.ravel()])
+                    zi_grid_norm = gp.predict(X_grid_norm).reshape(xi_grid.shape)
+                else:
+                    x_min_norm, x_max_norm = x_norm.min(), x_norm.max()
+                    y_min_norm, y_max_norm = y_norm.min(), y_norm.max()
+                    x_range_norm = x_max_norm - x_min_norm
+                    y_range_norm = y_max_norm - y_min_norm
+                    x_pad_norm = x_range_norm * 0.05
+                    y_pad_norm = y_range_norm * 0.05
+                    xi_norm = np.linspace(x_min_norm - x_pad_norm, x_max_norm + x_pad_norm, grid_resolution)
+                    yi_norm = np.linspace(y_min_norm - y_pad_norm, y_max_norm + y_pad_norm, grid_resolution)
+                    xi_grid_norm, yi_grid_norm = np.meshgrid(xi_norm, yi_norm)
+                    X_grid_norm = np.column_stack([xi_grid_norm.ravel(), yi_grid_norm.ravel()])
+                    zi_grid_norm = gp.predict(X_grid_norm).reshape(xi_grid_norm.shape)
+                    xi_grid = xi_grid_norm * x_std + x_mean if x_std > 0 else xi_grid_norm + x_mean
+                    yi_grid = yi_grid_norm * y_std + y_mean if y_std > 0 else yi_grid_norm + y_mean
                 
                 # Apply Gaussian smoothing filter to remove small-scale noise and wrinkles
                 if SCIPY_AVAILABLE:
@@ -7325,9 +9594,10 @@ class ThermoQGUI:
                     zi_grid_norm = gaussian_filter(zi_grid_norm, sigma=sigma)
                 
                 # Denormalize back to original space
-                xi_grid = xi_grid_norm * x_std + x_mean if x_std > 0 else xi_grid_norm + x_mean
-                yi_grid = yi_grid_norm * y_std + y_mean if y_std > 0 else yi_grid_norm + y_mean
-                zi_grid = zi_grid_norm * z_std + z_mean if z_std > 0 else zi_grid_norm + z_mean
+                if use_bounds:
+                    zi_grid = zi_grid_norm * z_std + z_mean if z_std > 0 else zi_grid_norm + z_mean
+                else:
+                    zi_grid = zi_grid_norm * z_std + z_mean if z_std > 0 else zi_grid_norm + z_mean
                 return xi_grid, yi_grid, zi_grid
             except Exception as e:
                 # Fallback to interpolation if GP fails
@@ -7336,14 +9606,18 @@ class ThermoQGUI:
         # Fallback: Use scipy interpolation
         if SCIPY_AVAILABLE:
             try:
-                x_min, x_max = x.min(), x.max()
-                y_min, y_max = y.min(), y.max()
-                x_range = x_max - x_min
-                y_range = y_max - y_min
-                x_pad = x_range * 0.05
-                y_pad = y_range * 0.05
-                xi = np.linspace(x_min - x_pad, x_max + x_pad, grid_resolution)
-                yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
+                if use_bounds:
+                    xi = np.linspace(x_lo, x_hi, grid_resolution)
+                    yi = np.linspace(y_lo, y_hi, grid_resolution)
+                else:
+                    x_min, x_max = x.min(), x.max()
+                    y_min, y_max = y.min(), y.max()
+                    x_range = x_max - x_min
+                    y_range = y_max - y_min
+                    x_pad = x_range * 0.05
+                    y_pad = y_range * 0.05
+                    xi = np.linspace(x_min - x_pad, x_max + x_pad, grid_resolution)
+                    yi = np.linspace(y_min - y_pad, y_max + y_pad, grid_resolution)
                 xi_grid, yi_grid = np.meshgrid(xi, yi)
                 
                 # Interpolate using cubic method for smoother surfaces
@@ -7376,25 +9650,34 @@ class ThermoQGUI:
 
     def open_file_and_offer_save_as(self, file_path, parent_window):
         """Open a file with the system default application (no Save As prompt)."""
-        try:
-            # Open the file based on its extension
-            if file_path.lower().endswith('.html'):
-                # Open HTML file in browser
-                webbrowser.open(f'file://{os.path.abspath(file_path)}')
-            else:
-                # Open image files with system default application
+        abs_path = os.path.abspath(file_path)
+
+        def _do_open():
+            try:
                 if platform.system() == 'Windows':
-                    os.startfile(os.path.abspath(file_path))
-                elif platform.system() == 'Darwin':  # macOS
-                    subprocess.call(['open', os.path.abspath(file_path)])
-                else:  # Linux
-                    subprocess.call(['xdg-open', os.path.abspath(file_path)])
-        except Exception as e:
-            messagebox.showerror(
-                self.tr('dlg_error', 'Error'),
-                self.tr('file_open_fail', 'Failed to open file: {e}').format(e=str(e)),
-                parent=parent_window,
-            )
+                    os.startfile(abs_path)
+                elif platform.system() == 'Darwin':
+                    subprocess.call(['open', abs_path], close_fds=True)
+                else:
+                    subprocess.call(['xdg-open', abs_path], close_fds=True)
+            except Exception as e:
+                try:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('file_open_fail', 'Failed to open file: {e}').format(e=str(e)),
+                        parent=parent_window,
+                    )
+                except Exception:
+                    pass
+
+        # Defer opening so heavy plot callbacks finish before shell/browser launch.
+        try:
+            if parent_window is not None and hasattr(parent_window, 'after'):
+                parent_window.after(0, _do_open)
+            else:
+                _do_open()
+        except Exception:
+            _do_open()
 
     def save_file_as(self, source_path, parent_window):
         """Save file to a different location"""
@@ -7442,8 +9725,7 @@ class ThermoQGUI:
         plot_window.geometry("850x900")
         self._present_tool_window(plot_window, self.root)
 
-        main_frame = ttk.Frame(plot_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame, _, _q_scroll_unbind = self._build_tool_window_scroll_area(plot_window, padding="20")
 
         title_label = ttk.Label(
             main_frame,
@@ -7535,6 +9817,18 @@ class ThermoQGUI:
         )
         smooth_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
+        iso_interval_frame = ttk.Frame(controls)
+        iso_interval_frame.pack(fill=tk.X, pady=5)
+        lbl_q_iso = ttk.Label(iso_interval_frame, text=self.tr('qtrue_iso_interval', 'Contour interval:'))
+        lbl_q_iso.pack(side=tk.LEFT, padx=5)
+        iso_interval_var = tk.StringVar(value="1")
+        ttk.Entry(iso_interval_frame, textvariable=iso_interval_var, width=8).pack(side=tk.LEFT, padx=5)
+        lbl_q_iso_hint = ttk.Label(
+            iso_interval_frame,
+            text=self.tr('qtrue_iso_interval_hint', 'Spacing for Q-value isocontours on the surface'),
+        )
+        lbl_q_iso_hint.pack(side=tk.LEFT, padx=5)
+
         view_frame = ttk.LabelFrame(
             controls,
             text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'),
@@ -7559,6 +9853,32 @@ class ThermoQGUI:
         ttk.Entry(azim_row, textvariable=azim_var, width=8).pack(side=tk.LEFT, padx=5)
         lbl_q_azr = ttk.Label(azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
         lbl_q_azr.pack(side=tk.LEFT, padx=5)
+
+        def _q_reset_coord():
+            try:
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    raise ValueError(self.tr('plot_select_xy', ''))
+                df = get_df()
+                if df is None or len(df) == 0:
+                    raise ValueError(self.tr('plot_msg_import_pandat_p', ''))
+                dx0, dx1, dy0, dy1 = self._dataframe_xy_extents(df, ex, ey)
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(dx0, dx1, dy0, dy1)
+                coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        coord_ui = self._build_plot_coord_range_ui(controls, reset_command=_q_reset_coord)
+        coord_ui['frame'].pack(fill=tk.X, pady=5)
+        q_coord_widgets = coord_ui['widgets']
+
+        exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
+        exp_ui['frame'].pack(fill=tk.X, pady=5)
+        q_exp_widgets = exp_ui['widgets']
 
         output_settings_frame = ttk.LabelFrame(
             controls,
@@ -7725,200 +10045,21 @@ class ThermoQGUI:
                 base = os.path.join(base_path, f"{prefix}_{ds}")
                 label_z = f"Q Value ({col_q_found})"
 
-                # Create smooth surface using Gaussian Process
-                status_label.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
-                plot_window.update()
-                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
-                    x, y, z,
-                    grid_resolution=100,
-                    smoothness=smoothness_var.get()
+                plot_limits = coord_ui['resolve'](
+                    float(x.min()), float(x.max()), float(y.min()), float(y.max()),
                 )
-                
-                if xi_grid is None:
-                    messagebox.showwarning(
-                        self.tr('plot_smooth_title', 'Smoothing Failed'),
-                        self.tr(
-                            'plot_smooth_msg',
-                            'Could not create smooth surface. Using scatter/triangulated surface instead. Please install scikit-learn and scipy for smooth surfaces.',
-                        ),
-                    )
-                    xi_grid, yi_grid, zi_grid = None, None, None
-
-                viz = viz_var.get()
-                if viz == "2D Heatmap":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'))
-                        return
-                    plt.figure(figsize=(10, 8))
-                    plt.xlabel(f"w({ex}) (%)")
-                    plt.ylabel(f"w({ey}) (%)")
-                    if xi_grid is not None:
-                        # Use smooth surface
-                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
-                        plt.colorbar(contour, label=label_z)
-                    else:
-                        # Fallback to scatter
-                        scatter = plt.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
-                        plt.colorbar(scatter, label=label_z)
-                    plt.grid(False)
-                    out_path = f"{base}_Heatmap.png"
-                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
-                    plt.close()
-                    status_label.config(text=f"Heatmap saved: {out_path}", foreground="green")
-                    # Open the file
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                elif viz == "3D Static":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'))
-                        return
-                    fig = plt.figure(figsize=(12, 10))
-                    ax = fig.add_subplot(111, projection='3d')
-                    if xi_grid is not None:
-                        # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
-                                              linewidth=0, antialiased=True, shade=True)
-                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                    else:
-                        # Fallback (avoid dot markers): use triangulated surface
-                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel(f"w({ex}) (%)")
-                    ax.set_ylabel(f"w({ey}) (%)")
-                    ax.set_zlabel(label_z)
-                    # Apply user-selected view angles for 3D Static
-                    try:
-                        ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
-                    except Exception:
-                        pass
-                    out_path = f"{base}_3d.png"
-                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
-                    plt.close()
-                    status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
-                    # Open the file
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                elif viz == "3D Rotation GIF":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_gif', 'Matplotlib is not installed. Cannot generate GIF.'))
-                        return
-                    fig = plt.figure(figsize=(12, 10))
-                    ax = fig.add_subplot(111, projection='3d')
-                    if xi_grid is not None:
-                        # Use smooth surface
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, 
-                                              linewidth=0, antialiased=True, shade=True)
-                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                    else:
-                        # Fallback (avoid dot markers): use triangulated surface
-                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel(f"w({ex}) (%)")
-                    ax.set_ylabel(f"w({ey}) (%)")
-                    ax.set_zlabel(label_z)
-
-                    def _rotate(angle):
-                        ax.view_init(azim=angle)
-                        return [ax]
-
-                    # Get GIF parameters
-                    try:
-                        rotation_step = int(float(gif_speed_var.get()))
-                    except:
-                        rotation_step = 5
-                    try:
-                        interval_ms = int(float(gif_interval_var.get()))
-                    except:
-                        interval_ms = 50
-                    try:
-                        fps_val = int(float(gif_fps_var.get()))
-                    except:
-                        fps_val = 20
-                    
-                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
-                    out_path = f"{base}_3d_rotation.gif"
-                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
-                    plt.close()
-                    status_label.config(text=f"GIF saved: {out_path}", foreground="green")
-                    # Open the file
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                else:
-                    if PLOTLY_AVAILABLE:
-                        if xi_grid is not None:
-                            # Use smooth surface
-                            fig_plotly = go.Figure(data=[
-                                go.Surface(x=xi_grid, y=yi_grid, z=zi_grid, 
-                                          colorscale='RdBu', reversescale=True, opacity=0.98,
-                                          colorbar=dict(title=label_z))
-                            ])
-                        else:
-                            # Fallback to scatter
-                            fig_plotly = go.Figure(data=[go.Scatter3d(
-                                x=x, y=y, z=z,
-                                mode='markers',
-                                marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85,
-                                            colorbar=dict(title=label_z))
-                            )])
-                        fig_plotly.update_layout(
-                            scene=dict(
-                            xaxis_title=f"w({ex})",
-                            yaxis_title=f"w({ey})",
-                                zaxis_title=label_z,
-                            ),
-                            width=900, height=700,
-                        )
-                        out_path = f"{base}_3d_interactive.html"
-                        fig_plotly.write_html(out_path)
-                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                        # Open the file
-                        self.open_file_and_offer_save_as(out_path, plot_window)
-                    else:
-                        out_path = f"{base}_3d_interactive.html"
-                        with open(out_path, 'w', encoding='utf-8') as f:
-                            f.write('<html><head><title>Q Value 3D Interactive Plot</title></head><body>\n')
-                            f.write('<h2>Q Value 3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
-                            f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
-                            f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
-                            f.write('<script>\n')
-                            if xi_grid is not None:
-                                # Use smooth surface
-                                f.write('var data = [{\n')
-                                f.write('  type: "surface",\n')
-                                f.write('  x: ' + str(xi_grid.tolist()) + ',\n')
-                                f.write('  y: ' + str(yi_grid.tolist()) + ',\n')
-                                f.write('  z: ' + str(zi_grid.tolist()) + ',\n')
-                                f.write('  colorscale: "Jet",\n')
-                                f.write('  opacity: 0.9,\n')
-                                f.write('  colorbar: {title: "' + label_z + '"}\n')
-                                f.write('}, {\n')
-                                f.write('  type: "scatter3d",\n')
-                                f.write('  mode: "markers",\n')
-                                f.write('  x: ' + str(x.tolist()) + ',\n')
-                                f.write('  y: ' + str(y.tolist()) + ',\n')
-                                f.write('  z: ' + str(z.tolist()) + ',\n')
-                                f.write('  marker: { size: 3, color: "black", opacity: 0.5 }\n')
-                                f.write('}];\n')
-                            else:
-                                # Fallback to scatter
-                                f.write('var data = [{\n')
-                                f.write('  type: "scatter3d",\n')
-                                f.write('  mode: "markers",\n')
-                                f.write('  x: ' + str(x.tolist()) + ',\n')
-                                f.write('  y: ' + str(y.tolist()) + ',\n')
-                                f.write('  z: ' + str(z.tolist()) + ',\n')
-                                f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "Jet", opacity: 0.8, colorbar: {title: "' + label_z + '"} }\n')
-                                f.write('}];\n')
-                            f.write('var layout = {\n')
-                            f.write('  scene: {\n')
-                            f.write(f'    xaxis: {{title: "w({ex})"}},\n')
-                            f.write(f'    yaxis: {{title: "w({ey})"}},\n')
-                            f.write('    zaxis: {title: "' + label_z + '"}\n')
-                            f.write('  }\n')
-                            f.write('};\n')
-                            f.write('Plotly.newPlot("plot", data, layout);\n')
-                            f.write('</script>\n')
-                            f.write('</body></html>')
-                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                        # Open the file
-                        self.open_file_and_offer_save_as(out_path, plot_window)
+                exp_pts = exp_ui['get_points'](ex, ey, z_hint=col_q_found)
+                self._plot_xyz_surface_render(
+                    x, y, z, ex, ey, base, label_z, viz_var.get(),
+                    smoothness_var.get(), image_format_var.get(),
+                    elev_var.get(), azim_var.get(),
+                    gif_speed_var.get(), gif_interval_var.get(), gif_fps_var.get(),
+                    status_label, plot_window,
+                    plot_limits=plot_limits, exp_points=exp_pts,
+                    iso_interval=iso_interval_var.get(),
+                    iso_clabel_fmt="%g", iso_level_fmt=".3g",
+                    show_legend=False,
+                )
 
             except Exception as e:
                 import traceback
@@ -7963,11 +10104,15 @@ class ThermoQGUI:
             rb_q_vg.config(text=self.tr('batch_viz_gif', '3D Rotation GIF'))
             rb_q_vp.config(text=self.tr('batch_viz_plotly', 'Plotly 3D'))
             lbl_q_sm.config(text=self.tr('batch_smooth', 'Smoothness:'))
+            lbl_q_iso.config(text=self.tr('qtrue_iso_interval', 'Contour interval:'))
+            lbl_q_iso_hint.config(text=self.tr('qtrue_iso_interval_hint', 'Spacing for Q-value isocontours on the surface'))
             view_frame.config(text=self.tr('batch_view_3d', '3D Static View'))
             lbl_q_el.config(text=self.tr('batch_elev', 'Elevation (deg):'))
             lbl_q_elr.config(text=self.tr('plot_elev_range', '(0–90)'))
             lbl_q_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_q_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
+            self._refresh_plot_coord_lang(q_coord_widgets)
+            self._refresh_plot_exp_lang(q_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_q_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
             btn_q_browse.config(text=self.tr('pandat_browse', 'Browse'))
@@ -7995,56 +10140,7 @@ class ThermoQGUI:
         plot_window.minsize(720, 560)
         self._present_tool_window(plot_window, self.root)
 
-        lmg_canvas = tk.Canvas(plot_window, highlightthickness=0)
-        lmg_scroll = ttk.Scrollbar(plot_window, orient="vertical", command=lmg_canvas.yview)
-        lmg_canvas.configure(yscrollcommand=lmg_scroll.set)
-        lmg_scrollable = ttk.Frame(lmg_canvas)
-        lmg_cwin = lmg_canvas.create_window((0, 0), window=lmg_scrollable, anchor="nw")
-
-        def _lmg_on_canvas_configure(event):
-            w = event.width
-            if w > 1:
-                lmg_canvas.itemconfigure(lmg_cwin, width=w)
-
-        def _lmg_on_scrollable_configure(_event=None):
-            lmg_canvas.configure(scrollregion=lmg_canvas.bbox("all"))
-
-        lmg_canvas.bind("<Configure>", _lmg_on_canvas_configure)
-        lmg_scrollable.bind("<Configure>", _lmg_on_scrollable_configure)
-        lmg_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        lmg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        def _unbind_lmg_scroll():
-            try:
-                if platform.system() == "Linux":
-                    plot_window.unbind_all("<Button-4>")
-                    plot_window.unbind_all("<Button-5>")
-                else:
-                    plot_window.unbind_all("<MouseWheel>")
-            except tk.TclError:
-                pass
-
-        def _on_lmg_mousewheel(event):
-            try:
-                if not plot_window.winfo_exists() or not lmg_canvas.winfo_exists():
-                    return
-            except tk.TclError:
-                return
-            if platform.system() == "Windows":
-                lmg_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            elif platform.system() == "Darwin":
-                lmg_canvas.yview_scroll(int(-1 * event.delta), "units")
-            else:
-                if event.num == 4:
-                    lmg_canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    lmg_canvas.yview_scroll(1, "units")
-
-        if platform.system() == "Linux":
-            lmg_canvas.bind_all("<Button-4>", _on_lmg_mousewheel)
-            lmg_canvas.bind_all("<Button-5>", _on_lmg_mousewheel)
-        else:
-            lmg_canvas.bind_all("<MouseWheel>", _on_lmg_mousewheel)
+        lmg_scrollable, lmg_canvas, _unbind_lmg_scroll = self._build_tool_window_scroll_area(plot_window)
 
         main_frame = ttk.Frame(lmg_scrollable, padding="20")
         main_frame.pack(fill=tk.X, expand=False)
@@ -8261,6 +10357,56 @@ class ThermoQGUI:
         lbl_lmg_azr = ttk.Label(azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
         lbl_lmg_azr.pack(side=tk.LEFT, padx=5)
 
+        def _lmg_reset_coord():
+            try:
+                df = state["df"]
+                x_col, y_col = state["x_col"], state["y_col"]
+                if df is None or not x_col or not y_col:
+                    raise ValueError(self.tr('plot_lmg_need_excel', ''))
+                xv = pd.to_numeric(df[x_col], errors='coerce')
+                yv = pd.to_numeric(df[y_col], errors='coerce')
+                mask = xv.notna() & yv.notna()
+                if not mask.any():
+                    raise ValueError(self.tr('plot_no_valid', ''))
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(
+                    float(xv[mask].min()), float(xv[mask].max()),
+                    float(yv[mask].min()), float(yv[mask].max()),
+                )
+                lmg_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        lmg_coord_ui = self._build_plot_coord_range_ui(controls, reset_command=_lmg_reset_coord)
+        lmg_coord_ui['frame'].pack(fill=tk.X, pady=5)
+        lmg_coord_widgets = lmg_coord_ui['widgets']
+
+        lmg_exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
+        lmg_exp_ui['frame'].pack(fill=tk.X, pady=5)
+        lmg_exp_widgets = lmg_exp_ui['widgets']
+
+        def _lmg_exp_points(x_col, y_col, z_hint=None):
+            def _lmg_element_from_column(col):
+                s = str(col)
+                mw = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', s, re.I)
+                if mw:
+                    return canonical_element_symbol(mw.group(1))
+                mp = re.match(
+                    r'^(?:MOLE|ATOMIC|MASS|WEIGHT)_PERCENT_([A-Za-z0-9]+)',
+                    s, re.I,
+                )
+                if mp:
+                    return canonical_element_symbol(mp.group(1))
+                return None
+
+            ex_el = _lmg_element_from_column(x_col)
+            ey_el = _lmg_element_from_column(y_col)
+            if ex_el and ey_el:
+                return lmg_exp_ui['get_points'](ex_el, ey_el, z_hint=z_hint)
+            return None
+
         output_settings_frame = ttk.LabelFrame(
             controls, text=self.tr('plot_phase_output_settings', 'Output Settings'), padding="10",
         )
@@ -8335,21 +10481,7 @@ class ThermoQGUI:
             return os.path.join(base_path, f"{prefix}_{suffix}")
 
         def _mpl_save_kwargs():
-            img_format = image_format_var.get().upper()
-            format_ext_map = {
-                "PNG": "png", "JPEG": "jpg", "GIF": "gif", "BMP": "bmp",
-                "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "AI": "ai",
-                "EPS": "eps", "PDF": "pdf",
-            }
-            ext = format_ext_map.get(img_format, "png")
-            save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
-            fmt_map = {
-                "PDF": "pdf", "EPS": "eps", "SVG": "svg", "AI": "pdf",
-                "JPEG": "jpeg", "JPG": "jpeg", "TIFF": "tiff", "WEBP": "webp",
-                "BMP": "bmp", "GIF": "gif",
-            }
-            save_kwargs["format"] = fmt_map.get(img_format, "png")
-            return ext, save_kwargs
+            return self._plot_image_ext_and_save_kwargs(image_format_var.get())
 
         def _apply_3d_view(ax):
             try:
@@ -8357,7 +10489,7 @@ class ThermoQGUI:
             except Exception:
                 pass
 
-        def _plot_curves_mpl(curves, x_col, y_col, t_plot, title_suffix, base_suffix, flat_z=False):
+        def _plot_curves_mpl(curves, x_col, y_col, t_plot, title_suffix, base_suffix, flat_z=False, plot_limits=None):
             if not MATPLOTLIB_AVAILABLE:
                 messagebox.showerror(
                     self.tr('plot_dep_title', 'Dependency Missing'),
@@ -8367,25 +10499,26 @@ class ThermoQGUI:
             viz = viz_var.get()
             z_label = self.tr('plot_lmg_axis_z_temp', 'Temperature (K)')
             phase_colors = _lmg_phase_color_map([c['label'] for c in curves])
-            legend_seen = set()
 
             if viz == "2D Boundary":
                 fig, ax = plt.subplots(figsize=(10, 8))
                 for c in curves:
                     ph = c['label']
-                    lbl = ph if ph not in legend_seen else None
-                    legend_seen.add(ph)
                     ax.plot(
-                        c['x'], c['y'], label=lbl,
+                        c['x'], c['y'],
                         color=phase_colors.get(ph), linewidth=1.8,
                     )
-                ax.set_xlabel(x_col)
-                ax.set_ylabel(y_col)
+                ax.set_xlabel(format_chemistry_axis_label(x_col))
+                ax.set_ylabel(format_chemistry_axis_label(y_col))
                 ax.set_title(self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
                     t=t_plot, note=title_suffix,
                 ))
-                ax.legend(loc='best', fontsize=8)
                 ax.grid(True, alpha=0.3)
+                if plot_limits:
+                    self._apply_plot_xy_limits(ax, *plot_limits)
+                self._overlay_experimental_points_mpl_2d(
+                    ax, _lmg_exp_points(x_col, y_col, z_hint='T'), show_legend=False,
+                )
                 ext, skw = _mpl_save_kwargs()
                 out_path = f"{_output_base(base_suffix)}_2d.{ext}"
                 fig.savefig(out_path, **skw)
@@ -8400,25 +10533,25 @@ class ThermoQGUI:
             fig = plt.figure(figsize=(12, 10))
             ax = fig.add_subplot(111, projection='3d')
             z_val = float(t_plot) if not flat_z else 0.0
-            legend_seen = set()
             for c in curves:
                 ph = c['label']
-                lbl = ph if ph not in legend_seen else None
-                legend_seen.add(ph)
                 zc = np.full_like(c['x'], z_val, dtype=float)
                 ax.plot(
-                    c['x'], c['y'], zc, label=lbl,
+                    c['x'], c['y'], zc,
                     color=phase_colors.get(ph), linewidth=1.8,
                 )
-            ax.set_xlabel(x_col)
-            ax.set_ylabel(y_col)
+            ax.set_xlabel(format_chemistry_axis_label(x_col))
+            ax.set_ylabel(format_chemistry_axis_label(y_col))
             ax.set_zlabel(z_label if not flat_z else '')
             ax.set_title(self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
                 t=t_plot, note=title_suffix,
             ))
-            ax.legend(loc='best', fontsize=8)
             _apply_3d_view(ax)
+            if plot_limits:
+                ax.set_xlim(plot_limits[0], plot_limits[1])
+                ax.set_ylim(plot_limits[2], plot_limits[3])
 
+            self._overlay_experimental_points_mpl_3d(ax, _lmg_exp_points(x_col, y_col, z_hint='T'))
             if viz == "3D Static":
                 ext, skw = _mpl_save_kwargs()
                 out_path = f"{_output_base(base_suffix)}_3d.{ext}"
@@ -8456,17 +10589,14 @@ class ThermoQGUI:
                 if PLOTLY_AVAILABLE:
                     import matplotlib.colors as mcolors
                     traces = []
-                    plotly_legend_seen = set()
                     for c in curves:
                         ph = c['label']
                         zc = np.full_like(c['x'], float(t_plot), dtype=float)
                         rgba = phase_colors.get(ph)
                         line_color = mcolors.to_hex(rgba) if rgba is not None else None
-                        show_legend = ph not in plotly_legend_seen
-                        plotly_legend_seen.add(ph)
                         traces.append(go.Scatter3d(
                             x=c['x'], y=c['y'], z=zc,
-                            mode='lines', name=ph, showlegend=show_legend,
+                            mode='lines', name=ph, showlegend=False,
                             line=dict(width=4, color=line_color),
                         ))
                     fig_p = go.Figure(data=traces)
@@ -8474,7 +10604,12 @@ class ThermoQGUI:
                         title=self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
                             t=t_plot, note=title_suffix,
                         ),
-                        scene=dict(xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_label),
+                        showlegend=False,
+                        scene=dict(
+                            xaxis_title=format_chemistry_axis_label(x_col),
+                            yaxis_title=format_chemistry_axis_label(y_col),
+                            zaxis_title=z_label,
+                        ),
                         width=900, height=700,
                     )
                     out_path = f"{_output_base(base_suffix)}_3d_interactive.html"
@@ -8513,18 +10648,16 @@ class ThermoQGUI:
                     textfont=dict(color=text_color, size=11), showlegend=False,
                 ))
 
-        def _plot_temperature_surfaces_mpl(x, y, z, x_col, y_col, base_suffix):
+        def _plot_temperature_surfaces_mpl(x, y, z, x_col, y_col, base_suffix, plot_limits=None):
             if not MATPLOTLIB_AVAILABLE:
                 messagebox.showerror(
                     self.tr('plot_dep_title', 'Dependency Missing'),
                     self.tr('plot_dep_3d', 'Matplotlib is not installed.'),
                 )
                 return
-            from matplotlib.lines import Line2D
 
             viz = viz_var.get()
             z_label = self.tr('plot_lmg_axis_z_temp', 'Temperature (K)')
-            iso_lbl = self.tr('plot_lmg_legend_isotherms', 'Temperature isotherms')
             plot_title = self.tr('plot_lmg_surfaces_title', 'Miscibility Gap — Stacked Temperature Surface')
             t_min = float(np.nanmin(z))
             levels = _lmg_iso_levels(z, iso_interval_var.get())
@@ -8533,8 +10666,14 @@ class ThermoQGUI:
             status_label.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground='orange')
             plot_window.update()
 
+            x_bounds = y_bounds = None
+            if plot_limits:
+                x_bounds = (plot_limits[0], plot_limits[1])
+                y_bounds = (plot_limits[2], plot_limits[3])
+
             xi, yi, zi = self.create_smooth_surface(
                 x, y, z, grid_resolution=100, smoothness=smoothness_var.get(),
+                x_bounds=x_bounds, y_bounds=y_bounds,
             )
             if zi is not None:
                 zi = _lmg_clip_z_to_min(zi, t_min)
@@ -8574,19 +10713,19 @@ class ThermoQGUI:
                         x, y, z_plot, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.65,
                     )
                     fig.colorbar(trisurf, shrink=0.5, aspect=5, label=z_label)
-                ax.set_xlabel(x_col)
-                ax.set_ylabel(y_col)
+                ax.set_xlabel(format_chemistry_axis_label(x_col))
+                ax.set_ylabel(format_chemistry_axis_label(y_col))
                 ax.set_zlabel(z_label)
                 ax.set_title(plot_title)
                 try:
                     ax.set_zlim(bottom=t_min)
                 except Exception:
                     pass
-                ax.legend(
-                    handles=[Line2D([0], [0], color=iso_line, lw=2, label=iso_lbl)],
-                    loc='upper left',
-                )
                 _apply_3d_view(ax)
+                if plot_limits:
+                    ax.set_xlim(plot_limits[0], plot_limits[1])
+                    ax.set_ylim(plot_limits[2], plot_limits[3])
+                self._overlay_experimental_points_mpl_3d(ax, _lmg_exp_points(x_col, y_col, z_hint='T'))
 
                 if viz == '3D Rotation GIF':
                     def _rotate(angle):
@@ -8631,12 +10770,37 @@ class ThermoQGUI:
                             x=x, y=y, z=z_plot, mode='markers',
                             marker=dict(size=2, color=z_plot, colorscale='RdBu', reversescale=True,
                                         colorbar=dict(title=z_label), cmin=t_min, opacity=0.75),
+                            showlegend=False,
                         ))
                     fig_p = go.Figure(data=traces)
+                    exp_pts = _lmg_exp_points(x_col, y_col, z_hint='T')
+                    if exp_pts:
+                        def _lmg_plotly_axis_el(col):
+                            s = str(col)
+                            mp = re.match(
+                                r'^(?:MOLE|ATOMIC|MASS|WEIGHT)_PERCENT_([A-Za-z0-9]+)',
+                                s, re.I,
+                            )
+                            if mp:
+                                return canonical_element_symbol(mp.group(1))
+                            mw = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', s, re.I)
+                            if mw:
+                                return canonical_element_symbol(mw.group(1))
+                            return None
+
+                        ex_el = _lmg_plotly_axis_el(x_col)
+                        ey_el = _lmg_plotly_axis_el(y_col)
+                        if ex_el and ey_el:
+                            self._overlay_experimental_points_plotly(
+                                fig_p, exp_pts, ex_el, ey_el, show_legend=False,
+                            )
                     fig_p.update_layout(
                         title=plot_title,
+                        showlegend=False,
                         scene=dict(
-                            xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_label,
+                            xaxis_title=format_chemistry_axis_label(x_col),
+                            yaxis_title=format_chemistry_axis_label(y_col),
+                            zaxis_title=z_label,
                             zaxis=dict(range=[t_min, None]),
                         ),
                         width=950, height=750,
@@ -8689,7 +10853,13 @@ class ThermoQGUI:
                 return
             suffix = f"at_{int(t_target) if t_target == int(t_target) else t_target:g}K"
             title_suffix = f" ({note})" if note else ""
-            _plot_curves_mpl(curves, x_col, y_col, t_target, title_suffix, suffix)
+            all_x = np.concatenate([c['x'] for c in curves])
+            all_y = np.concatenate([c['y'] for c in curves])
+            plot_limits = lmg_coord_ui['resolve'](
+                float(np.min(all_x)), float(np.max(all_x)),
+                float(np.min(all_y)), float(np.max(all_y)),
+            )
+            _plot_curves_mpl(curves, x_col, y_col, t_target, title_suffix, suffix, plot_limits=plot_limits)
 
         def plot_surfaces():
             path = file_var_s.get().strip()
@@ -8709,7 +10879,10 @@ class ThermoQGUI:
                 )
                 return
             x, y, z = stack
-            _plot_temperature_surfaces_mpl(x, y, z, x_col, y_col, "surfaces")
+            plot_limits = lmg_coord_ui['resolve'](
+                float(np.min(x)), float(np.max(x)), float(np.min(y)), float(np.max(y)),
+            )
+            _plot_temperature_surfaces_mpl(x, y, z, x_col, y_col, "surfaces", plot_limits=plot_limits)
 
         btn_plot_t = ttk.Button(
             btn_row_t, text=self.tr('plot_lmg_plot_at_t', 'Plot at Temperature'), command=plot_at_temperature,
@@ -8752,6 +10925,8 @@ class ThermoQGUI:
             lbl_lmg_elr.config(text=self.tr('plot_elev_range', '(0–90)'))
             lbl_lmg_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_lmg_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
+            self._refresh_plot_coord_lang(lmg_coord_widgets)
+            self._refresh_plot_exp_lang(lmg_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_lmg_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
             btn_lmg_out.config(text=self.tr('pandat_browse', 'Browse'))
@@ -8788,8 +10963,7 @@ class ThermoQGUI:
         plot_window.geometry("850x900")
         self._present_tool_window(plot_window, self.root)
 
-        main_frame = ttk.Frame(plot_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame, _, _tzero_scroll_unbind = self._build_tool_window_scroll_area(plot_window, padding="20")
 
         title_label = ttk.Label(
             main_frame,
@@ -8924,6 +11098,18 @@ class ThermoQGUI:
             command=_on_smoothness_change,
         ).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
+        iso_interval_frame = ttk.Frame(controls)
+        iso_interval_frame.pack(fill=tk.X, pady=5)
+        lbl_tz_iso = ttk.Label(iso_interval_frame, text=self.tr('tzero_iso_interval', 'Isotherm interval (K):'))
+        lbl_tz_iso.pack(side=tk.LEFT, padx=5)
+        iso_interval_var = tk.StringVar(value="10")
+        ttk.Entry(iso_interval_frame, textvariable=iso_interval_var, width=8).pack(side=tk.LEFT, padx=5)
+        lbl_tz_iso_hint = ttk.Label(
+            iso_interval_frame,
+            text=self.tr('tzero_iso_interval_hint', 'Contour spacing for T0 isotherms on 2D/3D surface plots'),
+        )
+        lbl_tz_iso_hint.pack(side=tk.LEFT, padx=5)
+
         view_frame = ttk.LabelFrame(controls, text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'), padding="10")
         view_frame.pack(fill=tk.X, pady=5)
         elev_var = tk.DoubleVar(value=30.0)
@@ -8942,6 +11128,32 @@ class ThermoQGUI:
         ttk.Entry(azim_row, textvariable=azim_var, width=8).pack(side=tk.LEFT, padx=5)
         lbl_tz_azr = ttk.Label(azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
         lbl_tz_azr.pack(side=tk.LEFT, padx=5)
+
+        def _tz_reset_coord():
+            try:
+                df = state["df"]
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if df is None or len(df) == 0:
+                    raise ValueError(self.tr('plot_t0_need', ''))
+                if not ex or not ey:
+                    raise ValueError(self.tr('plot_select_xy', ''))
+                dx0, dx1, dy0, dy1 = self._dataframe_xy_extents(df, ex, ey)
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(dx0, dx1, dy0, dy1)
+                tz_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        tz_coord_ui = self._build_plot_coord_range_ui(controls, reset_command=_tz_reset_coord)
+        tz_coord_ui['frame'].pack(fill=tk.X, pady=5)
+        tz_coord_widgets = tz_coord_ui['widgets']
+
+        exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
+        exp_ui['frame'].pack(fill=tk.X, pady=5)
+        tz_exp_widgets = exp_ui['widgets']
 
         output_settings_frame = ttk.LabelFrame(
             controls,
@@ -9072,191 +11284,19 @@ class ThermoQGUI:
                 base = os.path.join(base_path, f"{prefix}_{ex}_{ey}")
                 label_z = "T0 (K)"
 
-                viz = viz_var.get()
-                status_label.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
-                plot_window.update()
-                xi_grid, yi_grid, zi_grid = self.create_smooth_surface(
-                    x, y, z, grid_resolution=100, smoothness=smoothness_var.get()
+                plot_limits = tz_coord_ui['resolve'](
+                    float(x.min()), float(x.max()), float(y.min()), float(y.max()),
                 )
-                if xi_grid is None:
-                    messagebox.showwarning(
-                        self.tr('plot_smooth_title', 'Smoothing Failed'),
-                        self.tr(
-                            'plot_smooth_msg',
-                            'Could not create smooth surface. Using scatter/triangulated surface instead. Please install scikit-learn and scipy for smooth surfaces.',
-                        ),
-                    )
-
-                if viz == "2D Heatmap":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'))
-                        return
-                    plt.figure(figsize=(10, 8))
-                    plt.xlabel(f"w({ex})")
-                    plt.ylabel(f"w({ey})")
-                    if xi_grid is not None:
-                        contour = plt.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
-                        plt.colorbar(contour, label=label_z)
-                    else:
-                        scatter = plt.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
-                        plt.colorbar(scatter, label=label_z)
-                    plt.grid(False)
-                    out_path = f"{base}_Heatmap.png"
-                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
-                    plt.close()
-                    status_label.config(text=f"Heatmap saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                elif viz == "3D Static":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'))
-                        return
-                    fig = plt.figure(figsize=(12, 10))
-                    ax = fig.add_subplot(111, projection='3d')
-                    if xi_grid is not None:
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98,
-                                               linewidth=0, antialiased=True, shade=True)
-                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                    else:
-                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel(f"w({ex})")
-                    ax.set_ylabel(f"w({ey})")
-                    ax.set_zlabel(label_z)
-                    try:
-                        ax.view_init(elev=float(elev_var.get()), azim=float(azim_var.get()))
-                    except Exception:
-                        pass
-
-                    img_format = image_format_var.get().upper()
-                    format_ext_map = {
-                        "PNG": "png", "JPEG": "jpg", "GIF": "gif", "BMP": "bmp",
-                        "TIFF": "tiff", "WEBP": "webp", "SVG": "svg", "AI": "ai",
-                        "EPS": "eps", "PDF": "pdf"
-                    }
-                    ext = format_ext_map.get(img_format, "png")
-                    save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
-                    if img_format == "PDF":
-                        save_kwargs["format"] = "pdf"
-                    elif img_format == "EPS":
-                        save_kwargs["format"] = "eps"
-                    elif img_format == "SVG":
-                        save_kwargs["format"] = "svg"
-                    elif img_format == "AI":
-                        save_kwargs["format"] = "pdf"
-                    elif img_format in ["JPEG", "JPG"]:
-                        save_kwargs["format"] = "jpeg"
-                    elif img_format == "TIFF":
-                        save_kwargs["format"] = "tiff"
-                    elif img_format == "WEBP":
-                        save_kwargs["format"] = "webp"
-                    elif img_format == "BMP":
-                        save_kwargs["format"] = "bmp"
-                    elif img_format == "GIF":
-                        save_kwargs["format"] = "gif"
-                    else:
-                        save_kwargs["format"] = "png"
-                    out_path = f"{base}_3d.{ext}"
-                    plt.savefig(out_path, **save_kwargs)
-                    plt.close()
-                    status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                elif viz == "3D Rotation GIF":
-                    if not MATPLOTLIB_AVAILABLE:
-                        messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_gif', 'Matplotlib is not installed. Cannot generate GIF.'))
-                        return
-                    fig = plt.figure(figsize=(12, 10))
-                    ax = fig.add_subplot(111, projection='3d')
-                    if xi_grid is not None:
-                        surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98,
-                                               linewidth=0, antialiased=True, shade=True)
-                        fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
-                    else:
-                        trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                        fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-                    ax.set_xlabel(f"w({ex})")
-                    ax.set_ylabel(f"w({ey})")
-                    ax.set_zlabel(label_z)
-
-                    def _rotate(angle):
-                        ax.view_init(azim=angle)
-                        return [ax]
-
-                    try:
-                        rotation_step = int(float(gif_speed_var.get()))
-                    except Exception:
-                        rotation_step = 5
-                    try:
-                        interval_ms = int(float(gif_interval_var.get()))
-                    except Exception:
-                        interval_ms = 50
-                    try:
-                        fps_val = int(float(gif_fps_var.get()))
-                    except Exception:
-                        fps_val = 20
-
-                    ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
-                    out_path = f"{base}_3d_rotation.gif"
-                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
-                    plt.close()
-                    status_label.config(text=f"GIF saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
-                else:
-                    if PLOTLY_AVAILABLE:
-                        if xi_grid is not None:
-                            fig_plotly = go.Figure(data=[
-                                go.Surface(
-                                    x=xi_grid, y=yi_grid, z=zi_grid,
-                                    colorscale='RdBu', reversescale=True, opacity=0.98,
-                                    colorbar=dict(title=label_z)
-                                )
-                            ])
-                        else:
-                            fig_plotly = go.Figure(data=[go.Scatter3d(
-                                x=x, y=y, z=z,
-                                mode='markers',
-                                marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85,
-                                            colorbar=dict(title=label_z))
-                            )])
-                        fig_plotly.update_layout(
-                            scene=dict(
-                                xaxis_title=f"w({ex})",
-                                yaxis_title=f"w({ey})",
-                                zaxis_title=label_z,
-                            ),
-                            width=900, height=700,
-                        )
-                        out_path = f"{base}_3d_interactive.html"
-                        fig_plotly.write_html(out_path)
-                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                        self.open_file_and_offer_save_as(out_path, plot_window)
-                    else:
-                        out_path = f"{base}_3d_interactive.html"
-                        with open(out_path, 'w', encoding='utf-8') as f:
-                            f.write('<html><head><title>3D Interactive Plot</title></head><body>\n')
-                            f.write('<h2>3D Interactive Plot - Rotate and zoom with mouse</h2>\n')
-                            f.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.24.1/plotly.min.js"></script>\n')
-                            f.write('<div id="plot" style="width:900px;height:700px;"></div>\n')
-                            f.write('<script>\n')
-                            f.write('var data = [{\n')
-                            f.write('  type: "scatter3d",\n')
-                            f.write('  mode: "markers",\n')
-                            f.write('  x: ' + str(x.tolist()) + ',\n')
-                            f.write('  y: ' + str(y.tolist()) + ',\n')
-                            f.write('  z: ' + str(z.tolist()) + ',\n')
-                            f.write('  marker: { size: 3, color: ' + str(z.tolist()) + ', colorscale: "RdBu", reversescale: true, opacity: 0.85, colorbar: {title: "' + label_z + '"} }\n')
-                            f.write('}];\n')
-                            f.write('var layout = {\n')
-                            f.write('  scene: {\n')
-                            f.write(f'    xaxis: {{title: "w({ex})"}},\n')
-                            f.write(f'    yaxis: {{title: "w({ey})"}},\n')
-                            f.write('    zaxis: {title: "' + label_z + '"}\n')
-                            f.write('  }\n')
-                            f.write('};\n')
-                            f.write('Plotly.newPlot("plot", data, layout);\n')
-                            f.write('</script>\n')
-                            f.write('</body></html>')
-                        status_label.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-                        self.open_file_and_offer_save_as(out_path, plot_window)
+                exp_pts = exp_ui['get_points'](ex, ey, z_hint='T0 (K)')
+                self._plot_xyz_surface_render(
+                    x, y, z, ex, ey, base, label_z, viz_var.get(),
+                    smoothness_var.get(), image_format_var.get(),
+                    elev_var.get(), azim_var.get(),
+                    gif_speed_var.get(), gif_interval_var.get(), gif_fps_var.get(),
+                    status_label, plot_window,
+                    plot_limits=plot_limits, exp_points=exp_pts,
+                    iso_interval=iso_interval_var.get(),
+                )
 
             except Exception as e:
                 messagebox.showerror(
@@ -9302,11 +11342,15 @@ class ThermoQGUI:
             rb_tz_vg.config(text=self.tr('batch_viz_gif', '3D Rotation GIF'))
             rb_tz_vp.config(text=self.tr('batch_viz_plotly', 'Plotly 3D'))
             lbl_tz_sm.config(text=self.tr('batch_smooth', 'Smoothness:'))
+            lbl_tz_iso.config(text=self.tr('tzero_iso_interval', 'Isotherm interval (K):'))
+            lbl_tz_iso_hint.config(text=self.tr('tzero_iso_interval_hint', 'Contour spacing for T0 isotherms on 2D/3D surface plots'))
             view_frame.config(text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'))
             lbl_tz_el.config(text=self.tr('batch_elev', 'Elevation (deg):'))
             lbl_tz_elr.config(text=self.tr('plot_elev_range', '(0–90)'))
             lbl_tz_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_tz_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
+            self._refresh_plot_coord_lang(tz_coord_widgets)
+            self._refresh_plot_exp_lang(tz_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_tz_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
             btn_tz_out.config(text=self.tr('pandat_browse', 'Browse'))
@@ -9711,9 +11755,7 @@ class ThermoQGUI:
         converter_window.geometry("900x900")
         self._present_tool_window(converter_window, self.root)
 
-        # Create main frame
-        main_frame = ttk.Frame(converter_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame, _, _conv_scroll_unbind = self._build_tool_window_scroll_area(converter_window, padding="20")
         
         # Title
         title_label = ttk.Label(
@@ -9956,25 +11998,9 @@ class ThermoQGUI:
         generator_window.geometry("950x900")
         self._present_tool_window(generator_window, self.root)
 
-        # Create main frame with scrollable area
-        canvas = tk.Canvas(generator_window)
-        scrollbar = ttk.Scrollbar(generator_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def on_generator_canvas_configure(event):
-            w = event.width
-            if w > 1:
-                canvas.itemconfigure(canvas_window, width=w)
-
-        canvas.bind("<Configure>", on_generator_canvas_configure)
-
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-        scrollbar.pack(side="right", fill="y")
-
-        main_frame = scrollable_frame
+        main_frame, canvas, _tbatch_scroll_unbind = self._build_tool_window_scroll_area(
+            generator_window, padx=10, pady=10
+        )
 
         # Title
         title_label = ttk.Label(
@@ -9994,11 +12020,10 @@ class ThermoQGUI:
         info_label.pack(pady=(0, 20))
 
         def on_generator_scrollable_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
             if event.width > 100:
                 info_label.configure(wraplength=max(480, event.width - 80))
 
-        scrollable_frame.bind("<Configure>", on_generator_scrollable_configure)
+        main_frame.bind("<Configure>", on_generator_scrollable_configure, add="+")
         
         _txt_ft = lambda: (
             (self.tr('filetype_text', 'Text files'), "*.txt"),
@@ -10565,23 +12590,9 @@ class ThermoQGUI:
         generator_window.geometry("920x820")
         self._present_tool_window(generator_window, self.root)
 
-        canvas = tk.Canvas(generator_window)
-        scrollbar = ttk.Scrollbar(generator_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def on_pbfx_canvas_configure(event):
-            w = event.width
-            if w > 1:
-                canvas.itemconfigure(canvas_window, width=w)
-
-        canvas.bind("<Configure>", on_pbfx_canvas_configure)
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-        scrollbar.pack(side="right", fill="y")
-
-        main_frame = scrollable_frame
+        main_frame, canvas, _pbatch_scroll_unbind = self._build_tool_window_scroll_area(
+            generator_window, padx=10, pady=10
+        )
 
         title_label = ttk.Label(
             main_frame,
@@ -10606,11 +12617,10 @@ class ThermoQGUI:
         notebook.add(tab_gibbs, text=self.tr('pbatch_tab_gibbs', 'Gibbs'))
 
         def on_pbfx_scrollable_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
             if event.width > 100:
                 info_label.configure(wraplength=max(480, event.width - 80))
 
-        scrollable_frame.bind("<Configure>", on_pbfx_scrollable_configure)
+        main_frame.bind("<Configure>", on_pbfx_scrollable_configure, add="+")
 
         _pb_ft = lambda: (
             (self.tr('filetype_pbfx', 'Pandat batch (*.pbfx)'), "*.pbfx"),
@@ -11734,52 +13744,10 @@ class ThermoQGUI:
         processor_window.minsize(680, 520)
         self._present_tool_window(processor_window, self.root)
 
-        bottom_bar = ttk.Frame(processor_window, padding=(10, 6))
-        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        main_frame, _, _exptc_main_unbind = self._build_tool_window_scroll_area(processor_window, padding="12")
 
-        main_frame = ttk.Frame(processor_window, padding="12")
-        main_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        _exptc_wheel_bindings = [_exptc_main_unbind]
 
-        _exptc_wheel_bindings = []
-
-        def _exptc_bind_mousewheel(canvas):
-            def _on_wheel(event):
-                try:
-                    if not processor_window.winfo_exists() or not canvas.winfo_exists():
-                        return
-                except tk.TclError:
-                    return
-                if platform.system() == "Windows":
-                    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-                elif platform.system() == "Darwin":
-                    canvas.yview_scroll(int(-1 * event.delta), "units")
-                else:
-                    if event.num == 4:
-                        canvas.yview_scroll(-1, "units")
-                    elif event.num == 5:
-                        canvas.yview_scroll(1, "units")
-
-            def _bind(_event=None):
-                if platform.system() == "Linux":
-                    canvas.bind_all("<Button-4>", _on_wheel)
-                    canvas.bind_all("<Button-5>", _on_wheel)
-                else:
-                    canvas.bind_all("<MouseWheel>", _on_wheel)
-
-            def _unbind(_event=None):
-                try:
-                    if platform.system() == "Linux":
-                        canvas.unbind_all("<Button-4>")
-                        canvas.unbind_all("<Button-5>")
-                    else:
-                        canvas.unbind_all("<MouseWheel>")
-                except tk.TclError:
-                    pass
-
-            canvas.bind("<Enter>", _bind)
-            canvas.bind("<Leave>", _unbind)
-            _exptc_wheel_bindings.append(_unbind)
-        
         # Title
         title_label = ttk.Label(
             main_frame,
@@ -11787,51 +13755,20 @@ class ThermoQGUI:
             font=('Arial', 14, 'bold'),
         )
         title_label.pack(pady=(0, 4))
-        
-        info_label = ttk.Label(
-            main_frame,
-            text=self.tr('exptc_intro', ''),
-            wraplength=680,
-            justify="left",
-        )
-        info_label.pack(pady=(0, 6), anchor=tk.W)
 
         notebook = ttk.Notebook(main_frame)
         notebook.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
 
-        tab_mr_outer = ttk.Frame(notebook)
-        tab_lmg_outer = ttk.Frame(notebook)
-        tab_t0_outer = ttk.Frame(notebook)
+        tab_mr_outer = ttk.Frame(notebook, padding="6")
+        tab_lmg_outer = ttk.Frame(notebook, padding="6")
+        tab_t0_outer = ttk.Frame(notebook, padding="6")
         notebook.add(tab_mr_outer, text=self.tr('exptc_tab_mr', 'Melting Range'))
         notebook.add(tab_lmg_outer, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
         notebook.add(tab_t0_outer, text=self.tr('exptc_tab_t0', 'T-zero'))
 
-        def _exptc_make_tab_scrollable(tab_outer):
-            canvas = tk.Canvas(tab_outer, highlightthickness=0, borderwidth=0)
-            sb = ttk.Scrollbar(tab_outer, orient=tk.VERTICAL, command=canvas.yview)
-            inner = ttk.Frame(canvas, padding="6")
-            cwin = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-            def _sync_tab_scroll(_event=None):
-                canvas.update_idletasks()
-                canvas.configure(scrollregion=canvas.bbox("all"))
-
-            def on_canvas_configure(event):
-                if event.width > 1:
-                    canvas.itemconfigure(cwin, width=event.width)
-                _sync_tab_scroll()
-
-            canvas.bind("<Configure>", on_canvas_configure)
-            inner.bind("<Configure>", _sync_tab_scroll)
-            canvas.configure(yscrollcommand=sb.set)
-            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            sb.pack(side=tk.RIGHT, fill=tk.Y)
-            _exptc_bind_mousewheel(canvas)
-            return inner
-
-        tab_mr = _exptc_make_tab_scrollable(tab_mr_outer)
-        tab_lmg = _exptc_make_tab_scrollable(tab_lmg_outer)
-        tab_t0 = _exptc_make_tab_scrollable(tab_t0_outer)
+        tab_mr = tab_mr_outer
+        tab_lmg = tab_lmg_outer
+        tab_t0 = tab_t0_outer
 
         exptc_state = {'mr_errors': [], 'lmg_errors': [], 't0_errors': []}
         _exptc_txt_ft = (
@@ -11958,6 +13895,14 @@ class ThermoQGUI:
         # -----------------------------
         # Tab 1: Melting range (legacy)
         # -----------------------------
+        mr_info_label = ttk.Label(
+            tab_mr,
+            text=self.tr('exptc_mr_intro', ''),
+            wraplength=640,
+            justify='left',
+        )
+        mr_info_label.pack(anchor=tk.W, pady=(0, 6))
+
         mr_folder_frame = ttk.LabelFrame(tab_mr, text=self.tr('exptc_mr_folder', 'Select Folder Containing .exp Files'), padding="8")
         mr_folder_frame.pack(fill=tk.X, pady=4)
 
@@ -12233,18 +14178,38 @@ class ThermoQGUI:
                 mr_log(f"Error: {str(e)}")
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
+        def _close_exptc():
+            for unbind in _exptc_wheel_bindings:
+                unbind()
+            self._unregister_tool_lang_refresh(_refresh_exptc_lang)
+            processor_window.destroy()
+
         mr_buttons = ttk.Frame(tab_mr)
-        mr_buttons.pack(pady=4)
+        mr_buttons.pack(pady=4, anchor=tk.CENTER)
         btn_exptc_mr_proc = ttk.Button(
             mr_buttons,
             text=self.tr('exptc_process', 'Process Files'),
             command=mr_process_files,
         )
         btn_exptc_mr_proc.pack(side=tk.LEFT, padx=10)
+        btn_exptc_mr_close = ttk.Button(
+            mr_buttons,
+            text=self.tr('extp_close', 'Close'),
+            command=_close_exptc,
+        )
+        btn_exptc_mr_close.pack(side=tk.LEFT, padx=10)
 
         # -----------------------------
         # Tab: Miscibility Gap
         # -----------------------------
+        lmg_info_label = ttk.Label(
+            tab_lmg,
+            text=self.tr('exptc_lmg_intro', ''),
+            wraplength=640,
+            justify='left',
+        )
+        lmg_info_label.pack(anchor=tk.W, pady=(0, 6))
+
         lmg_folder_frame = ttk.LabelFrame(
             tab_lmg,
             text=self.tr('exptc_lmg_folder', 'Select Folder Containing .exp Files (one temperature per file)'),
@@ -12455,17 +14420,31 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
         lmg_buttons = ttk.Frame(tab_lmg)
-        lmg_buttons.pack(pady=4)
+        lmg_buttons.pack(pady=4, anchor=tk.CENTER)
         btn_exptc_lmg_proc = ttk.Button(
             lmg_buttons,
             text=self.tr('exptc_process', 'Process Files'),
             command=lmg_process_files,
         )
         btn_exptc_lmg_proc.pack(side=tk.LEFT, padx=10)
+        btn_exptc_lmg_close = ttk.Button(
+            lmg_buttons,
+            text=self.tr('extp_close', 'Close'),
+            command=_close_exptc,
+        )
+        btn_exptc_lmg_close.pack(side=tk.LEFT, padx=10)
 
         # -----------------------------
         # Tab 2: T-zero extraction
         # -----------------------------
+        t0_info_label = ttk.Label(
+            tab_t0,
+            text=self.tr('exptc_t0_intro', ''),
+            wraplength=640,
+            justify='left',
+        )
+        t0_info_label.pack(anchor=tk.W, pady=(0, 6))
+
         t0_folder_frame = ttk.LabelFrame(tab_t0, text=self.tr('exptc_t0_folder', 'Select Folder Containing *_T0.exp Files'), padding="8")
         t0_folder_frame.pack(fill=tk.X, pady=4)
 
@@ -12739,37 +14718,31 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('exp_process_fail', 'Processing failed:\n{e}').format(e=str(e)))
 
         t0_buttons = ttk.Frame(tab_t0)
-        t0_buttons.pack(pady=4)
+        t0_buttons.pack(pady=4, anchor=tk.CENTER)
         btn_exptc_t0_proc = ttk.Button(
             t0_buttons,
             text=self.tr('exptc_process', 'Process Files'),
             command=t0_process_files,
         )
         btn_exptc_t0_proc.pack(side=tk.LEFT, padx=10)
+        btn_exptc_t0_close = ttk.Button(
+            t0_buttons,
+            text=self.tr('extp_close', 'Close'),
+            command=_close_exptc,
+        )
+        btn_exptc_t0_close.pack(side=tk.LEFT, padx=10)
 
         def _exptc_update_wrap(_event=None):
             w = main_frame.winfo_width()
             if w > 80:
                 wl = max(360, w - 24)
-                info_label.configure(wraplength=wl)
+                for lbl in (mr_info_label, lmg_info_label, t0_info_label):
+                    lbl.configure(wraplength=wl)
                 hint_wl = max(320, w - 48)
                 for ui in (mr_abnormal_ui, lmg_abnormal_ui, t0_abnormal_ui):
                     ui['lbl_tpl1_hint'].configure(wraplength=hint_wl)
 
         main_frame.bind("<Configure>", _exptc_update_wrap)
-
-        def _close_exptc():
-            for unbind in _exptc_wheel_bindings:
-                unbind()
-            self._unregister_tool_lang_refresh(_refresh_exptc_lang)
-            processor_window.destroy()
-
-        btn_exptc_close = ttk.Button(
-            bottom_bar,
-            text=self.tr('extp_close', 'Close'),
-            command=_close_exptc,
-        )
-        btn_exptc_close.pack(side=tk.LEFT, padx=10)
 
         def _refresh_exptc_lang():
             try:
@@ -12779,7 +14752,9 @@ class ThermoQGUI:
                 return
             processor_window.title(self.tr('exptc_win_title', 'Extract Thermo-calc Results'))
             title_label.config(text=self.tr('exptc_heading', 'Extract Thermo-calc Results'))
-            info_label.config(text=self.tr('exptc_intro', ''))
+            mr_info_label.config(text=self.tr('exptc_mr_intro', ''))
+            lmg_info_label.config(text=self.tr('exptc_lmg_intro', ''))
+            t0_info_label.config(text=self.tr('exptc_t0_intro', ''))
             try:
                 notebook.tab(0, text=self.tr('exptc_tab_mr', 'Melting Range'))
                 notebook.tab(1, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
@@ -12807,6 +14782,7 @@ class ThermoQGUI:
             )
             mr_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_mr_proc.config(text=self.tr('exptc_process', 'Process Files'))
+            btn_exptc_mr_close.config(text=self.tr('extp_close', 'Close'))
             lmg_folder_frame.config(text=self.tr('exptc_lmg_folder', 'Select Folder Containing .exp Files (one temperature per file)'))
             btn_exptc_lmg_fd.config(text=self.tr('pandat_browse', 'Browse'))
             lmg_filter_frame.config(text=self.tr('exptc_lmg_filter', 'Filename Filter (Optional)'))
@@ -12828,6 +14804,7 @@ class ThermoQGUI:
             )
             lmg_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_lmg_proc.config(text=self.tr('exptc_process', 'Process Files'))
+            btn_exptc_lmg_close.config(text=self.tr('extp_close', 'Close'))
             t0_folder_frame.config(text=self.tr('exptc_t0_folder', 'Select Folder Containing *_T0.exp Files'))
             btn_exptc_t0_fd.config(text=self.tr('pandat_browse', 'Browse'))
             t0_filter_frame.config(text=self.tr('exptc_t0_filter', 'Filename Filter (Optional)'))
@@ -12849,7 +14826,7 @@ class ThermoQGUI:
             )
             t0_status_frame.config(text=self.tr('exptc_status', 'Status'))
             btn_exptc_t0_proc.config(text=self.tr('exptc_process', 'Process Files'))
-            btn_exptc_close.config(text=self.tr('extp_close', 'Close'))
+            btn_exptc_t0_close.config(text=self.tr('extp_close', 'Close'))
 
         processor_window.protocol('WM_DELETE_WINDOW', _close_exptc)
         self._register_tool_lang_refresh(_refresh_exptc_lang)
@@ -12862,30 +14839,10 @@ class ThermoQGUI:
         extractor_window.minsize(600, 520)
         self._present_tool_window(extractor_window, self.root)
 
-        # Bottom bar: always visible at bottom of window
-        bottom_bar = ttk.Frame(extractor_window, padding="10")
-        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
-        # Scrollable content above the buttons
-        canvas = tk.Canvas(extractor_window, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(extractor_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas, padding="20")
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        # Scrollable content (vertical + horizontal)
+        main_frame, _ext_scroll_canvas, ext_scroll_unbind = self._build_tool_window_scroll_area(
+            extractor_window, padding="20"
         )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        main_frame = scrollable_frame
         
         # Title
         title_label = ttk.Label(
@@ -12894,15 +14851,6 @@ class ThermoQGUI:
             font=('Arial', 14, 'bold'),
         )
         title_label.pack(pady=(0, 10))
-        
-        # Instructions
-        info_label = ttk.Label(
-            main_frame,
-            text=self.tr('extp_intro', ''),
-            wraplength=650,
-            justify='center',
-        )
-        info_label.pack(pady=(0, 20))
 
         notebook = ttk.Notebook(main_frame)
         notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
@@ -12913,6 +14861,14 @@ class ThermoQGUI:
         notebook.add(tab_extract, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
         notebook.add(tab_t0, text=self.tr('extp_tab_t0', 'T-zero'))
         notebook.add(tab_trist, text=self.tr('extp_tab_trist', 'TriST Zone'))
+
+        extract_info_label = ttk.Label(
+            tab_extract,
+            text=self.tr('extp_intro', ''),
+            wraplength=620,
+            justify='center',
+        )
+        extract_info_label.pack(pady=(0, 10))
         
         # Lever folder selection
         lever_frame = ttk.LabelFrame(tab_extract, text=self.tr('extp_lever_folder', 'Lever/Equilibrium Folder'), padding="15")
@@ -12922,9 +14878,10 @@ class ThermoQGUI:
         ttk.Entry(lever_frame, textvariable=lever_folder_var, width=60).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
         def browse_extp_lever():
-            p = filedialog.askdirectory(title=self.tr('extp_fd_lever', 'Select Lever folder'))
+            p = filedialog.askdirectory(title=self.tr('extp_fd_lever', 'Select Lever folder'), parent=extractor_window)
             if p:
                 lever_folder_var.set(p)
+            self._refocus_tool_window(extractor_window)
 
         btn_extp_lever = ttk.Button(lever_frame, text=self.tr('pandat_browse', 'Browse'), command=browse_extp_lever)
         btn_extp_lever.pack(side=tk.RIGHT, padx=5)
@@ -12964,6 +14921,11 @@ class ThermoQGUI:
         status_frame.pack(fill=tk.X, pady=10)
         status_label = ttk.Label(status_frame, text=self.tr('extp_ready', 'Ready to extract'), foreground="blue", wraplength=620)
         status_label.pack(anchor="w")
+
+        extract_btns = ttk.Frame(tab_extract)
+        extract_btns.pack(fill=tk.X, pady=(5, 10))
+        extract_btn_row = ttk.Frame(extract_btns)
+        extract_btn_row.pack(anchor=tk.CENTER, pady=10)
         
         def _find_col(df, names):
             """Find column in df by case-insensitive match. names: list of candidates e.g. ['fs','f_s']"""
@@ -13406,6 +15368,14 @@ class ThermoQGUI:
         # -----------------------------
         # Tab: T-zero (Pandat)
         # -----------------------------
+        t0_info_label = ttk.Label(
+            tab_t0,
+            text=self.tr('extp_t0_intro', ''),
+            wraplength=620,
+            justify='left',
+        )
+        t0_info_label.pack(anchor=tk.W, pady=(0, 10))
+
         t0_folder_frame = ttk.LabelFrame(tab_t0, text=self.tr('extp_t0_folder', 'T-zero Folder (All table_T0)'), padding="15")
         t0_folder_frame.pack(fill=tk.X, pady=10)
 
@@ -13442,9 +15412,9 @@ class ThermoQGUI:
         btn_extp_t0_out.pack(side=tk.RIGHT, padx=5)
 
         t0_status_frame = ttk.LabelFrame(tab_t0, text=self.tr('extp_status', 'Status'), padding="8")
-        t0_status_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        t0_status_text = tk.Text(t0_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
-        t0_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        t0_status_frame.pack(fill=tk.X, expand=False, pady=10)
+        t0_status_text = tk.Text(t0_status_frame, height=5, width=70, wrap=tk.WORD, state=tk.DISABLED)
+        t0_status_text.pack(side=tk.LEFT, fill=tk.X, expand=False)
         t0_status_scroll = ttk.Scrollbar(t0_status_frame, orient=tk.VERTICAL, command=t0_status_text.yview)
         t0_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         t0_status_text.configure(yscrollcommand=t0_status_scroll.set)
@@ -13568,7 +15538,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
 
         t0_btns = ttk.Frame(tab_t0)
-        t0_btns.pack(pady=10)
+        t0_btns.pack(pady=10, anchor=tk.CENTER)
         btn_extp_t0_proc = ttk.Button(t0_btns, text=self.tr('extp_t0_extract_btn', 'Extract T0'), command=extract_t0_results)
         btn_extp_t0_proc.pack(side=tk.LEFT, padx=10)
 
@@ -13669,15 +15639,7 @@ class ThermoQGUI:
         )
         btn_extp_trist_out.pack(side=tk.RIGHT, padx=5)
 
-        trist_status_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_status', 'Status'), padding="8")
-        trist_status_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        trist_status_text = tk.Text(trist_status_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
-        trist_status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        trist_status_scroll = ttk.Scrollbar(trist_status_frame, orient=tk.VERTICAL, command=trist_status_text.yview)
-        trist_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        trist_status_text.configure(yscrollcommand=trist_status_scroll.set)
-
-        # TriST settings (axes + grid)
+        # TriST settings (axes + grid) — above Status
         trist_settings = ttk.LabelFrame(tab_trist, text=self.tr('extp_trist_settings', 'Settings'), padding="10")
         trist_settings.pack(fill=tk.X, pady=(0, 10))
 
@@ -13700,6 +15662,17 @@ class ThermoQGUI:
         trist_grid_n = tk.StringVar(value="60")
         ttk.Entry(trist_grid_row, textvariable=trist_grid_n, width=6).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Label(trist_grid_row, text=self.tr('extp_trist_grid_hint', 'Higher N = slower; typical 40–80.')).pack(side=tk.LEFT)
+
+        trist_status_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_status', 'Status'), padding="8")
+        trist_status_frame.pack(fill=tk.X, expand=False, pady=10)
+        trist_status_text = tk.Text(trist_status_frame, height=5, width=70, wrap=tk.WORD, state=tk.DISABLED)
+        trist_status_text.pack(side=tk.LEFT, fill=tk.X, expand=False)
+        trist_status_scroll = ttk.Scrollbar(trist_status_frame, orient=tk.VERTICAL, command=trist_status_text.yview)
+        trist_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        trist_status_text.configure(yscrollcommand=trist_status_scroll.set)
+
+        trist_build_row = ttk.Frame(tab_trist)
+        trist_build_row.pack(fill=tk.X, pady=(0, 10))
 
         def trist_log(msg):
             try:
@@ -14086,7 +16059,9 @@ class ThermoQGUI:
                 # Feed the visualizer with the newly generated workbook.
                 try:
                     viz_src_var.set(out_path)
-                    viz_html_var.set(os.path.splitext(out_path)[0] + "_TriST_plot.html")
+                    out_dir = os.path.dirname(out_path)
+                    if out_dir and os.path.isdir(out_dir):
+                        trist_output_dir_var.set(out_dir)
                     _load_viz_wcols_from_xlsx()
                 except Exception:
                     pass
@@ -14095,13 +16070,21 @@ class ThermoQGUI:
                 import traceback
                 traceback.print_exc()
 
+        btn_extp_trist_run = ttk.Button(
+            trist_build_row,
+            text=self.tr('extp_trist_btn', 'Build TriST workbook'),
+            command=run_trist_extract,
+        )
+        btn_extp_trist_run.pack(anchor=tk.CENTER, pady=5)
+
         # Visualization (Plotly)
         viz_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_trist_viz', 'Visualize TriST'), padding="10")
         viz_frame.pack(fill=tk.X, pady=(0, 10))
 
         viz_src_row = ttk.Frame(viz_frame)
         viz_src_row.pack(fill=tk.X, pady=2)
-        ttk.Label(viz_src_row, text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)')).pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_src = ttk.Label(viz_src_row, text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
+        trist_lbl_viz_src.pack(side=tk.LEFT, padx=(0, 6))
         viz_src_var = tk.StringVar(value="")
         ttk.Entry(viz_src_row, textvariable=viz_src_var, width=52).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
@@ -14122,7 +16105,8 @@ class ThermoQGUI:
 
         viz_opts_row = ttk.Frame(viz_frame)
         viz_opts_row.pack(fill=tk.X, pady=2)
-        ttk.Label(viz_opts_row, text=self.tr('extp_trist_viz_sheet', 'Data sheet')).pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_sheet = ttk.Label(viz_opts_row, text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
+        trist_lbl_viz_sheet.pack(side=tk.LEFT, padx=(0, 6))
         viz_sheet_var = tk.StringVar(value="TriST_boundaries")
         viz_sheet_combo = ttk.Combobox(
             viz_opts_row,
@@ -14134,14 +16118,17 @@ class ThermoQGUI:
         viz_sheet_combo.pack(side=tk.LEFT, padx=(0, 10))
 
         only_trist_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var).pack(side=tk.LEFT)
+        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var)
+        trist_cb_only_trist.pack(side=tk.LEFT)
 
         viz_t_row = ttk.Frame(viz_frame)
         viz_t_row.pack(fill=tk.X, pady=2)
-        ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmin', 'T min:')).pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_tmin = ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmin', 'T min:'))
+        trist_lbl_viz_tmin.pack(side=tk.LEFT, padx=(0, 6))
         viz_tmin = tk.StringVar(value="")
         ttk.Entry(viz_t_row, textvariable=viz_tmin, width=10).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmax', 'T max:')).pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_tmax = ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmax', 'T max:'))
+        trist_lbl_viz_tmax.pack(side=tk.LEFT, padx=(0, 6))
         viz_tmax = tk.StringVar(value="")
         ttk.Entry(viz_t_row, textvariable=viz_tmax, width=10).pack(side=tk.LEFT, padx=(0, 10))
 
@@ -14160,118 +16147,231 @@ class ThermoQGUI:
         viz_smooth_bnd_var = tk.BooleanVar(value=True)
         trist_cb_smooth_bnd = ttk.Checkbutton(
             viz_bnd_surf_row,
-            text=self.tr("extp_trist_viz_smooth_surf", "Smooth f=0 surface (cubic in T; needs _trist_cube.npz)"),
+            text=self.tr(
+                "extp_trist_viz_smooth_surf",
+                "Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)",
+            ),
             variable=viz_smooth_bnd_var,
         )
         trist_cb_smooth_bnd.pack(side=tk.LEFT)
 
+        viz_iso_row = ttk.Frame(viz_frame)
+        viz_iso_row.pack(fill=tk.X, pady=2)
+        trist_lbl_iso_int = ttk.Label(
+            viz_iso_row, text=self.tr("extp_trist_viz_iso_interval", "Isotherm interval (K):")
+        )
+        trist_lbl_iso_int.pack(side=tk.LEFT, padx=(0, 6))
+        viz_iso_interval = tk.StringVar(value="10")
+        ttk.Entry(viz_iso_row, textvariable=viz_iso_interval, width=6).pack(side=tk.LEFT, padx=(0, 8))
+        trist_lbl_iso_int_hint = ttk.Label(
+            viz_iso_row,
+            text=self.tr(
+                "extp_trist_viz_iso_interval_hint",
+                "Contour spacing for temperature isotherms on the smooth surface",
+            ),
+            foreground='gray',
+        )
+        trist_lbl_iso_int_hint.pack(side=tk.LEFT, padx=(0, 10))
+
+        viz_smooth_row = ttk.Frame(viz_frame)
+        viz_smooth_row.pack(fill=tk.X, pady=2)
+        trist_lbl_smooth = ttk.Label(viz_smooth_row, text=self.tr('batch_smooth', 'Smoothness:'))
+        trist_lbl_smooth.pack(side=tk.LEFT, padx=(0, 6))
+        viz_smoothness_var = tk.DoubleVar(value=70.0)
+        trist_lbl_smooth_val = ttk.Label(viz_smooth_row, text="70", width=4)
+        trist_lbl_smooth_val.pack(side=tk.RIGHT, padx=(6, 0))
+
+        def _trist_on_smoothness(_evt=None):
+            try:
+                trist_lbl_smooth_val.config(text=f"{int(float(viz_smoothness_var.get()))}")
+            except Exception:
+                pass
+
+        ttk.Scale(
+            viz_smooth_row,
+            from_=0, to=100, orient=tk.HORIZONTAL,
+            variable=viz_smoothness_var, command=_trist_on_smoothness,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        _trist_on_smoothness()
+
         viz_cols_row = ttk.Frame(viz_frame)
         viz_cols_row.pack(fill=tk.X, pady=2)
-        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_cols', 'Axes (w columns)')).pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_cols = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
+        trist_lbl_viz_cols.pack(side=tk.LEFT, padx=(0, 6))
         viz_x = tk.StringVar(value="")
         viz_y = tk.StringVar(value="")
         viz_x_combo = ttk.Combobox(viz_cols_row, textvariable=viz_x, values=[], width=10, state="readonly")
         viz_y_combo = ttk.Combobox(viz_cols_row, textvariable=viz_y, values=[], width=10, state="readonly")
-        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_x', 'X:')).pack(side=tk.LEFT, padx=(10, 2))
+        trist_lbl_viz_x = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_x', 'X:'))
+        trist_lbl_viz_x.pack(side=tk.LEFT, padx=(10, 2))
         viz_x_combo.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_y', 'Y:')).pack(side=tk.LEFT, padx=(0, 2))
+        trist_lbl_viz_y = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_y', 'Y:'))
+        trist_lbl_viz_y.pack(side=tk.LEFT, padx=(0, 2))
         viz_y_combo.pack(side=tk.LEFT, padx=(0, 6))
+
+        def _trist_viz_filtered_df():
+            xlsx = viz_src_var.get().strip()
+            if not xlsx or not os.path.isfile(xlsx):
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            sheet = viz_sheet_var.get().strip() or "TriST_boundaries"
+            dfp = pd.read_excel(xlsx, sheet_name=sheet, engine='openpyxl')
+            if dfp is None or dfp.empty:
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            dgcol = 'dG = G_solid - G_liquid (J/mol)'
+            if sheet not in ("TriST_boundaries", "T0_lines", "TriST_mask"):
+                if dgcol in dfp.columns and only_trist_var.get():
+                    dfp[dgcol] = pd.to_numeric(dfp[dgcol], errors='coerce')
+                    dfp = dfp[dfp[dgcol] <= 0].copy()
+            if 'T (K)' in dfp.columns:
+                dfp['T (K)'] = pd.to_numeric(dfp['T (K)'], errors='coerce')
+                try:
+                    if viz_tmin.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] >= float(viz_tmin.get())]
+                except Exception:
+                    pass
+                try:
+                    if viz_tmax.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] <= float(viz_tmax.get())]
+                except Exception:
+                    pass
+            if dfp.empty:
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            return dfp
+
+        def _trist_viz_reset_coord():
+            try:
+                dfp = _trist_viz_filtered_df()
+                a_col, b_col = viz_x.get().strip(), viz_y.get().strip()
+                if not a_col or a_col not in dfp.columns or not b_col or b_col not in dfp.columns or a_col == b_col:
+                    cand = [c for c in dfp.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                    if len(cand) < 2:
+                        raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+                    a_col, b_col = cand[0], cand[1]
+                av = pd.to_numeric(dfp[a_col], errors='coerce')
+                bv = pd.to_numeric(dfp[b_col], errors='coerce')
+                mask = av.notna() & bv.notna()
+                if not mask.any():
+                    raise ValueError(self.tr('plot_no_valid', 'No valid data points after filtering.'))
+                px0, px1, py0, py1 = _extp_trist_default_coord_limits(
+                    float(av[mask].min()), float(av[mask].max()),
+                    float(bv[mask].min()), float(bv[mask].max()),
+                )
+                trist_viz_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', 'Could not compute default range: {e}').format(e=str(e)),
+                )
+
+        trist_viz_coord_ui = self._build_plot_coord_range_ui(viz_frame, reset_command=_trist_viz_reset_coord)
+        trist_viz_coord_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_viz_coord_widgets = trist_viz_coord_ui['widgets']
 
         viz_mesh_row = ttk.Frame(viz_frame)
         viz_mesh_row.pack(fill=tk.X, pady=2)
         viz_mask_mesh_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
+        trist_cb_mask_dome = ttk.Checkbutton(
             viz_mesh_row,
-            text=self.tr('extp_trist_viz_mask_mesh', 'TriST_mask: Mesh3d surface (per T)'),
+            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)'),
             variable=viz_mask_mesh_var,
-        ).pack(side=tk.LEFT)
-
-        viz_out_row = ttk.Frame(viz_frame)
-        viz_out_row.pack(fill=tk.X, pady=2)
-        trist_lbl_viz_out = ttk.Label(viz_out_row, text=self.tr('extp_trist_viz_html', 'Output HTML'))
-        trist_lbl_viz_out.pack(side=tk.LEFT, padx=(0, 6))
-        viz_html_var = tk.StringVar(value="TriST_plot.html")
-        ttk.Entry(viz_out_row, textvariable=viz_html_var, width=52).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-
-        viz_export_row = ttk.Frame(viz_frame)
-        viz_export_row.pack(fill=tk.X, pady=2)
-        trist_lbl_viz_export_as = ttk.Label(viz_export_row, text=self.tr('extp_trist_viz_export_as', 'Export as:'))
-        trist_lbl_viz_export_as.pack(side=tk.LEFT, padx=(0, 6))
-        viz_export_mode = tk.StringVar(value="html")
-        trist_rb_viz_export_html = ttk.Radiobutton(
-            viz_export_row,
-            text=self.tr('extp_trist_viz_export_html', 'Interactive HTML'),
-            variable=viz_export_mode,
-            value="html",
         )
-        trist_rb_viz_export_html.pack(side=tk.LEFT, padx=(0, 10))
-        trist_rb_viz_export_image = ttk.Radiobutton(
-            viz_export_row,
-            text=self.tr('extp_trist_viz_export_image', 'Static image'),
-            variable=viz_export_mode,
-            value="image",
-        )
-        trist_rb_viz_export_image.pack(side=tk.LEFT, padx=(0, 10))
-        trist_lbl_viz_img_fmt = ttk.Label(viz_export_row, text=self.tr('extp_trist_viz_img_fmt', 'Image format:'))
-        trist_lbl_viz_img_fmt.pack(side=tk.LEFT, padx=(6, 4))
-        viz_img_fmt_var = tk.StringVar(value="PNG")
-        trist_img_fmt_combo = ttk.Combobox(
-            viz_export_row,
-            textvariable=viz_img_fmt_var,
-            values=["PNG", "JPEG", "WEBP", "SVG", "PDF", "EPS"],
-            state="readonly",
-            width=8,
-        )
-        trist_img_fmt_combo.pack(side=tk.LEFT)
+        trist_cb_mask_dome.pack(side=tk.LEFT)
 
-        def _browse_trist_viz_html():
-            p0 = viz_html_var.get().strip()
-            mode = (viz_export_mode.get() or "html").strip().lower()
-            fmt = (viz_img_fmt_var.get() or "PNG").strip().upper()
-            ext_map = {
-                "PNG": ".png",
-                "JPEG": ".jpg",
-                "WEBP": ".webp",
-                "SVG": ".svg",
-                "PDF": ".pdf",
-                "EPS": ".eps",
-            }
-            if mode == "image":
-                ext = ext_map.get(fmt, ".png")
-                title_txt = self.tr('extp_trist_viz_export_image', 'Static image')
-                filetypes = [
-                    (f"{fmt} files", f"*{ext}"),
-                    (self.tr('filetype_all', 'All files'), "*.*"),
-                ]
-                default_ext = ext
-                default_name = os.path.basename(p0) if p0 else f"TriST_plot{ext}"
-            else:
-                title_txt = self.tr('extp_trist_viz_html', 'Output HTML')
-                filetypes = [
-                    (self.tr('filetype_html', 'HTML files'), "*.html"),
-                    (self.tr('filetype_all', 'All files'), "*.*"),
-                ]
-                default_ext = ".html"
-                default_name = os.path.basename(p0) if p0 else "TriST_plot.html"
-            p = filedialog.asksaveasfilename(
-                title=title_txt,
-                defaultextension=default_ext,
-                initialfile=default_name,
-                filetypes=filetypes,
-            )
-            if p:
-                viz_html_var.set(p)
-        ttk.Button(viz_out_row, text=self.tr('pandat_browse', 'Browse'), command=_browse_trist_viz_html).pack(side=tk.RIGHT, padx=5)
+        trist_viz_mode_row = ttk.Frame(viz_frame)
+        trist_viz_mode_row.pack(fill=tk.X, pady=4)
+        trist_lbl_viz_mode = ttk.Label(trist_viz_mode_row, text=self.tr('plot_vis_label', 'Visualization:'))
+        trist_lbl_viz_mode.pack(side=tk.LEFT, padx=(0, 6))
+        trist_viz_var = tk.StringVar(value="Plotly 3D")
+        trist_rb_v2 = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_2d', '2D Heatmap'),
+            variable=trist_viz_var, value="2D Heatmap",
+        )
+        trist_rb_v2.pack(side=tk.LEFT, padx=4)
+        trist_rb_v3 = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_3d', '3D Static'),
+            variable=trist_viz_var, value="3D Static",
+        )
+        trist_rb_v3.pack(side=tk.LEFT, padx=4)
+        trist_rb_vg = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_gif', '3D Rotation GIF'),
+            variable=trist_viz_var, value="3D Rotation GIF",
+        )
+        trist_rb_vg.pack(side=tk.LEFT, padx=4)
+        trist_rb_vp = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_plotly', 'Plotly 3D'),
+            variable=trist_viz_var, value="Plotly 3D",
+        )
+        trist_rb_vp.pack(side=tk.LEFT, padx=4)
+
+        trist_out_ui = self._build_plot_output_settings_ui(viz_frame, default_prefix='TriST_plot')
+        trist_out_ui['frame'].pack(fill=tk.X, pady=5)
+        trist_output_dir_var = trist_out_ui['output_dir_var']
+        trist_output_prefix_var = trist_out_ui['output_prefix_var']
+        trist_image_format_var = trist_out_ui['image_format_var']
+        trist_out_widgets = trist_out_ui['widgets']
+
+        trist_exp_ui = self._build_plot_experimental_points_ui(viz_frame, extractor_window)
+        trist_exp_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_exp_widgets = trist_exp_ui['widgets']
+
+        def _trist_exp_points(a_col, b_col, z_hint='T'):
+            mx = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(a_col), re.I)
+            my = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(b_col), re.I)
+            if mx and my:
+                return trist_exp_ui['get_points'](mx.group(1), my.group(1), z_hint=z_hint)
+            return None
+
+        trist_view_frame = ttk.LabelFrame(
+            viz_frame, text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'), padding="8",
+        )
+        trist_view_frame.pack(fill=tk.X, pady=4)
+        trist_elev_var = tk.DoubleVar(value=30.0)
+        trist_azim_var = tk.DoubleVar(value=-60.0)
+        trist_elev_row = ttk.Frame(trist_view_frame)
+        trist_elev_row.pack(fill=tk.X, pady=2)
+        trist_lbl_elev = ttk.Label(trist_elev_row, text=self.tr('batch_elev', 'Elevation (deg):'))
+        trist_lbl_elev.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_elev_row, textvariable=trist_elev_var, width=8).pack(side=tk.LEFT, padx=5)
+        trist_lbl_elev_rng = ttk.Label(trist_elev_row, text=self.tr('plot_elev_range', '(0–90)'))
+        trist_lbl_elev_rng.pack(side=tk.LEFT, padx=5)
+        trist_azim_row = ttk.Frame(trist_view_frame)
+        trist_azim_row.pack(fill=tk.X, pady=2)
+        trist_lbl_azim = ttk.Label(trist_azim_row, text=self.tr('batch_azim', 'Azimuth (deg):'))
+        trist_lbl_azim.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_azim_row, textvariable=trist_azim_var, width=8).pack(side=tk.LEFT, padx=5)
+        trist_lbl_azim_rng = ttk.Label(trist_azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
+        trist_lbl_azim_rng.pack(side=tk.LEFT, padx=5)
+
+        trist_gif_frame = ttk.LabelFrame(
+            viz_frame, text=self.tr('batch_gif_params', '3D Rotation GIF Parameters'), padding="8",
+        )
+        trist_gif_frame.pack(fill=tk.X, pady=4)
+        trist_gif_speed_var = tk.StringVar(value="5")
+        trist_gif_interval_var = tk.StringVar(value="50")
+        trist_gif_fps_var = tk.StringVar(value="20")
+        trist_gspd_row = ttk.Frame(trist_gif_frame)
+        trist_gspd_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gspd = ttk.Label(trist_gspd_row, text=self.tr('batch_gif_speed', 'Rotation Speed (degrees/frame):'))
+        trist_lbl_gspd.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gspd_row, textvariable=trist_gif_speed_var, width=10).pack(side=tk.LEFT, padx=5)
+        trist_gint_row = ttk.Frame(trist_gif_frame)
+        trist_gint_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gint = ttk.Label(trist_gint_row, text=self.tr('batch_gif_interval', 'Frame Interval (ms):'))
+        trist_lbl_gint.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gint_row, textvariable=trist_gif_interval_var, width=10).pack(side=tk.LEFT, padx=5)
+        trist_gfps_row = ttk.Frame(trist_gif_frame)
+        trist_gfps_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gfps = ttk.Label(trist_gfps_row, text=self.tr('batch_gif_fps', 'FPS:'))
+        trist_lbl_gfps.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gfps_row, textvariable=trist_gif_fps_var, width=10).pack(side=tk.LEFT, padx=5)
 
         def _default_viz_paths():
-            # Prefer the TriST output path; otherwise use viz_src_var.
             base = trist_out_var.get().strip()
             if base and base.lower().endswith('.xlsx'):
                 viz_src_var.set(base)
-                try:
-                    viz_html_var.set(os.path.splitext(base)[0] + "_TriST_plot.html")
-                except Exception:
-                    pass
+            out_dir = os.path.dirname(base) if base else ""
+            if out_dir and os.path.isdir(out_dir):
+                trist_output_dir_var.set(out_dir)
 
         _default_viz_paths()
         # Populate ternary axis comboboxes if a default workbook exists.
@@ -14307,10 +16407,18 @@ class ThermoQGUI:
             elif len(wcols) >= 2:
                 viz_x.set(wcols[0]); viz_y.set(wcols[1])
 
-        def _open_trist_plot():
-            if not PLOTLY_AVAILABLE:
+        def _run_trist_viz():
+            viz_mode = trist_viz_var.get()
+            if viz_mode == "Plotly 3D" and not PLOTLY_AVAILABLE:
                 messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('extp_trist_viz_need_plotly', ''))
                 return
+            if viz_mode != "Plotly 3D" and not MATPLOTLIB_AVAILABLE:
+                messagebox.showerror(
+                    self.tr('plot_dep_title', 'Dependency Missing'),
+                    self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'),
+                )
+                return
+
             xlsx = viz_src_var.get().strip()
             if not xlsx:
                 _default_viz_paths()
@@ -14318,6 +16426,7 @@ class ThermoQGUI:
             if not xlsx or not os.path.isfile(xlsx):
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                 return
+
             sheet = viz_sheet_var.get().strip() or "TriST_boundaries"
             try:
                 dfp = pd.read_excel(xlsx, sheet_name=sheet, engine='openpyxl')
@@ -14329,7 +16438,6 @@ class ThermoQGUI:
                 return
 
             dgcol = 'dG = G_solid - G_liquid (J/mol)'
-            # Boundary sheets do not use dG filter (they are already boundaries).
             if sheet not in ("TriST_boundaries", "T0_lines", "TriST_mask"):
                 if dgcol in dfp.columns and only_trist_var.get():
                     dfp[dgcol] = pd.to_numeric(dfp[dgcol], errors='coerce')
@@ -14365,8 +16473,8 @@ class ThermoQGUI:
             b = pd.to_numeric(dfp[b_col], errors='coerce')
             t = pd.to_numeric(dfp.get('T (K)', np.nan), errors='coerce')
             dg = pd.to_numeric(dfp.get(dgcol, np.nan), errors='coerce')
-            mask = a.notna() & b.notna() & t.notna()
-            dfp2 = dfp.loc[mask].copy()
+            row_mask = a.notna() & b.notna() & t.notna()
+            dfp2 = dfp.loc[row_mask].copy()
             if dfp2.empty:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                 return
@@ -14377,16 +16485,75 @@ class ThermoQGUI:
             if dgcol in dfp2.columns:
                 dg2 = pd.to_numeric(dfp2[dgcol], errors='coerce').to_numpy(dtype=np.float64)
             else:
-                # Boundary sheets do not carry dG column; keep shape-compatible NaN array.
                 dg2 = np.full(len(dfp2), np.nan, dtype=np.float64)
+            f2 = (
+                pd.to_numeric(dfp2.get('f(C0) (J/mol)', np.nan), errors='coerce').to_numpy(dtype=np.float64)
+                if 'f(C0) (J/mol)' in dfp2.columns else np.full(len(dfp2), np.nan, dtype=np.float64)
+            )
 
-            x = a2
-            y = b2
-            keep = np.isfinite(x) & np.isfinite(y) & np.isfinite(t2)
-            x, y, t2, dg2 = x[keep], y[keep], t2[keep], dg2[keep]
+            keep = np.isfinite(a2) & np.isfinite(b2) & np.isfinite(t2)
+            x, y, t2, dg2, f2 = a2[keep], b2[keep], t2[keep], dg2[keep], f2[keep]
             if len(x) < 3:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                 return
+
+            try:
+                px0, px1, py0, py1 = trist_viz_coord_ui['resolve'](
+                    float(np.nanmin(x)), float(np.nanmax(x)),
+                    float(np.nanmin(y)), float(np.nanmax(y)),
+                    square_default=False,
+                )
+            except ValueError as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                return
+
+            t_lo = viz_tmin.get().strip()
+            t_hi = viz_tmax.get().strip()
+            dfp2 = _extp_trist_filter_df_xy(dfp2, a_col, b_col, px0, px1, py0, py1)
+            if dfp2.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+            a2 = pd.to_numeric(dfp2[a_col], errors='coerce').to_numpy(dtype=np.float64)
+            b2 = pd.to_numeric(dfp2[b_col], errors='coerce').to_numpy(dtype=np.float64)
+            t2 = pd.to_numeric(dfp2['T (K)'], errors='coerce').to_numpy(dtype=np.float64)
+            if dgcol in dfp2.columns:
+                dg2 = pd.to_numeric(dfp2[dgcol], errors='coerce').to_numpy(dtype=np.float64)
+            else:
+                dg2 = np.full(len(dfp2), np.nan, dtype=np.float64)
+            f2 = (
+                pd.to_numeric(dfp2.get('f(C0) (J/mol)', np.nan), errors='coerce').to_numpy(dtype=np.float64)
+                if 'f(C0) (J/mol)' in dfp2.columns else np.full(len(dfp2), np.nan, dtype=np.float64)
+            )
+            keep = np.isfinite(a2) & np.isfinite(b2) & np.isfinite(t2)
+            x, y, t2, dg2, f2 = a2[keep], b2[keep], t2[keep], dg2[keep], f2[keep]
+            if len(x) < 3:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+            pts_lbl = self.tr("extp_trist_legend_mask_pts", "TriST inside (points)")
+
+            def _trist_load_bnd_df():
+                try:
+                    dfb = pd.read_excel(xlsx, sheet_name="TriST_boundaries", engine="openpyxl")
+                except Exception:
+                    return None
+                if dfb is None or dfb.empty:
+                    return None
+                dfb = dfb.copy()
+                if "T (K)" in dfb.columns:
+                    dfb["T (K)"] = pd.to_numeric(dfb["T (K)"], errors="coerce")
+                    try:
+                        if t_lo != "":
+                            dfb = dfb[dfb["T (K)"] >= float(t_lo)]
+                    except Exception:
+                        pass
+                    try:
+                        if t_hi != "":
+                            dfb = dfb[dfb["T (K)"] <= float(t_hi)]
+                    except Exception:
+                        pass
+                return _extp_trist_filter_df_xy(dfb, a_col, b_col, px0, px1, py0, py1)
 
             f_cb_title = self.tr(
                 "extp_trist_colorbar_f",
@@ -14404,184 +16571,426 @@ class ThermoQGUI:
                     return bool(np.isfinite(tval))
                 return bool(abs(tval - d_bnd * np.round(tval / d_bnd)) <= max(0.11, 0.12 * d_bnd))
 
-            fig = go.Figure()
-            if sheet == "TriST_boundaries" and viz_smooth_bnd_var.get() and SCIPY_AVAILABLE:
-                npz_p = os.path.splitext(xlsx)[0] + "_trist_cube.npz"
-                if os.path.isfile(npz_p):
-                    try:
-                        dnp = np.load(npz_p, allow_pickle=False)
-                        raw_x = dnp.get("x_col", None)
-                        raw_y = dnp.get("y_col", None)
-                        x_saved = (raw_x.decode("utf-8") if isinstance(raw_x, (bytes, bytearray)) else str(np.asarray(raw_x).item()))
-                        y_saved = (raw_y.decode("utf-8") if isinstance(raw_y, (bytes, bytearray)) else str(np.asarray(raw_y).item()))
-                        if a_col.strip() == str(x_saved).strip() and b_col.strip() == str(y_saved).strip():
-                            T_c = np.asarray(dnp["T_vals"], dtype=np.float64)
-                            xg = np.asarray(dnp["x_lin"], dtype=np.float64)
-                            yg = np.asarray(dnp["y_lin"], dtype=np.float64)
-                            f_c = np.asarray(dnp["f_cube"], dtype=np.float64)
-                            iso = _extp_trist_isosurface_f_zero(self.tr, T_c, yg, xg, f_c, opacity=0.28)
-                            if iso is not None:
-                                fig.add_trace(iso)
-                    except Exception:
-                        pass
-            if sheet in ("TriST_boundaries", "T0_lines"):
-                # Per-temperature boundary / T0 curves as 3D lines; optional T step (TriST only).
-                do_step = sheet == "TriST_boundaries"
-                dfb = dfp2.copy()
+            prefix = trist_output_prefix_var.get().strip() or "TriST_plot"
+            base_path = trist_out_ui['get_base_path']()
+            sheet_tag = sheet.replace(' ', '_')
+            base = os.path.join(base_path, f"{prefix}_{sheet_tag}")
+
+            def _trist_boundary_groups(dfb):
+                dfb = dfb.copy()
                 dfb['T (K)'] = pd.to_numeric(dfb['T (K)'], errors='coerce')
                 if 'curve_id' in dfb.columns and 'point_i' in dfb.columns:
                     dfb['curve_id'] = pd.to_numeric(dfb['curve_id'], errors='coerce')
                     dfb['point_i'] = pd.to_numeric(dfb['point_i'], errors='coerce')
-                    groups = dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)', 'curve_id'], sort=True)
-                else:
-                    groups = dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)'], sort=True)
-                for gk, gdf in groups:
-                    gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
-                    tt = float(gdf['T (K)'].iloc[0])
-                    if not _trist_bnd_t_step_ok(tt, do_step):
-                        continue
-                    fig.add_trace(
-                        go.Scatter3d(
-                            x=pd.to_numeric(gdf[a_col], errors='coerce'),
-                            y=pd.to_numeric(gdf[b_col], errors='coerce'),
-                            z=np.full(len(gdf), tt, dtype=float),
-                            mode='lines',
-                            line=dict(width=3),
-                            name=f"{sheet} @ {tt:.0f}K",
-                            hovertemplate=f"T={tt:.0f}K<br>{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<extra></extra>",
-                        )
+                    return dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)', 'curve_id'], sort=True)
+                return dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)'], sort=True)
+
+            def _trist_iso_levels_from_z(z_arr):
+                return _lmg_iso_levels(z_arr, viz_iso_interval.get())
+
+            def _trist_line_smooth_sheet():
+                return sheet in ("TriST_boundaries", "T0_lines")
+
+            def _trist_line_smooth_surf_label():
+                if sheet == "T0_lines":
+                    return self.tr(
+                        "extp_trist_legend_t0_smooth_surf",
+                        "T0 line (Gaussian smooth surface, dG=0)",
                     )
-            elif sheet == "TriST_mask":
-                if viz_mask_mesh_var.get() and SCIPY_AVAILABLE:
-                    # Mesh3d per temperature: 2D triangulation in (x,y) then place at z=T.
-                    dfm = dfp2.copy()
-                    dfm['T (K)'] = pd.to_numeric(dfm['T (K)'], errors='coerce')
-                    dfm[a_col] = pd.to_numeric(dfm[a_col], errors='coerce')
-                    dfm[b_col] = pd.to_numeric(dfm[b_col], errors='coerce')
-                    dfm['f(C0) (J/mol)'] = pd.to_numeric(dfm.get('f(C0) (J/mol)', np.nan), errors='coerce')
-                    n_mesh = 0
-                    for tt, gdf in dfm.dropna(subset=['T (K)', a_col, b_col]).groupby('T (K)', sort=True):
-                        pts = gdf[[a_col, b_col]].to_numpy(dtype=np.float64)
-                        if len(pts) < 10:
-                            continue
-                        # Downsample for triangulation speed
-                        max_pts = 4000
-                        if len(pts) > max_pts:
-                            idx = np.linspace(0, len(pts) - 1, max_pts).astype(int)
-                            gdf = gdf.iloc[idx].copy()
-                            pts = gdf[[a_col, b_col]].to_numpy(dtype=np.float64)
-                        try:
-                            tri = Delaunay(pts)
-                        except Exception:
-                            continue
-                        zc = np.full(len(pts), float(tt), dtype=float)
-                        f_int = pd.to_numeric(gdf['f(C0) (J/mol)'], errors='coerce').to_numpy(dtype=np.float64)
-                        n_mesh += 1
-                        _mkw = dict(
-                            x=pts[:, 0],
-                            y=pts[:, 1],
-                            z=zc,
-                            i=tri.simplices[:, 0],
-                            j=tri.simplices[:, 1],
-                            k=tri.simplices[:, 2],
-                            intensity=f_int,
-                            colorscale="Viridis",
-                            opacity=0.25,
-                            name=self.tr("extp_trist_legend_mask_mesh", "TriST inside (mesh)") + f" @ {float(tt):.0f}K",
-                            showscale=(n_mesh == 1),
-                        )
-                        if n_mesh == 1:
-                            _mkw["colorbar"] = dict(title=f_cb_title, titleside="right", len=0.5, y=0.45)
-                        fig.add_trace(go.Mesh3d(**_mkw))
-                else:
-                    # Render TriST inside-region points as a 3D point cloud.
-                    hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>f=%{{marker.color:.3g}}"
-                    fig.add_trace(
-                        go.Scatter3d(
-                            x=x,
-                            y=y,
-                            z=t2,
-                            mode="markers",
-                            marker=dict(
-                                size=2,
-                                color=pd.to_numeric(dfp2.get('f(C0) (J/mol)', np.nan), errors='coerce').to_numpy(dtype=np.float64),
-                                colorscale="Viridis",
-                                opacity=0.55,
-                                colorbar=dict(title=f_cb_title, titleside="right", len=0.6),
-                            ),
-                            hovertemplate=hover,
-                            name=self.tr("extp_trist_legend_mask_pts", "TriST inside (points)"),
-                        )
+                return self.tr(
+                    "extp_trist_legend_smooth_surf", "TriST boundary (Gaussian smooth surface)",
+                )
+
+            def _trist_boundary_smooth_surface():
+                """GPR smooth surface from all boundary / T0 line (x,y,T) points."""
+                bx, by, bt = _extp_trist_boundary_xyz(dfp2, a_col, b_col)
+                if len(bx) < 3:
+                    return None
+                xi, yi, zi = self.create_smooth_surface(
+                    bx, by, bt, grid_resolution=100,
+                    smoothness=viz_smoothness_var.get(),
+                    x_bounds=(px0, px1), y_bounds=(py0, py1),
+                )
+                if xi is None or zi is None:
+                    return None
+                levels = _trist_iso_levels_from_z(bt)
+                return xi, yi, zi, levels
+
+            iso_lbl = self.tr("extp_trist_legend_isotherms", "Temperature isotherms")
+            iso_line = '#2c3e50'
+            iso_text = '#1a252f'
+
+            def _trist_plot_line_smooth_mpl(ax, fig, show_legend=True, show_colorbar=True):
+                if not (_trist_line_smooth_sheet() and viz_smooth_bnd_var.get() and SKLEARN_AVAILABLE):
+                    return False
+                surf = _trist_boundary_smooth_surface()
+                if surf is None:
+                    return False
+                xi, yi, zi, levels = surf
+                surf_lbl = _trist_line_smooth_surf_label()
+                s = ax.plot_surface(
+                    xi, yi, zi, cmap='coolwarm', alpha=0.55, linewidth=0, antialiased=True,
+                )
+                if show_colorbar:
+                    fig.colorbar(s, ax=ax, shrink=0.6, pad=0.08, label='T (K)')
+                _extp_trist_draw_iso_3d_mpl(ax, xi, yi, zi, levels, iso_line, iso_text, mid_frac=0.5)
+                if show_legend:
+                    from matplotlib.lines import Line2D
+                    ax.legend(
+                        handles=[
+                            Line2D([0], [0], color='gray', lw=4, label=surf_lbl),
+                            Line2D([0], [0], color=iso_line, lw=2, label=iso_lbl),
+                        ],
+                        loc='upper left',
                     )
-            else:
-                # Scatter view for raw merged points
-                hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>dG=%{{marker.color:.3g}} J/mol"
-                fig.add_trace(
-                    go.Scatter3d(
-                        x=x,
-                        y=y,
-                        z=t2,
-                        mode='markers',
-                        marker=dict(size=3, color=dg2, colorscale='RdBu', reversescale=True, opacity=0.85, colorbar=dict(title="dG")),
-                        hovertemplate=hover,
-                        name="Merged points",
+                return True
+
+            def _trist_plot_line_smooth_plotly(traces):
+                if not (_trist_line_smooth_sheet() and viz_smooth_bnd_var.get() and SKLEARN_AVAILABLE):
+                    return False
+                surf = _trist_boundary_smooth_surface()
+                if surf is None:
+                    return False
+                xi, yi, zi, levels = surf
+                surf_lbl = _trist_line_smooth_surf_label()
+                t_min = float(np.nanmin(zi))
+                traces.append(
+                    go.Surface(
+                        x=xi, y=yi, z=zi, colorscale='RdBu', reversescale=True,
+                        opacity=0.65, cmin=t_min,
+                        colorbar=dict(title='T (K)'), showscale=True,
+                        name=surf_lbl,
                     )
                 )
-            fig.update_layout(
-                title=f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}",
-                scene=dict(
-                    xaxis_title=a_col,
-                    yaxis_title=b_col,
-                    zaxis_title="T (K)",
-                ),
-                margin=dict(l=0, r=0, t=40, b=0),
-            )
+                for lvl, seg in _lmg_contour_segments(xi, yi, zi, levels):
+                    _extp_trist_plotly_iso_traces(traces, lvl, seg, iso_line, iso_text, mid_frac=0.5)
+                return True
 
-            mode = (viz_export_mode.get() or "html").strip().lower()
-            out_path = viz_html_var.get().strip()
-            img_fmt = (viz_img_fmt_var.get() or "PNG").strip().upper()
-            ext_map = {
-                "PNG": ".png",
-                "JPEG": ".jpg",
-                "WEBP": ".webp",
-                "SVG": ".svg",
-                "PDF": ".pdf",
-                "EPS": ".eps",
-            }
-            if mode == "image":
-                if not out_path:
-                    out_path = os.path.splitext(xlsx)[0] + "_TriST_plot" + ext_map.get(img_fmt, ".png")
-                else:
-                    root_no_ext, _old_ext = os.path.splitext(out_path)
-                    out_path = root_no_ext + ext_map.get(img_fmt, ".png")
-                viz_html_var.set(out_path)
-                try:
-                    fig.write_image(out_path, format=img_fmt.lower(), width=1400, height=1000, scale=2)
-                except Exception:
-                    messagebox.showerror(
-                        self.tr('plot_dep_title', 'Dependency Missing'),
-                        self.tr(
-                            'extp_trist_viz_need_kaleido',
-                            'Static image export requires Plotly image engine (kaleido). Please run: pip install -U kaleido',
-                        ),
+            def _trist_plot_plotly():
+                fig = go.Figure()
+                traces = []
+                smooth_line_ok = _trist_plot_line_smooth_plotly(traces)
+                for trc in traces:
+                    fig.add_trace(trc)
+                if sheet in ("TriST_boundaries", "T0_lines") and not smooth_line_ok:
+                    do_step = sheet == "TriST_boundaries"
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        fig.add_trace(
+                            go.Scatter3d(
+                                x=pd.to_numeric(gdf[a_col], errors='coerce'),
+                                y=pd.to_numeric(gdf[b_col], errors='coerce'),
+                                z=np.full(len(gdf), tt, dtype=float),
+                                mode='lines',
+                                line=dict(width=3),
+                                name=f"{sheet} @ {tt:.0f}K",
+                                hovertemplate=f"T={tt:.0f}K<br>{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<extra></extra>",
+                            )
+                        )
+                elif sheet == "TriST_mask":
+                    dome_ok = False
+                    if viz_mask_mesh_var.get():
+                        cube = _extp_trist_try_load_cube(xlsx, a_col, b_col)
+                        if cube is not None:
+                            T_c, yg, xg, f_c = cube
+                            dome_traces = list(_extp_trist_plotly_mask_dome(
+                                self.tr, T_c, yg, xg, f_c, show_volume=True,
+                                px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                            ))
+                            for _dtr in dome_traces:
+                                fig.add_trace(_dtr)
+                            dome_ok = len(dome_traces) > 0
+                        if not dome_ok:
+                            dfb = _trist_load_bnd_df()
+                            if dfb is not None and not dfb.empty:
+                                rings = _extp_trist_collect_rings_per_T(dfb, a_col, b_col)
+                                loft = _extp_trist_loft_surface_plotly(
+                                    self.tr, rings,
+                                    px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                                )
+                                if loft is not None:
+                                    fig.add_trace(loft)
+                                    dome_ok = True
+                    if not dome_ok:
+                        hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>f=%{{marker.color:.3g}}"
+                        fig.add_trace(
+                            go.Scatter3d(
+                                x=x, y=y, z=t2, mode="markers",
+                                marker=dict(size=2, color=f2, colorscale="Viridis", opacity=0.55,
+                                          colorbar=dict(title=f_cb_title, titleside="right", len=0.6)),
+                                hovertemplate=hover,
+                                name=pts_lbl,
+                            )
+                        )
+                elif sheet not in ("TriST_boundaries", "T0_lines"):
+                    hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>dG=%{{marker.color:.3g}} J/mol"
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=x, y=y, z=t2, mode='markers',
+                            marker=dict(size=3, color=dg2, colorscale='RdBu', reversescale=True, opacity=0.85,
+                                      colorbar=dict(title="dG")),
+                            hovertemplate=hover, name="Merged points",
+                        )
                     )
-                    return
-            else:
-                if not out_path:
-                    out_path = os.path.splitext(xlsx)[0] + "_TriST_plot.html"
-                else:
-                    root_no_ext, _old_ext = os.path.splitext(out_path)
-                    out_path = root_no_ext + ".html"
-                viz_html_var.set(out_path)
+                mx = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(a_col), re.I)
+                my = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(b_col), re.I)
+                if mx and my:
+                    self._overlay_experimental_points_plotly(
+                        fig, _trist_exp_points(a_col, b_col), mx.group(1), my.group(1),
+                    )
+                if not fig.data:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                    return None
+                try:
+                    z0 = float(t_lo) if t_lo.strip() else float(np.nanmin(t2))
+                    z1 = float(t_hi) if t_hi.strip() else float(np.nanmax(t2))
+                    if not (np.isfinite(z0) and np.isfinite(z1) and z1 > z0):
+                        z0, z1 = None, None
+                except Exception:
+                    z0, z1 = None, None
+                scene_cfg = _extp_trist_plotly_scene_config(
+                    a_col, b_col, px0, px1, py0, py1, z0=z0, z1=z1,
+                )
+                fig.update_layout(
+                    title=f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}",
+                    scene=scene_cfg,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    showlegend=True,
+                    width=1000,
+                    height=820,
+                )
+                out_path = f"{base}_3d_interactive.html"
                 try:
                     fig.write_html(out_path)
                 except Exception as e:
                     messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
-                    return
+                    return None
+                return out_path
+
+            def _trist_plot_mpl_2d():
+                from matplotlib.collections import LineCollection
+                fig, ax = plt.subplots(figsize=(10, 8))
+                if sheet in ("TriST_boundaries", "T0_lines"):
+                    do_step = sheet == "TriST_boundaries"
+                    segments, seg_t = [], []
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                        gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                        ok = np.isfinite(gx) & np.isfinite(gy)
+                        gx, gy = gx[ok], gy[ok]
+                        if len(gx) < 2:
+                            continue
+                        segments.append(np.column_stack([gx, gy]))
+                        seg_t.append(tt)
+                    if segments:
+                        lc = LineCollection(segments, cmap='coolwarm', linewidths=1.8)
+                        lc.set_array(np.asarray(seg_t, dtype=float))
+                        ax.add_collection(lc)
+                        ax.autoscale()
+                        fig.colorbar(lc, ax=ax, label='T (K)')
+                elif sheet == "TriST_mask" and np.isfinite(f2).any():
+                    t_pick = float(np.median(t2))
+                    try:
+                        if viz_tmin.get().strip() and viz_tmax.get().strip():
+                            t_pick = 0.5 * (float(viz_tmin.get()) + float(viz_tmax.get()))
+                    except Exception:
+                        pass
+                    tol = max(1.0, 0.05 * (float(np.nanmax(t2)) - float(np.nanmin(t2)) + 1.0))
+                    sel = np.abs(t2 - t_pick) <= tol
+                    xs, ys, fs = x[sel], y[sel], f2[sel]
+                    if len(xs) < 10:
+                        xs, ys, fs = x, y, f2
+                    if len(xs) >= 3:
+                        tc = ax.tricontourf(xs, ys, fs, levels=30, cmap='viridis')
+                        fig.colorbar(tc, ax=ax, label=f_cb_title)
+                    ax.set_title(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
+                else:
+                    sc = ax.scatter(x, y, c=t2, cmap='coolwarm', s=24, alpha=0.85)
+                    fig.colorbar(sc, ax=ax, label='T (K)')
+                ax.set_xlabel(format_chemistry_axis_label(a_col))
+                ax.set_ylabel(format_chemistry_axis_label(b_col))
+                if not ax.get_title():
+                    ax.set_title(f"TriST ({sheet})")
+                ax.grid(True, alpha=0.25)
+                self._apply_plot_xy_limits(ax, px0, px1, py0, py1)
+                self._overlay_experimental_points_mpl_2d(ax, _trist_exp_points(a_col, b_col))
+                fig.tight_layout()
+                ext, skw = self._plot_image_ext_and_save_kwargs(trist_image_format_var.get())
+                out_path = f"{base}_Heatmap.{ext}"
+                fig.savefig(out_path, **skw)
+                plt.close(fig)
+                return out_path
+
+            def _trist_plot_mpl_3d(gif=False):
+                from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+                fig = plt.figure(figsize=(12, 10))
+                ax = fig.add_subplot(111, projection='3d')
+                bnd_static_plain = sheet == "TriST_boundaries" and not gif
+                smooth_line_ok = _trist_plot_line_smooth_mpl(
+                    ax, fig,
+                    show_legend=not bnd_static_plain,
+                    show_colorbar=True,
+                )
+                if sheet in ("TriST_boundaries", "T0_lines") and not smooth_line_ok:
+                    do_step = sheet == "TriST_boundaries"
+                    import matplotlib.cm as cm
+                    import matplotlib.colors as mcolors
+                    from matplotlib.lines import Line2D
+                    bnd_lbl = self.tr(
+                        "extp_trist_legend_boundary" if sheet == "TriST_boundaries" else "extp_trist_legend_t0",
+                        "TriST boundary (f=0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
+                    )
+                    seg_t = []
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                        gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                        ok = np.isfinite(gx) & np.isfinite(gy)
+                        gx, gy = gx[ok], gy[ok]
+                        if len(gx) >= 2:
+                            seg_t.append(tt)
+                    if seg_t:
+                        t_arr = np.asarray(seg_t, dtype=np.float64)
+                        norm = mcolors.Normalize(vmin=float(t_arr.min()), vmax=float(t_arr.max()))
+                        cmap = cm.coolwarm
+                        for _gk, gdf in _trist_boundary_groups(dfp2):
+                            gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                            tt = float(gdf['T (K)'].iloc[0])
+                            if not _trist_bnd_t_step_ok(tt, do_step):
+                                continue
+                            gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                            gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                            ok = np.isfinite(gx) & np.isfinite(gy)
+                            gx, gy = gx[ok], gy[ok]
+                            if len(gx) < 2:
+                                continue
+                            ax.plot(gx, gy, np.full(len(gx), tt), color=cmap(norm(tt)), linewidth=1.8, alpha=0.9)
+                        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+                        sm.set_array([])
+                        fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.08, label='T (K)')
+                        if not bnd_static_plain:
+                            ax.legend(
+                                handles=[Line2D([0], [0], color='gray', lw=2, label=bnd_lbl)],
+                                loc='upper left',
+                            )
+                elif sheet == "TriST_mask":
+                    dome_ok = False
+                    if viz_mask_mesh_var.get():
+                        cube = _extp_trist_try_load_cube(xlsx, a_col, b_col)
+                        if cube is not None:
+                            T_c, yg, xg, f_c = cube
+                            dome_ok = _extp_trist_mpl_isosurface_f_zero(
+                                ax, T_c, yg, xg, f_c, label=dome_lbl,
+                                px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                            )
+                        if not dome_ok:
+                            dfb = _trist_load_bnd_df()
+                            if dfb is not None and not dfb.empty:
+                                rings = _extp_trist_collect_rings_per_T(dfb, a_col, b_col)
+                                dome_ok = _extp_trist_loft_surface_mpl(
+                                    ax, rings, label=dome_lbl,
+                                    px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                                )
+                    if not dome_ok:
+                        p = ax.scatter(x, y, t2, c=f2, cmap='viridis', s=4, alpha=0.55, label=pts_lbl)
+                        fig.colorbar(p, ax=ax, shrink=0.6, label=f_cb_title)
+                        from matplotlib.lines import Line2D
+                        ax.legend(
+                            handles=[Line2D([0], [0], marker='o', color='w', markerfacecolor='#2ecc71',
+                                            markersize=6, label=pts_lbl)],
+                            loc='upper left',
+                        )
+                    else:
+                        from matplotlib.patches import Patch
+                        ax.legend(handles=[Patch(facecolor='#c0392b', alpha=0.48, label=dome_lbl)], loc='upper left')
+                elif sheet not in ("TriST_boundaries", "T0_lines"):
+                    p = ax.scatter(x, y, t2, c=dg2, cmap='RdBu', s=8, alpha=0.85)
+                    fig.colorbar(p, ax=ax, shrink=0.6, label='dG (J/mol)')
+                ax.set_xlabel(format_chemistry_axis_label(a_col))
+                ax.set_ylabel(format_chemistry_axis_label(b_col))
+                ax.set_zlabel('T (K)')
+                ax.set_title(f"TriST ({sheet})")
+                ax.set_xlim(px0, px1)
+                ax.set_ylim(py0, py1)
+                try:
+                    z0 = float(t_lo) if t_lo.strip() else None
+                    z1 = float(t_hi) if t_hi.strip() else None
+                    if z0 is not None and z1 is not None and z1 > z0:
+                        ax.set_zlim(z0, z1)
+                    elif z0 is not None:
+                        ax.set_zlim(z0, ax.get_zlim()[1])
+                    elif z1 is not None:
+                        ax.set_zlim(ax.get_zlim()[0], z1)
+                except Exception:
+                    pass
+                try:
+                    ax.view_init(elev=float(trist_elev_var.get()), azim=float(trist_azim_var.get()))
+                except Exception:
+                    pass
+                self._overlay_experimental_points_mpl_3d(ax, _trist_exp_points(a_col, b_col))
+                if gif:
+                    def _rotate(angle):
+                        ax.view_init(elev=float(trist_elev_var.get()), azim=angle)
+                        return [ax]
+                    try:
+                        rotation_step = int(float(trist_gif_speed_var.get()))
+                    except Exception:
+                        rotation_step = 5
+                    try:
+                        interval_ms = int(float(trist_gif_interval_var.get()))
+                    except Exception:
+                        interval_ms = 50
+                    try:
+                        fps_val = int(float(trist_gif_fps_var.get()))
+                    except Exception:
+                        fps_val = 20
+                    ani = animation.FuncAnimation(
+                        fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms,
+                    )
+                    out_path = f"{base}_3d_rotation.gif"
+                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
+                    plt.close(fig)
+                    return out_path
+                fig.tight_layout()
+                ext, skw = self._plot_image_ext_and_save_kwargs(trist_image_format_var.get())
+                out_path = f"{base}_3d.{ext}"
+                fig.savefig(out_path, **skw)
+                plt.close(fig)
+                return out_path
+
+            out_path = None
+            if viz_mode == "Plotly 3D":
+                out_path = _trist_plot_plotly()
+            elif viz_mode == "2D Heatmap":
+                out_path = _trist_plot_mpl_2d()
+            elif viz_mode == "3D Static":
+                out_path = _trist_plot_mpl_3d(gif=False)
+            elif viz_mode == "3D Rotation GIF":
+                out_path = _trist_plot_mpl_3d(gif=True)
+            else:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('plot_vis_label', 'Visualization:'))
+                return
+            if not out_path:
+                return
             try:
-                webbrowser.open(out_path)
+                self.open_file_and_offer_save_as(out_path, extractor_window)
             except Exception:
                 pass
+            messagebox.showinfo(
+                self.tr('dlg_success', 'Success'),
+                self.tr('extp_trist_viz_saved', 'TriST plot saved: {path}').format(path=out_path),
+            )
+
 
         # Keep w-column lists in sync
         try:
@@ -14591,13 +17000,9 @@ class ThermoQGUI:
         _load_viz_wcols_from_xlsx()
 
         trist_btns = ttk.Frame(tab_trist)
-        trist_btns.pack(pady=10)
-        btn_extp_trist_run = ttk.Button(
-            trist_btns, text=self.tr('extp_trist_btn', 'Build TriST workbook'), command=run_trist_extract
-        )
-        btn_extp_trist_run.pack(side=tk.LEFT, padx=10)
+        trist_btns.pack(pady=10, anchor=tk.CENTER)
 
-        btn_extp_trist_viz = ttk.Button(trist_btns, text=self.tr('extp_trist_viz_btn', 'Open interactive plot'), command=_open_trist_plot)
+        btn_extp_trist_viz = ttk.Button(trist_btns, text=self.tr('extp_trist_viz_btn', 'Open interactive plot'), command=_run_trist_viz)
         btn_extp_trist_viz.pack(side=tk.LEFT, padx=10)
 
         def import_to_thermoq():
@@ -14620,6 +17025,7 @@ class ThermoQGUI:
                     messagebox.showerror(
                         self.tr('dlg_error', 'Error'),
                         self.tr('extp_import_missing', 'Generated Excel files not found in {dir}. Please run Extract Results first.').format(dir=output_dir),
+                        parent=extractor_window,
                     )
                     return
 
@@ -14629,7 +17035,9 @@ class ThermoQGUI:
                     p_s_file=ps_path,
                     ts_s_file=tss_path,
                     auto_import=True,
+                    refocus_after=extractor_window,
                 )
+                self.root.after(100, lambda: self._refocus_tool_window(extractor_window))
             except Exception as e:
                 status_label.config(text=f"Error: {str(e)}", foreground="red")
                 messagebox.showerror(
@@ -14639,12 +17047,12 @@ class ThermoQGUI:
                     ),
                 )
         
-        # Buttons in bottom bar: only show on P/Ts tab
-        btn_inner = ttk.Frame(bottom_bar)
-        btn_inner.pack(expand=True)
-
         def _close_extp():
             self._unregister_tool_lang_refresh(_refresh_extp_lang)
+            try:
+                ext_scroll_unbind()
+            except Exception:
+                pass
             extractor_window.destroy()
 
         btn_extp_trist_close = ttk.Button(
@@ -14652,35 +17060,16 @@ class ThermoQGUI:
         )
         btn_extp_trist_close.pack(side=tk.LEFT, padx=10)
 
-        btn_extp_run = ttk.Button(btn_inner, text=self.tr('extp_extract_btn', 'Extract Results'), command=extract_results)
+        btn_extp_run = ttk.Button(extract_btn_row, text=self.tr('extp_extract_btn', 'Extract Results'), command=extract_results)
         btn_extp_run.pack(side=tk.LEFT, padx=10)
-        btn_extp_import = ttk.Button(btn_inner, text=self.tr('extp_import_btn', 'Import to ThermoQ'), command=import_to_thermoq)
+        btn_extp_import = ttk.Button(extract_btn_row, text=self.tr('extp_import_btn', 'Import to ThermoQ'), command=import_to_thermoq)
         btn_extp_import.pack(side=tk.LEFT, padx=10)
-        btn_extp_close = ttk.Button(btn_inner, text=self.tr('extp_close', 'Close'), command=_close_extp)
+        btn_extp_close = ttk.Button(extract_btn_row, text=self.tr('extp_close', 'Close'), command=_close_extp)
         btn_extp_close.pack(side=tk.LEFT, padx=10)
 
-        # T-zero tab gets its own Close button; hide bottom bar buttons there.
+        # T-zero tab gets its own Close button.
         btn_extp_t0_close = ttk.Button(t0_btns, text=self.tr('extp_close', 'Close'), command=_close_extp)
         btn_extp_t0_close.pack(side=tk.LEFT, padx=10)
-
-        def _sync_extp_bottom_bar():
-            try:
-                cur = notebook.select()
-                on_extract = (cur == str(tab_extract))
-            except Exception:
-                on_extract = True
-            try:
-                if on_extract:
-                    if not btn_inner.winfo_ismapped():
-                        btn_inner.pack(expand=True)
-                else:
-                    if btn_inner.winfo_ismapped():
-                        btn_inner.pack_forget()
-            except Exception:
-                pass
-
-        def _on_extp_tab_changed(_evt=None):
-            _sync_extp_bottom_bar()
 
         def _refresh_extp_lang():
             try:
@@ -14690,7 +17079,7 @@ class ThermoQGUI:
                 return
             extractor_window.title(self.tr('extp_win_title', 'Extract Pandat Results'))
             title_label.config(text=self.tr('extp_heading', 'Extract Pandat Results'))
-            info_label.config(text=self.tr('extp_intro', ''))
+            extract_info_label.config(text=self.tr('extp_intro', ''))
             try:
                 notebook.tab(0, text=self.tr('extp_tab_extract', 'P/Ts (Lever/Scheil)'))
                 notebook.tab(1, text=self.tr('extp_tab_t0', 'T-zero'))
@@ -14708,6 +17097,7 @@ class ThermoQGUI:
             btn_extp_import.config(text=self.tr('extp_import_btn', 'Import to ThermoQ'))
             btn_extp_close.config(text=self.tr('extp_close', 'Close'))
             try:
+                t0_info_label.config(text=self.tr('extp_t0_intro', ''))
                 t0_folder_frame.config(text=self.tr('extp_t0_folder', 'T-zero Folder (All table_T0)'))
                 btn_extp_t0.config(text=self.tr('pandat_browse', 'Browse'))
                 t0_out_frame.config(text=self.tr('extp_t0_output_xlsx', 'Output Excel File (T0)'))
@@ -14727,18 +17117,55 @@ class ThermoQGUI:
                 trist_status_frame.config(text=self.tr('extp_status', 'Status'))
                 btn_extp_trist_run.config(text=self.tr('extp_trist_btn', 'Build TriST workbook'))
                 viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
+                trist_lbl_viz_src.config(text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
+                trist_lbl_viz_sheet.config(text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
+                trist_cb_only_trist.config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'))
+                trist_lbl_viz_tmin.config(text=self.tr('extp_trist_viz_tmin', 'T min:'))
+                trist_lbl_viz_tmax.config(text=self.tr('extp_trist_viz_tmax', 'T max:'))
+                trist_lbl_viz_cols.config(text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
+                trist_lbl_viz_x.config(text=self.tr('extp_trist_viz_x', 'X:'))
+                trist_lbl_viz_y.config(text=self.tr('extp_trist_viz_y', 'Y:'))
                 viz_sheet_combo.config(values=["TriST_boundaries", "T0_lines", "TriST_mask"])
                 trist_lbl_bnd_int.config(text=self.tr("extp_trist_viz_bnd_interval", "Boundary lines every (K):"))
-                trist_lbl_bnd_int_hint.config(text=self.tr("extp_trist_viz_bnd_interval_hint", "0 = all temperatures"))
+                trist_lbl_bnd_int_hint.config(text=self.tr("extp_trist_viz_bnd_interval_hint", "0 = all temperatures (2D mode)"))
                 trist_cb_smooth_bnd.config(
-                    text=self.tr("extp_trist_viz_smooth_surf", "Smooth f=0 surface (cubic in T; needs _trist_cube.npz)")
+                    text=self.tr(
+                        "extp_trist_viz_smooth_surf",
+                        "Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)",
+                    )
                 )
-                trist_lbl_viz_out.config(text=self.tr('extp_trist_viz_html', 'Output HTML'))
-                trist_lbl_viz_export_as.config(text=self.tr('extp_trist_viz_export_as', 'Export as:'))
-                trist_rb_viz_export_html.config(text=self.tr('extp_trist_viz_export_html', 'Interactive HTML'))
-                trist_rb_viz_export_image.config(text=self.tr('extp_trist_viz_export_image', 'Static image'))
-                trist_lbl_viz_img_fmt.config(text=self.tr('extp_trist_viz_img_fmt', 'Image format:'))
-                btn_extp_trist_viz.config(text=self.tr('extp_trist_viz_btn', 'Open interactive plot'))
+                trist_lbl_iso_int.config(text=self.tr("extp_trist_viz_iso_interval", "Isotherm interval (K):"))
+                trist_lbl_iso_int_hint.config(
+                    text=self.tr(
+                        "extp_trist_viz_iso_interval_hint",
+                        "Contour spacing for temperature isotherms on the smooth surface",
+                    )
+                )
+                trist_lbl_smooth.config(text=self.tr('batch_smooth', 'Smoothness:'))
+                trist_cb_mask_dome.config(
+                    text=self.tr(
+                        "extp_trist_viz_mask_mesh",
+                        "Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)",
+                    )
+                )
+                trist_lbl_viz_mode.config(text=self.tr('plot_vis_label', 'Visualization:'))
+                trist_rb_v2.config(text=self.tr('batch_viz_2d', '2D Heatmap'))
+                trist_rb_v3.config(text=self.tr('batch_viz_3d', '3D Static'))
+                trist_rb_vg.config(text=self.tr('batch_viz_gif', '3D Rotation GIF'))
+                trist_rb_vp.config(text=self.tr('batch_viz_plotly', 'Plotly 3D'))
+                self._refresh_plot_output_lang(trist_out_widgets)
+                self._refresh_plot_coord_lang(trist_viz_coord_widgets)
+                self._refresh_plot_exp_lang(trist_exp_widgets)
+                trist_view_frame.config(text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'))
+                trist_lbl_elev.config(text=self.tr('batch_elev', 'Elevation (deg):'))
+                trist_lbl_elev_rng.config(text=self.tr('plot_elev_range', '(0–90)'))
+                trist_lbl_azim.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
+                trist_lbl_azim_rng.config(text=self.tr('plot_azim_range', '(-180–180)'))
+                trist_gif_frame.config(text=self.tr('batch_gif_params', '3D Rotation GIF Parameters'))
+                trist_lbl_gspd.config(text=self.tr('batch_gif_speed', 'Rotation Speed (degrees/frame):'))
+                trist_lbl_gint.config(text=self.tr('batch_gif_interval', 'Frame Interval (ms):'))
+                trist_lbl_gfps.config(text=self.tr('batch_gif_fps', 'FPS:'))
+                btn_extp_trist_viz.config(text=self.tr('extp_trist_viz_btn', 'Plot'))
                 btn_extp_trist_close.config(text=self.tr('extp_close', 'Close'))
             except Exception:
                 pass
@@ -14747,10 +17174,8 @@ class ThermoQGUI:
                 status_label.config(text=self.tr('extp_ready', 'Ready to extract'))
 
         extractor_window.protocol('WM_DELETE_WINDOW', _close_extp)
-        notebook.bind('<<NotebookTabChanged>>', _on_extp_tab_changed)
         self._register_tool_lang_refresh(_refresh_extp_lang)
         _refresh_extp_lang()
-        _sync_extp_bottom_bar()
 
     def open_partition_vector_plotter(self):
         """Open solid-liquid partition coefficient vector plotter tool"""
@@ -14762,19 +17187,7 @@ class ThermoQGUI:
         win.geometry("900x800")
         self._present_tool_window(win, self.root)
 
-        # Scrollable layout (similar style to liquidus vector plotter)
-        canvas = tk.Canvas(win)
-        scrollbar = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-        scrollbar.pack(side="right", fill="y")
+        scrollable_frame, canvas, _part_scroll_unbind = self._build_tool_window_scroll_area(win, padx=10, pady=10)
 
         outer_frame = ttk.Frame(scrollable_frame, padding="20")
         outer_frame.pack(fill=tk.BOTH, expand=True)
@@ -14899,6 +17312,33 @@ class ThermoQGUI:
             vis_frame, text=self.tr('plot_k_vis_plotly', 'Plotly 3D'), variable=plot_plotly_var
         )
         k_cb_pl.pack(side=tk.LEFT, padx=5)
+
+        def _k_reset_coord():
+            try:
+                ds = dataset_var.get()
+                df_src = self.pandat_p_data if ds == "Equilibrium" else self.pandat_p_s_data
+                if df_src is None or len(df_src) == 0:
+                    raise ValueError(self.tr('plot_k_no_p', ''))
+                ex = elem_x_var.get().strip()
+                ey = elem_y_var.get().strip()
+                if not ex or not ey:
+                    raise ValueError(self.tr('plot_k_select_xy', ''))
+                dx0, dx1, dy0, dy1 = self._dataframe_xy_extents(df_src, ex, ey)
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(dx0, dx1, dy0, dy1)
+                k_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', '').format(e=str(e)),
+                )
+
+        k_coord_ui = self._build_plot_coord_range_ui(main_frame, reset_command=_k_reset_coord)
+        k_coord_ui['frame'].pack(fill=tk.X, pady=5)
+        k_coord_widgets = k_coord_ui['widgets']
+
+        k_exp_ui = self._build_plot_experimental_points_ui(main_frame, win)
+        k_exp_ui['frame'].pack(fill=tk.X, pady=5)
+        k_exp_widgets = k_exp_ui['widgets']
 
         # Output settings (directory and basic GIF settings)
         output_settings_frame = ttk.LabelFrame(
@@ -15118,6 +17558,7 @@ class ThermoQGUI:
 
                 x_min, x_max = float(wx.min()), float(wx.max())
                 y_min, y_max = float(wy.min()), float(wy.max())
+                px0, px1, py0, py1 = k_coord_ui['resolve'](x_min, x_max, y_min, y_max)
 
                 prefix = prefix_var.get().strip() or "k_vectors"
                 base_dir = output_dir_var.get().strip()
@@ -15126,42 +17567,10 @@ class ThermoQGUI:
                 else:
                     base_path = "."
 
-                # Image format for 2D quiver, heatmap, and 3D static (same logic as liquidus vector plotter)
-                img_format = image_format_var.get().upper()
-                format_ext_map = {
-                    "PNG": "png",
-                    "JPEG": "jpg",
-                    "GIF": "gif",
-                    "BMP": "bmp",
-                    "TIFF": "tiff",
-                    "WEBP": "webp",
-                    "SVG": "svg",
-                    "PDF": "pdf",
-                    "EPS": "eps",
-                }
-                ext = format_ext_map.get(img_format, "png")
-                save_kwargs = {"dpi": 300, "bbox_inches": "tight"}
-                if img_format == "PDF":
-                    save_kwargs["format"] = "pdf"
-                elif img_format == "EPS":
-                    save_kwargs["format"] = "eps"
-                elif img_format == "SVG":
-                    save_kwargs["format"] = "svg"
-                elif img_format in ["JPEG", "JPG"]:
-                    save_kwargs["format"] = "jpeg"
-                elif img_format == "TIFF":
-                    save_kwargs["format"] = "tiff"
-                elif img_format == "WEBP":
-                    save_kwargs["format"] = "webp"
-                elif img_format == "BMP":
-                    save_kwargs["format"] = "bmp"
-                elif img_format == "GIF":
-                    save_kwargs["format"] = "gif"
-                else:
-                    save_kwargs["format"] = "png"
+                ext, save_kwargs = self._plot_image_ext_and_save_kwargs(image_format_var.get())
 
                 # Simple scaling to avoid overly long arrows
-                axis_span = max(x_max - x_min, y_max - y_min, 1e-9)
+                axis_span = max(px1 - px0, py1 - py0, 1e-9)
                 max_abs = float(np.nanmax(np.abs(np.r_[dx.values, dy.values])))
                 if not np.isfinite(max_abs) or max_abs == 0:
                     max_abs = 1.0
@@ -15182,11 +17591,11 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:blue",
                 )
-                ax1.set_xlabel(f"w({ex})")
-                ax1.set_ylabel(f"w({ey})")
+                ax1.set_xlabel(format_w_element_label(ex))
+                ax1.set_ylabel(format_w_element_label(ey))
                 ax1.set_title(f"U arrows: k({ex}) = w({ex}@{solid_phase})/w({ex}@LIQUID)")
                 ax1.grid(False)
-                ax1.set_aspect("equal", adjustable="box")
+                self._apply_plot_xy_limits(ax1, px0, px1, py0, py1, aspect_square=True)
                 fig1.tight_layout()
                 out1 = os.path.join(base_path, f"{prefix}_{ex}_U.{ext}")
                 fig1.savefig(out1, **save_kwargs)
@@ -15205,11 +17614,11 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:orange",
                 )
-                ax2.set_xlabel(f"w({ex})")
-                ax2.set_ylabel(f"w({ey})")
+                ax2.set_xlabel(format_w_element_label(ex))
+                ax2.set_ylabel(format_w_element_label(ey))
                 ax2.set_title(f"V arrows: k({ey}) = w({ey}@{solid_phase})/w({ey}@LIQUID)")
                 ax2.grid(False)
-                ax2.set_aspect("equal", adjustable="box")
+                self._apply_plot_xy_limits(ax2, px0, px1, py0, py1, aspect_square=True)
                 fig2.tight_layout()
                 out2 = os.path.join(base_path, f"{prefix}_{ey}_V.{ext}")
                 fig2.savefig(out2, **save_kwargs)
@@ -15228,11 +17637,11 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:green",
                 )
-                ax3.set_xlabel(f"w({ex})")
-                ax3.set_ylabel(f"w({ey})")
+                ax3.set_xlabel(format_w_element_label(ex))
+                ax3.set_ylabel(format_w_element_label(ey))
                 ax3.set_title("Resultant Z: deviation of partition coefficients (k-1)")
                 ax3.grid(False)
-                ax3.set_aspect("equal", adjustable="box")
+                self._apply_plot_xy_limits(ax3, px0, px1, py0, py1, aspect_square=True)
                 fig3.tight_layout()
                 out3 = os.path.join(base_path, f"{prefix}_Z.{ext}")
                 fig3.savefig(out3, **save_kwargs)
@@ -15245,9 +17654,12 @@ class ThermoQGUI:
                     tcf = ax_hm.tricontourf(wx.values, wy.values, k_dev_mag, levels=30, cmap="viridis")
                     cbar = fig_hm.colorbar(tcf, ax=ax_hm)
                     cbar.set_label("|k - 1|")
-                    ax_hm.set_xlabel(f"w({ex})")
-                    ax_hm.set_ylabel(f"w({ey})")
+                    ax_hm.set_xlabel(format_w_element_label(ex))
+                    ax_hm.set_ylabel(format_w_element_label(ey))
                     ax_hm.set_title("2D Heatmap of |k-1| magnitude")
+                    self._apply_plot_xy_limits(ax_hm, px0, px1, py0, py1)
+                    exp_pts = k_exp_ui['get_points'](ex, ey, z_hint=None)
+                    self._overlay_experimental_points_mpl_2d(ax_hm, exp_pts)
                     fig_hm.tight_layout()
                     out_hm = os.path.join(base_path, f"{prefix}_k_heatmap.{ext}")
                     fig_hm.savefig(out_hm, **save_kwargs)
@@ -15270,10 +17682,14 @@ class ThermoQGUI:
                     )
                     cbar3 = fig_3d.colorbar(surf, ax=ax_3d, shrink=0.7, aspect=15)
                     cbar3.set_label("|k - 1|")
-                    ax_3d.set_xlabel(f"w({ex})")
-                    ax_3d.set_ylabel(f"w({ey})")
+                    ax_3d.set_xlabel(format_w_element_label(ex))
+                    ax_3d.set_ylabel(format_w_element_label(ey))
                     ax_3d.set_zlabel("|k - 1|")
                     ax_3d.set_title("3D Static Surface of |k-1|")
+                    ax_3d.set_xlim(px0, px1)
+                    ax_3d.set_ylim(py0, py1)
+                    exp_pts = k_exp_ui['get_points'](ex, ey, z_hint=None)
+                    self._overlay_experimental_points_mpl_3d(ax_3d, exp_pts)
                     fig_3d.tight_layout()
                     out_3d = os.path.join(base_path, f"{prefix}_k_3d.{ext}")
                     fig_3d.savefig(out_3d, **save_kwargs)
@@ -15293,8 +17709,8 @@ class ThermoQGUI:
                         antialiased=True,
                     )
                     fig_gif.colorbar(surf_gif, ax=ax_gif, shrink=0.7, aspect=15)
-                    ax_gif.set_xlabel(f"w({ex})")
-                    ax_gif.set_ylabel(f"w({ey})")
+                    ax_gif.set_xlabel(format_w_element_label(ex))
+                    ax_gif.set_ylabel(format_w_element_label(ey))
                     ax_gif.set_zlabel("|k - 1|")
                     ax_gif.set_title("3D Rotation of |k-1| surface")
 
@@ -15350,8 +17766,8 @@ class ThermoQGUI:
                         )
                         fig_pl.update_layout(
                             scene=dict(
-                                xaxis_title=f"w({ex})",
-                                yaxis_title=f"w({ey})",
+                                xaxis_title=format_w_element_label(ex),
+                                yaxis_title=format_w_element_label(ey),
                                 zaxis_title="|k - 1|",
                             ),
                             width=900,
@@ -15570,12 +17986,12 @@ class ThermoQGUI:
                         m = re.match(r"^W\(([A-Z]+)\)$", cu)
                         if m:
                             up = m.group(1).upper()
-                            found.add(upper_periodic.get(up, up.capitalize()))
+                            found.add(upper_periodic.get(up, canonical_element_symbol(up)))
                             continue
                         m2 = re.match(r"^W\(([A-Z]+)@", cu)
                         if m2:
                             up = m2.group(1).upper()
-                            found.add(upper_periodic.get(up, up.capitalize()))
+                            found.add(upper_periodic.get(up, canonical_element_symbol(up)))
 
                 found = sorted(found)
                 if not found:
@@ -16004,8 +18420,8 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:blue",
                 )
-                ax1.set_xlabel(f"w({ex})")
-                ax1.set_ylabel(f"w({ey})")
+                ax1.set_xlabel(format_w_element_label(ex))
+                ax1.set_ylabel(format_w_element_label(ey))
                 ax1.set_title(f"U at T={t_target:g}: k({ex})-1 (dx)")
                 ax1.grid(False)
                 ax1.set_aspect("equal", adjustable="box")
@@ -16028,8 +18444,8 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:orange",
                 )
-                ax2.set_xlabel(f"w({ex})")
-                ax2.set_ylabel(f"w({ey})")
+                ax2.set_xlabel(format_w_element_label(ex))
+                ax2.set_ylabel(format_w_element_label(ey))
                 ax2.set_title(f"V at T={t_target:g}: k({ey})-1 (dy)")
                 ax2.grid(False)
                 ax2.set_aspect("equal", adjustable="box")
@@ -16052,8 +18468,8 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:green",
                 )
-                ax3.set_xlabel(f"w({ex})")
-                ax3.set_ylabel(f"w({ey})")
+                ax3.set_xlabel(format_w_element_label(ex))
+                ax3.set_ylabel(format_w_element_label(ey))
                 ax3.set_title(f"Z at T={t_target:g}: resultant (k-1)")
                 ax3.grid(False)
                 ax3.set_aspect("equal", adjustable="box")
@@ -16270,12 +18686,12 @@ class ThermoQGUI:
                         m = re.match(r"^W\(([A-Z]+)\)$", cu)
                         if m:
                             up = m.group(1).upper()
-                            found.add(upper_periodic.get(up, up.capitalize()))
+                            found.add(upper_periodic.get(up, canonical_element_symbol(up)))
                             continue
                         m2 = re.match(r"^W\(([A-Z]+)@", cu)
                         if m2:
                             up = m2.group(1).upper()
-                            found.add(upper_periodic.get(up, up.capitalize()))
+                            found.add(upper_periodic.get(up, canonical_element_symbol(up)))
 
                 found = sorted(found)
                 if not found:
@@ -16515,6 +18931,47 @@ class ThermoQGUI:
 
         # Initial fill (if already set)
         _iso_auto_temp_update()
+
+        # k vs T curve option
+        iso_k_curve_frame = ttk.LabelFrame(
+            tab_isocomp,
+            text=self.tr('iso_k_curve_frame', 'Partition coefficient vs T'),
+            padding="10",
+        )
+        iso_k_curve_frame.pack(fill=tk.X, pady=5)
+        iso_plot_k_curve_var = tk.BooleanVar(value=True)
+        iso_cb_plot_k_curve = ttk.Checkbutton(
+            iso_k_curve_frame,
+            text=self.tr(
+                'iso_k_curve_enable',
+                'Plot k vs T curves (k = w(*@solid)/w(*@LIQUID))',
+            ),
+            variable=iso_plot_k_curve_var,
+        )
+        iso_cb_plot_k_curve.pack(anchor=tk.W)
+
+        def _iso_comp_reset_coord():
+            iso_comp_coord_ui['set_fields'](0.0, 100.0, 0.0, 100.0)
+
+        iso_comp_coord_ui = self._build_plot_coord_range_ui(
+            tab_isocomp,
+            reset_command=_iso_comp_reset_coord,
+            key_prefix='iso_comp_coord',
+        )
+        iso_comp_coord_ui['frame'].pack(fill=tk.X, pady=5)
+        iso_comp_coord_widgets = iso_comp_coord_ui['widgets']
+
+        def _iso_k_reset_coord():
+            for v in iso_k_coord_ui['vars']:
+                v.set('')
+
+        iso_k_coord_ui = self._build_plot_coord_range_ui(
+            tab_isocomp,
+            reset_command=_iso_k_reset_coord,
+            key_prefix='iso_k_coord',
+        )
+        iso_k_coord_ui['frame'].pack(fill=tk.X, pady=5)
+        iso_k_coord_widgets = iso_k_coord_ui['widgets']
 
         # Output settings (directory + image format)
         iso_output_frame = ttk.LabelFrame(
@@ -17100,8 +19557,8 @@ class ThermoQGUI:
                     )
 
                 ax2d.scatter([o_wx], [o_wy], color="red", s=40, marker="o", label="O (overall)")
-                ax2d.set_xlabel(f"W({ex})")
-                ax2d.set_ylabel(f"W({ey})")
+                ax2d.set_xlabel(format_w_element_label(ex))
+                ax2d.set_ylabel(format_w_element_label(ey))
                 ax2d.set_title(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
                 ax2d.grid(False)
                 ax2d.set_aspect("equal", adjustable="box")
@@ -17135,8 +19592,8 @@ class ThermoQGUI:
                         ls="--",
                     )
 
-                ax3d.set_xlabel(f"W({ex})")
-                ax3d.set_ylabel(f"W({ey})")
+                ax3d.set_xlabel(format_w_element_label(ex))
+                ax3d.set_ylabel(format_w_element_label(ey))
                 ax3d.set_zlabel("T (K)")
                 ax3d.set_title(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
                 fig3d.tight_layout()
@@ -17150,8 +19607,8 @@ class ThermoQGUI:
                 out_html_iso = os.path.join(base_path, f"{prefix3}_iso_3Dinteractive.html")
                 if PLOTLY_AVAILABLE:
                     try:
-                        x_title = f"W({ex})"
-                        y_title = f"W({ey})"
+                        x_title = format_w_element_label(ex)
+                        y_title = format_w_element_label(ey)
 
                         # Trace indices fixed across frames:
                         # 0: f line (liquid) up to current T
@@ -17345,8 +19802,8 @@ class ThermoQGUI:
                 ax_anim.plot(sxo_s, syo_s, tt_dense, color="tab:orange", lw=1, alpha=0.25)
                 ax_anim.plot([o_wx, o_wx], [o_wy, o_wy], [t_a[0], t_a[-1]], color="red", lw=1.0, ls="--", alpha=0.8)
 
-                ax_anim.set_xlabel(f"W({ex})")
-                ax_anim.set_ylabel(f"W({ey})")
+                ax_anim.set_xlabel(format_w_element_label(ex))
+                ax_anim.set_ylabel(format_w_element_label(ey))
                 ax_anim.set_zlabel("T (K)")
                 ax_anim.set_title(self.tr('iso_dyn_title', '3D Dynamic (high -> low)'))
 
@@ -17959,6 +20416,29 @@ class ThermoQGUI:
                     )
                     return
 
+                # Partition coefficients k = w(solid)/w(liquid)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    kx = np.where(fxo > 0, sxo / fxo, np.nan)
+                    ky = np.where(fyo > 0, syo / fyo, np.nan)
+                temps_asc_k = temps_desc[::-1]
+                kx_asc = kx[::-1]
+                ky_asc = ky[::-1]
+
+                # Composition plot coordinate limits
+                comp_pts_x = np.r_[fxo, sxo, [o_wx]]
+                comp_pts_y = np.r_[fyo, syo, [o_wy]]
+                comp_x_min = float(np.nanmin(comp_pts_x))
+                comp_x_max = float(np.nanmax(comp_pts_x))
+                comp_y_min = float(np.nanmin(comp_pts_y))
+                comp_y_max = float(np.nanmax(comp_pts_y))
+                try:
+                    px0, px1, py0, py1 = iso_comp_coord_ui['resolve'](
+                        comp_x_min, comp_x_max, comp_y_min, comp_y_max, square_default=True,
+                    )
+                except ValueError as exc:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), str(exc))
+                    return
+
                 # Output settings
                 prefix3 = iso_prefix_var.get().strip() or "isocomposition"
                 output_dir = iso_output_dir_var.get().strip()
@@ -18028,10 +20508,9 @@ class ThermoQGUI:
                 # Node markers
                 ax2d.scatter(fxo, fyo, color="tab:blue", s=18)
                 ax2d.scatter(sxo, syo, color="tab:orange", s=18)
-                ax2d.set_xlabel(f"W({ex})")
-                ax2d.set_ylabel(f"W({ey})")
-                ax2d.set_xlim(0, 100)
-                ax2d.set_ylim(0, 100)
+                ax2d.set_xlabel(format_w_element_label(ex))
+                ax2d.set_ylabel(format_w_element_label(ey))
+                self._apply_plot_xy_limits(ax2d, px0, px1, py0, py1, aspect_square=True)
                 ax2d.set_title(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
                 ax2d.grid(False)
                 ax2d.set_aspect("equal", adjustable="box")
@@ -18042,6 +20521,70 @@ class ThermoQGUI:
                 plt.close(fig2d)
                 self.open_file_and_offer_save_as(out2d, win)
 
+                # k vs T curves
+                if iso_plot_k_curve_var.get():
+                    kx_mask = np.isfinite(kx_asc) & np.isfinite(temps_asc_k)
+                    ky_mask = np.isfinite(ky_asc) & np.isfinite(temps_asc_k)
+                    if kx_mask.sum() + ky_mask.sum() < 2:
+                        messagebox.showwarning(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('iso_k_curve_no_valid', 'No valid partition coefficient values to plot k vs T.'),
+                        )
+                    else:
+                        k_finite = np.r_[kx_asc[kx_mask], ky_asc[ky_mask]]
+                        t_finite = np.r_[temps_asc_k[kx_mask], temps_asc_k[ky_mask]]
+                        t_k_min = float(np.min(t_finite))
+                        t_k_max = float(np.max(t_finite))
+                        k_min = float(np.min(k_finite))
+                        k_max = float(np.max(k_finite))
+                        if k_min == k_max:
+                            k_min -= 0.05
+                            k_max += 0.05
+                        try:
+                            kx0, kx1, ky0, ky1 = iso_k_coord_ui['resolve'](
+                                t_k_min, t_k_max, k_min, k_max, square_default=False,
+                            )
+                        except ValueError as exc:
+                            messagebox.showerror(self.tr('dlg_error', 'Error'), str(exc))
+                            return
+
+                        fig_k, ax_k = plt.subplots(figsize=(7, 6), dpi=140)
+                        if kx_mask.sum() >= 1:
+                            ax_k.plot(
+                                temps_asc_k[kx_mask],
+                                kx_asc[kx_mask],
+                                color="tab:blue",
+                                lw=2,
+                                marker="o",
+                                ms=5,
+                                label=self.tr('iso_k_curve_legend', 'k({el})').format(el=ex),
+                            )
+                        if ky_mask.sum() >= 1:
+                            ax_k.plot(
+                                temps_asc_k[ky_mask],
+                                ky_asc[ky_mask],
+                                color="tab:orange",
+                                lw=2,
+                                marker="s",
+                                ms=5,
+                                label=self.tr('iso_k_curve_legend', 'k({el})').format(el=ey),
+                            )
+                        ax_k.axhline(1.0, color="gray", lw=1.0, linestyle="--", alpha=0.6)
+                        ax_k.set_xlabel("T (K)")
+                        ax_k.set_ylabel("k")
+                        ax_k.set_title(self.tr('iso_k_curve_title', 'Partition coefficient k vs T (isocomposition O)'))
+                        ax_k.grid(True, alpha=0.3)
+                        ax_k.set_xlim(kx0, kx1)
+                        ax_k.set_ylim(ky0, ky1)
+                        self._apply_sampled_temperature_xticks(ax_k, temps_asc_k)
+                        self._apply_k_value_axis_ticks(ax_k)
+                        ax_k.legend(loc="best")
+                        fig_k.tight_layout()
+                        out_k = os.path.join(base_path, f"{prefix3}_iso_k_vs_T.{ext}")
+                        fig_k.savefig(out_k, **save_kwargs)
+                        plt.close(fig_k)
+                        self.open_file_and_offer_save_as(out_k, win)
+
                 # 3D static plot
                 fig3d = plt.figure(figsize=(8, 7), dpi=140)
                 ax3d = fig3d.add_subplot(111, projection="3d")
@@ -18051,11 +20594,11 @@ class ThermoQGUI:
                     ti = temps_desc[i]
                     ax3d.plot([fxo[i], o_wx], [fyo[i], o_wy], [ti, ti], color="gray", lw=1.2, linestyle="--", alpha=0.45)
                     ax3d.plot([sxo[i], o_wx], [syo[i], o_wy], [ti, ti], color="gray", lw=1.2, linestyle="--", alpha=0.45)
-                ax3d.set_xlabel(f"W({ex})")
-                ax3d.set_ylabel(f"W({ey})")
+                ax3d.set_xlabel(format_w_element_label(ex))
+                ax3d.set_ylabel(format_w_element_label(ey))
                 ax3d.set_zlabel("T (K)")
-                ax3d.set_xlim(0, 100)
-                ax3d.set_ylim(0, 100)
+                ax3d.set_xlim(px0, px1)
+                ax3d.set_ylim(py0, py1)
                 ax3d.set_title(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
                 fig3d.tight_layout()
                 out3d = os.path.join(base_path, f"{prefix3}_iso_3Dstatic.{ext}")
@@ -18068,10 +20611,10 @@ class ThermoQGUI:
                 ax_anim = fig_anim.add_subplot(111, projection="3d")
                 ax_anim.plot(fxo_s, fyo_s, t_dense, color="tab:blue", lw=1.2, alpha=0.25)
                 ax_anim.plot(sxo_s, syo_s, t_dense, color="tab:orange", lw=1.2, alpha=0.25)
-                ax_anim.set_xlim(0, 100)
-                ax_anim.set_ylim(0, 100)
-                ax_anim.set_xlabel(f"W({ex})")
-                ax_anim.set_ylabel(f"W({ey})")
+                ax_anim.set_xlim(px0, px1)
+                ax_anim.set_ylim(py0, py1)
+                ax_anim.set_xlabel(format_w_element_label(ex))
+                ax_anim.set_ylabel(format_w_element_label(ey))
                 ax_anim.set_zlabel("T (K)")
                 ax_anim.set_title(self.tr('iso_dyn_title', '3D Dynamic (high -> low)'))
 
@@ -18267,8 +20810,8 @@ class ThermoQGUI:
                         ]
                         fig_pl.update_layout(
                             scene=dict(
-                                xaxis_title=f"W({ex})",
-                                yaxis_title=f"W({ey})",
+                                xaxis_title=format_w_element_label(ex),
+                                yaxis_title=format_w_element_label(ey),
                                 zaxis_title="T (K)",
                             ),
                             width=950,
@@ -18368,6 +20911,8 @@ class ThermoQGUI:
             k_cb_3d.config(text=self.tr('plot_k_vis_3d', '3D Static'))
             k_cb_gif.config(text=self.tr('plot_k_vis_gif', '3D Rotation GIF'))
             k_cb_pl.config(text=self.tr('plot_k_vis_plotly', 'Plotly 3D'))
+            self._refresh_plot_coord_lang(k_coord_widgets)
+            self._refresh_plot_exp_lang(k_exp_widgets)
             output_settings_frame.config(text=self.tr('stp_output_settings', 'Output Settings'))
             k_lbl_outdir.config(text=self.tr('stp_output_directory', 'Output directory:'))
             k_btn_browse_out.config(text=self.tr('pandat_browse', 'Browse'))
@@ -18458,6 +21003,15 @@ class ThermoQGUI:
             iso_lbl_tmin.config(text=self.tr('iso_tmin', 'T min (K):'))
             iso_lbl_tmax.config(text=self.tr('iso_tmax', 'T max (K):'))
             iso_lbl_npts.config(text=self.tr('iso_npts', 'Number of temperature points:'))
+            iso_k_curve_frame.config(text=self.tr('iso_k_curve_frame', 'Partition coefficient vs T'))
+            iso_cb_plot_k_curve.config(
+                text=self.tr(
+                    'iso_k_curve_enable',
+                    'Plot k vs T curves (k = w(*@solid)/w(*@LIQUID))',
+                ),
+            )
+            self._refresh_plot_coord_lang(iso_comp_coord_widgets)
+            self._refresh_plot_coord_lang(iso_k_coord_widgets)
             iso_output_frame.config(text=self.tr('stp_output', 'Output'))
             iso_lbl_fn_prefix.config(text=self.tr('stp_filename_prefix', 'Filename prefix:'))
             iso_output_settings_frame.config(text=self.tr('stp_output_settings', 'Output Settings'))
@@ -18482,6 +21036,10 @@ class ThermoQGUI:
 
         def _on_partition_win_destroy(event):
             if event.widget is win:
+                try:
+                    _part_scroll_unbind()
+                except Exception:
+                    pass
                 if getattr(self, '_partition_plotter_lang_refresh', None) is _refresh_partition_plotter_language:
                     self._partition_plotter_lang_refresh = None
 
@@ -18497,32 +21055,9 @@ class ThermoQGUI:
         vector_window.geometry("800x800")
         self._present_tool_window(vector_window, self.root)
 
-        # Create scrollable frame
-        canvas = tk.Canvas(vector_window)
-        scrollbar = ttk.Scrollbar(vector_window, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        scrollable_frame, canvas, _unbind_liqvec_mousewheel = self._build_tool_window_scroll_area(
+            vector_window, padx=10, pady=10
         )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-        scrollbar.pack(side="right", fill="y")
-        
-        # bind_all keeps firing after this Toplevel is closed unless we unbind — guard + cleanup.
-        def _unbind_liqvec_mousewheel():
-            try:
-                if platform.system() == "Linux":
-                    vector_window.unbind_all("<Button-4>")
-                    vector_window.unbind_all("<Button-5>")
-                else:
-                    vector_window.unbind_all("<MouseWheel>")
-            except tk.TclError:
-                pass
 
         def _on_liqvec_destroy(event):
             if event.widget is vector_window:
@@ -18537,30 +21072,6 @@ class ThermoQGUI:
 
         vector_window.protocol("WM_DELETE_WINDOW", _close_liquidus_vector_window)
 
-        # Bind mouse wheel to canvas (Windows and Mac)
-        def _on_mousewheel(event):
-            try:
-                if not vector_window.winfo_exists() or not canvas.winfo_exists():
-                    return
-            except tk.TclError:
-                return
-            if platform.system() == 'Windows':
-                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            elif platform.system() == 'Darwin':  # Mac
-                canvas.yview_scroll(int(-1*event.delta), "units")
-            else:  # Linux
-                if event.num == 4:
-                    canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    canvas.yview_scroll(1, "units")
-        
-        # Bind mouse wheel events
-        if platform.system() == 'Linux':
-            canvas.bind_all("<Button-4>", _on_mousewheel)
-            canvas.bind_all("<Button-5>", _on_mousewheel)
-        else:
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        
         # Create main frame inside scrollable frame
         main_frame = ttk.Frame(scrollable_frame, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -18652,6 +21163,66 @@ class ThermoQGUI:
         dataset_var.trace_add("write", lambda *args: on_dataset_changed())
         # Initial update
         on_dataset_changed()
+
+        def _standardize_columns(df):
+            """Standardize column names"""
+            df = df.rename(columns={c: c.strip() for c in df.columns})
+            return standardize_dataframe_element_columns(df)
+
+        def _find_w_columns(df, ex, ey):
+            """Find w(ex) and w(ey) columns in a Pandat dataframe."""
+            norm = {c: re.sub(r"\s+", "", c, flags=re.UNICODE).lower() for c in df.columns}
+            rev = {v: k for k, v in norm.items()}
+
+            def find_by_exact(key):
+                return rev.get(key)
+
+            def find_by_regex(patterns):
+                for c in df.columns:
+                    s = c.lower()
+                    if all(re.search(p, s, flags=re.IGNORECASE) for p in patterns):
+                        return c
+                return None
+
+            wx = find_by_exact(f"w({ex.lower()})") or find_by_regex([rf"^w\({ex.lower()}\)"])
+            wy = find_by_exact(f"w({ey.lower()})") or find_by_regex([rf"^w\({ey.lower()}\)"])
+            if not (wx and wy):
+                raise ValueError(
+                    f"Missing required columns. Need: 'w({ex})', 'w({ey})'. Found: {list(df.columns)}"
+                )
+            return wx, wy
+
+        def _find_required_columns(df, ex, ey):
+            """Find required columns for elements"""
+            wx, wy = _find_w_columns(df, ex, ey)
+            norm = {c: re.sub(r"\s+", "", c, flags=re.UNICODE).lower() for c in df.columns}
+            rev = {v: k for k, v in norm.items()}
+
+            def find_by_exact(key):
+                return rev.get(key)
+
+            def find_by_regex(patterns):
+                for c in df.columns:
+                    s = c.lower()
+                    if all(re.search(p, s, flags=re.IGNORECASE) for p in patterns):
+                        return c
+                return None
+
+            inv_x = find_by_exact(f"1/dwdt_l({ex.lower()}@liquid)") or find_by_regex([
+                r"1/dwdt_l\(", rf"{ex.lower()}@liquid\)"
+            ])
+            inv_y = find_by_exact(f"1/dwdt_l({ey.lower()}@liquid)") or find_by_regex([
+                r"1/dwdt_l\(", rf"{ey.lower()}@liquid\)"
+            ])
+
+            if not (inv_x and inv_y):
+                raise ValueError(
+                    f"Missing required columns. Need: 'w({ex})', 'w({ey})', "
+                    f"'1/dwdT_L({ex}@LIQUID)', '1/dwdT_L({ey}@LIQUID)'. "
+                    f"Found: {list(df.columns)}"
+                )
+
+            return wx, wy, inv_x, inv_y
         
         # Options
         options_frame = ttk.LabelFrame(main_frame, text=self.tr('liqvec_options', 'Options'), padding="15")
@@ -18666,13 +21237,10 @@ class ThermoQGUI:
         processed_export_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
         def browse_processed_export():
-            file_path = filedialog.asksaveasfilename(
-                title=self.tr('liqvec_proc_export_title', 'Export processed data'),
-                defaultextension=".xlsx",
-                filetypes=[
-                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
-                    (self.tr('filetype_all', 'All files'), "*.*"),
-                ],
+            file_path = self._ask_save_data_path(
+                vector_window,
+                self.tr('liqvec_proc_export_title', 'Export processed data'),
+                initialfile='liquidus_processed.xlsx',
             )
             if file_path:
                 processed_export_var.set(file_path)
@@ -18718,7 +21286,7 @@ class ThermoQGUI:
                         col_upper = col.strip().upper()
                         match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 w_cols[element] = col
                 
@@ -18731,7 +21299,7 @@ class ThermoQGUI:
                         # Match dwdT_L(ELEMENT@LIQUID) pattern
                         match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 dwdt_cols[element] = col
                                 # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
@@ -18758,9 +21326,9 @@ class ThermoQGUI:
                     messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('export_need_path', 'Please specify export path!'))
                     return
                 
-                # Export to Excel
+                # Export data file
                 try:
-                    processed_df.to_excel(export_path, index=False)
+                    self._export_dataframe_to_path(processed_df, export_path)
                     status_label.config(text=f"Processed data exported to: {os.path.basename(export_path)}", foreground="green")
                     messagebox.showinfo(
                     self.tr('dlg_success', 'Success'),
@@ -18801,13 +21369,10 @@ class ThermoQGUI:
         excel_export_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
         def browse_excel_export():
-            file_path = filedialog.asksaveasfilename(
-                title=self.tr('liqvec_fd_clean', 'Save Cleaned Excel File'),
-                defaultextension=".xlsx",
-                filetypes=[
-                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
-                    (self.tr('filetype_all', 'All files'), "*.*"),
-                ],
+            file_path = self._ask_save_data_path(
+                vector_window,
+                self.tr('plot_data_save_cleaned', 'Save Cleaned Data File'),
+                initialfile='liquidus_cleaned.xlsx',
             )
             if file_path:
                 excel_export_var.set(file_path)
@@ -18853,7 +21418,7 @@ class ThermoQGUI:
                         col_upper = col.strip().upper()
                         match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 w_cols[element] = col
                 
@@ -18866,7 +21431,7 @@ class ThermoQGUI:
                         # Match dwdT_L(ELEMENT@LIQUID) pattern
                         match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 dwdt_cols[element] = col
                                 # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
@@ -18932,7 +21497,7 @@ class ThermoQGUI:
                 
                 # Export to Excel
                 try:
-                    cleaned_df.to_excel(export_path, index=False)
+                    self._export_dataframe_to_path(cleaned_df, export_path)
                     status_label.config(text=f"Cleaned data exported to: {os.path.basename(export_path)}", foreground="green")
                     messagebox.showinfo(
                     self.tr('dlg_success', 'Success'),
@@ -18967,6 +21532,118 @@ class ThermoQGUI:
         
         clean_fill_var.trace_add("write", lambda *args: toggle_excel_export())
         
+        # Coordinate range (2D / X-Y of 3D plots)
+        coord_frame = ttk.LabelFrame(main_frame, text=self.tr('liqvec_coord_frame', 'Coordinate Range'), padding="15")
+        coord_frame.pack(fill=tk.X, pady=10)
+
+        lbl_lv_coord_hint = ttk.Label(
+            coord_frame,
+            text=self.tr('liqvec_coord_hint', ''),
+            wraplength=650,
+            justify='left',
+        )
+        lbl_lv_coord_hint.pack(anchor=tk.W, pady=(0, 8))
+
+        lv_xmin_var = tk.StringVar(value="")
+        lv_xmax_var = tk.StringVar(value="")
+        lv_ymin_var = tk.StringVar(value="")
+        lv_ymax_var = tk.StringVar(value="")
+
+        coord_row1 = ttk.Frame(coord_frame)
+        coord_row1.pack(fill=tk.X, pady=2)
+        lbl_lv_xmin = ttk.Label(coord_row1, text=self.tr('liqvec_x_min', 'X Min:'))
+        lbl_lv_xmin.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(coord_row1, textvariable=lv_xmin_var, width=12).pack(side=tk.LEFT, padx=5)
+        lbl_lv_xmax = ttk.Label(coord_row1, text=self.tr('liqvec_x_max', 'X Max:'))
+        lbl_lv_xmax.pack(side=tk.LEFT, padx=15)
+        ttk.Entry(coord_row1, textvariable=lv_xmax_var, width=12).pack(side=tk.LEFT, padx=5)
+
+        coord_row2 = ttk.Frame(coord_frame)
+        coord_row2.pack(fill=tk.X, pady=2)
+        lbl_lv_ymin = ttk.Label(coord_row2, text=self.tr('liqvec_y_min', 'Y Min:'))
+        lbl_lv_ymin.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(coord_row2, textvariable=lv_ymin_var, width=12).pack(side=tk.LEFT, padx=5)
+        lbl_lv_ymax = ttk.Label(coord_row2, text=self.tr('liqvec_y_max', 'Y Max:'))
+        lbl_lv_ymax.pack(side=tk.LEFT, padx=15)
+        ttk.Entry(coord_row2, textvariable=lv_ymax_var, width=12).pack(side=tk.LEFT, padx=5)
+
+        def _format_liqvec_limit(v):
+            return f"{float(v):.6g}"
+
+        def _set_liqvec_coord_fields(x0, x1, y0, y1):
+            lv_xmin_var.set(_format_liqvec_limit(x0))
+            lv_xmax_var.set(_format_liqvec_limit(x1))
+            lv_ymin_var.set(_format_liqvec_limit(y0))
+            lv_ymax_var.set(_format_liqvec_limit(y1))
+
+        def _composition_extents_from_pandat():
+            """Return (data_x_min, data_x_max, data_y_min, data_y_max) for current UI selection."""
+            ds = dataset_var.get()
+            if ds == "Equilibrium":
+                source_df = self.pandat_p_data
+                if source_df is None or len(source_df) == 0:
+                    raise ValueError(self.tr('plot_k_no_p', 'No P file data found.'))
+            else:
+                source_df = self.pandat_p_s_data
+                if source_df is None or len(source_df) == 0:
+                    raise ValueError(self.tr('plot_k_no_ps', 'No P-S file data found.'))
+            ex = elem_x_var.get().strip()
+            ey = elem_y_var.get().strip()
+            if not ex or not ey:
+                raise ValueError(self.tr('plot_k_select_xy', 'Please select X and Y elements!'))
+            df = _standardize_columns(source_df.copy())
+            col_wx, col_wy = _find_w_columns(df, ex, ey)
+            wx = pd.to_numeric(df[col_wx], errors="coerce")
+            wy = pd.to_numeric(df[col_wy], errors="coerce")
+            valid = wx.notna() & wy.notna()
+            if not valid.any():
+                raise ValueError(self.tr('plot_liq_no_points_filter', 'No valid data points found after filtering!'))
+            wx = wx[valid]
+            wy = wy[valid]
+            return float(wx.min()), float(wx.max()), float(wy.min()), float(wy.max())
+
+        def reset_liqvec_coord_range():
+            try:
+                dx0, dx1, dy0, dy1 = _composition_extents_from_pandat()
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(dx0, dx1, dy0, dy1)
+                _set_liqvec_coord_fields(px0, px1, py0, py1)
+                status_label.config(text=self.tr('liqvec_coord_reset_ok', ''), foreground="green")
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('liqvec_coord_reset_fail', 'Could not compute default range: {e}').format(e=str(e)),
+                )
+
+        def _resolve_liqvec_plot_limits(data_x_min, data_x_max, data_y_min, data_y_max):
+            raw = [v.get().strip() for v in (lv_xmin_var, lv_xmax_var, lv_ymin_var, lv_ymax_var)]
+            filled = [bool(s) for s in raw]
+            if not any(filled):
+                px0, px1, py0, py1 = self._liquidus_square_axis_limits(
+                    data_x_min, data_x_max, data_y_min, data_y_max
+                )
+                _set_liqvec_coord_fields(px0, px1, py0, py1)
+                return px0, px1, py0, py1
+            if not all(filled):
+                raise ValueError(self.tr('liqvec_coord_partial', ''))
+            try:
+                px0, px1, py0, py1 = (float(s) for s in raw)
+            except ValueError as exc:
+                raise ValueError(self.tr('liqvec_coord_invalid', '')) from exc
+            if px0 >= px1 or py0 >= py1:
+                raise ValueError(self.tr('liqvec_coord_invalid', ''))
+            return px0, px1, py0, py1
+
+        btn_lv_coord_reset = ttk.Button(
+            coord_frame,
+            text=self.tr('liqvec_coord_reset', 'Reset to default (square)'),
+            command=reset_liqvec_coord_range,
+        )
+        btn_lv_coord_reset.pack(anchor=tk.W, pady=(8, 0))
+
+        lv_exp_ui = self._build_plot_experimental_points_ui(main_frame, vector_window)
+        lv_exp_ui['frame'].pack(fill=tk.X, pady=5)
+        lv_exp_widgets = lv_exp_ui['widgets']
+
         # Visualization options for Z vectors on liquidus surface
         viz_frame = ttk.LabelFrame(main_frame, text=self.tr('liqvec_viz_frame', 'Visualization'), padding="15")
         viz_frame.pack(fill=tk.X, pady=10)
@@ -19175,45 +21852,6 @@ class ThermoQGUI:
                                    state="readonly", width=15)
         format_combo.pack(side=tk.LEFT, padx=5)
         
-        def _standardize_columns(df):
-            """Standardize column names"""
-            df = df.rename(columns={c: c.strip() for c in df.columns})
-            return df
-        
-        def _find_required_columns(df, ex, ey):
-            """Find required columns for elements"""
-            norm = {c: re.sub(r"\s+", "", c, flags=re.UNICODE).lower() for c in df.columns}
-            rev = {v: k for k, v in norm.items()}
-            
-            def find_by_exact(key):
-                return rev.get(key)
-            
-            def find_by_regex(patterns):
-                for c in df.columns:
-                    s = c.lower()
-                    if all(re.search(p, s, flags=re.IGNORECASE) for p in patterns):
-                        return c
-                return None
-            
-            wx = find_by_exact(f"w({ex.lower()})") or find_by_regex([rf"^w\({ex.lower()}\)"])
-            wy = find_by_exact(f"w({ey.lower()})") or find_by_regex([rf"^w\({ey.lower()}\)"])
-            
-            inv_x = find_by_exact(f"1/dwdt_l({ex.lower()}@liquid)") or find_by_regex([
-                r"1/dwdt_l\(", rf"{ex.lower()}@liquid\)"
-            ])
-            inv_y = find_by_exact(f"1/dwdt_l({ey.lower()}@liquid)") or find_by_regex([
-                r"1/dwdt_l\(", rf"{ey.lower()}@liquid\)"
-            ])
-            
-            if not (wx and wy and inv_x and inv_y):
-                raise ValueError(
-                    f"Missing required columns. Need: 'w({ex})', 'w({ey})', "
-                    f"'1/dwdT_L({ex}@LIQUID)', '1/dwdT_L({ey}@LIQUID)'. "
-                    f"Found: {list(df.columns)}"
-                )
-            
-            return wx, wy, inv_x, inv_y
-        
         def plot_vectors():
             """Plot liquidus vectors"""
             try:
@@ -19268,7 +21906,7 @@ class ThermoQGUI:
                         col_upper = col.strip().upper()
                         match = re.match(r'^W\(([A-Z]+)\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 w_cols[element] = col
                 
@@ -19281,7 +21919,7 @@ class ThermoQGUI:
                         # Match dwdT_L(ELEMENT@LIQUID) pattern
                         match = re.match(r'^DWDT_L\(([A-Z]+)@LIQUID\)$', col_upper)
                         if match:
-                            element = match.group(1).capitalize()
+                            element = canonical_element_symbol(match.group(1))
                             if element in PERIODIC_TABLE:
                                 dwdt_cols[element] = col
                                 # Calculate 1/dwdT_L(*@LIQUID) = 1 / dwdT_L(*@LIQUID)
@@ -19377,7 +22015,7 @@ class ThermoQGUI:
                     excel_export_path = excel_export_var.get().strip()
                     if excel_export_path:
                         try:
-                            cleaned_df.to_excel(excel_export_path, index=False)
+                            self._export_dataframe_to_path(cleaned_df, excel_export_path)
                             status_label.config(text=f"Cleaned data exported to: {os.path.basename(excel_export_path)}", foreground="green")
                             messagebox.showinfo(
                                 self.tr('dlg_success', 'Success'),
@@ -19422,6 +22060,15 @@ class ThermoQGUI:
                 # Clip to data domain
                 x_min, x_max = float(wx.min()), float(wx.max())
                 y_min, y_max = float(wy.min()), float(wy.max())
+
+                try:
+                    plot_x_min, plot_x_max, plot_y_min, plot_y_max = _resolve_liqvec_plot_limits(
+                        x_min, x_max, y_min, y_max
+                    )
+                except ValueError as ve:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), str(ve))
+                    status_label.config(text=str(ve), foreground="red")
+                    return
                 
                 # Get temperature data for 3D plot
                 t_data = pd.to_numeric(df[col_t], errors="coerce")[valid]
@@ -19472,16 +22119,18 @@ class ThermoQGUI:
                 u_plot = x1 - wx.values
                 ax1.quiver(wx.values, wy.values, u_plot, np.zeros_like(u_plot), 
                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:blue")
-                ax1.set_xlabel(col_wx)
-                ax1.set_ylabel(col_wy)
+                ax1.set_xlabel(format_chemistry_axis_label(col_wx))
+                ax1.set_ylabel(format_chemistry_axis_label(col_wy))
                 ax1.set_title(f"U arrows (scaled by ratio to min of 1/dwdT_L({ex}@LIQUID))")
                 ax1.grid(False)
+                ax1.set_xlim(plot_x_min, plot_x_max)
+                ax1.set_ylim(plot_y_min, plot_y_max)
+                self._liquidus_apply_axis_ticks(ax1, step=1.0)
                 ax1.set_aspect("equal", adjustable="box")
                 fig1.tight_layout()
                 out1 = os.path.join(base_path, f"{prefix}_{ex}_horizontal.{ext}")
                 fig1.savefig(out1, **save_kwargs)
                 plt.close(fig1)
-                self.open_file_and_offer_save_as(out1, vector_window)
                 
                 # Figure 2: V arrows (vertical)
                 fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -19489,16 +22138,18 @@ class ThermoQGUI:
                 v_plot = y1 - wy.values
                 ax2.quiver(wx.values, wy.values, np.zeros_like(v_plot), v_plot, 
                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:orange")
-                ax2.set_xlabel(col_wx)
-                ax2.set_ylabel(col_wy)
+                ax2.set_xlabel(format_chemistry_axis_label(col_wx))
+                ax2.set_ylabel(format_chemistry_axis_label(col_wy))
                 ax2.set_title(f"V arrows (scaled by ratio to min of 1/dwdT_L({ey}@LIQUID))")
                 ax2.grid(False)
+                ax2.set_xlim(plot_x_min, plot_x_max)
+                ax2.set_ylim(plot_y_min, plot_y_max)
+                self._liquidus_apply_axis_ticks(ax2, step=1.0)
                 ax2.set_aspect("equal", adjustable="box")
                 fig2.tight_layout()
                 out2 = os.path.join(base_path, f"{prefix}_{ey}_vertical.{ext}")
                 fig2.savefig(out2, **save_kwargs)
                 plt.close(fig2)
-                self.open_file_and_offer_save_as(out2, vector_window)
                 
                 # Figure 3: Resultant Z vector
                 fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -19506,16 +22157,18 @@ class ThermoQGUI:
                 z_dy = v_plot
                 ax3.quiver(wx.values, wy.values, z_dx, z_dy, 
                           angles="xy", scale_units="xy", scale=1, width=0.003, color="tab:green")
-                ax3.set_xlabel(col_wx)
-                ax3.set_ylabel(col_wy)
+                ax3.set_xlabel(format_chemistry_axis_label(col_wx))
+                ax3.set_ylabel(format_chemistry_axis_label(col_wy))
                 ax3.set_title(f"Resultant Z = vector sum of U and V (scaled)")
                 ax3.grid(False)
+                ax3.set_xlim(plot_x_min, plot_x_max)
+                ax3.set_ylim(plot_y_min, plot_y_max)
+                self._liquidus_apply_axis_ticks(ax3, step=1.0)
                 ax3.set_aspect("equal", adjustable="box")
                 fig3.tight_layout()
                 out3 = os.path.join(base_path, f"{prefix}_Z_resultant.{ext}")
                 fig3.savefig(out3, **save_kwargs)
                 plt.close(fig3)
-                self.open_file_and_offer_save_as(out3, vector_window)
                 
                 # Figure 4: Z vectors on liquidus surface (with visualization options)
                 out4 = None
@@ -19525,52 +22178,63 @@ class ThermoQGUI:
                         status_label.config(text="Creating smooth liquidus surface...", foreground="orange")
                         vector_window.update()
                         
-                        # Get smooth surface for temperature
+                        # Get smooth surface for temperature (grid matches plot coordinate window)
                         t_smooth = self.create_smooth_surface(
-                            wx.values, wy.values, t_data.values, 
+                            wx.values, wy.values, t_data.values,
                             grid_resolution=100,
-                            smoothness=smoothness_var.get()
+                            smoothness=smoothness_var.get(),
+                            x_bounds=(plot_x_min, plot_x_max),
+                            y_bounds=(plot_y_min, plot_y_max),
                         )
                         
                         if t_smooth is not None:
+                            xi_plot, yi_plot, zi_plot = t_smooth
                             xi_grid_smooth, yi_grid_smooth, zi_grid = t_smooth
                         else:
+                            xi_plot, yi_plot, zi_plot = None, None, None
                             xi_grid_smooth, yi_grid_smooth, zi_grid = None, None, None
+                        t_vmin, t_vmax = self._liquidus_t_limits_in_view(
+                            wx.values, wy.values, t_data.values,
+                            plot_x_min, plot_x_max, plot_y_min, plot_y_max,
+                            zi_grid=zi_plot, xi_grid=xi_plot, yi_grid=yi_plot,
+                        )
+                        in_view = (
+                            (wx.values >= plot_x_min) & (wx.values <= plot_x_max)
+                            & (wy.values >= plot_y_min) & (wy.values <= plot_y_max)
+                        )
                         
                         # Get visualization type
                         viz = viz_var.get()
-                        
-                        # Normalize arrow size by dividing by the maximum absolute component.
-                        # Then scale arrows to a fixed fraction of the x/y axis span so they don't become excessively long.
+
+                        # Use the same arrow components as the Z resultant 2D plot (u_plot / v_plot).
                         z_dx_arr = np.asarray(z_dx, dtype=float)
                         z_dy_arr = np.asarray(z_dy, dtype=float)
-                        max_abs = float(np.nanmax(np.abs(np.r_[z_dx_arr, z_dy_arr])))
-                        if (not np.isfinite(max_abs)) or max_abs == 0:
-                            max_abs = 1.0
                         axis_span = max(float(x_max - x_min), float(y_max - y_min), 1e-9)
-                        arrow_scale_xy = 0.10 * axis_span
-                        z_dx_norm = (z_dx_arr / max_abs) * arrow_scale_xy
-                        z_dy_norm = (z_dy_arr / max_abs) * arrow_scale_xy
-                        
-                        # Calculate z_surface_values for vectors
-                        z_surface_values = []
-                        if xi_grid_smooth is not None:
-                            for i in range(len(wx.values)):
-                                x_idx = np.argmin(np.abs(xi_grid_smooth[0, :] - wx.values[i]))
-                                y_idx = np.argmin(np.abs(yi_grid_smooth[:, 0] - wy.values[i]))
-                                z_surf = zi_grid[y_idx, x_idx]
-                                z_surface_values.append(z_surf)
-                        else:
-                            z_surface_values = t_data.values
-                        z_surface_values = np.array(z_surface_values)
 
-                        # Helper: sample surface Z at an arbitrary (x, y) so vector tails lie on the surface
                         wx_arr = np.asarray(wx.values, dtype=float)
                         wy_arr = np.asarray(wy.values, dtype=float)
                         t_arr = np.asarray(t_data.values, dtype=float)
 
-                        def _surface_z_at(xp, yp):
+                        _surface_interp = None
+                        if xi_grid_smooth is not None and zi_grid is not None:
                             try:
+                                xi_1d = np.asarray(xi_grid_smooth[0, :], dtype=float)
+                                yi_1d = np.asarray(yi_grid_smooth[:, 0], dtype=float)
+                                if SCIPY_AVAILABLE:
+                                    _surface_interp = RegularGridInterpolator(
+                                        (yi_1d, xi_1d), np.asarray(zi_grid, dtype=float),
+                                        method='linear', bounds_error=False, fill_value=np.nan,
+                                    )
+                            except Exception:
+                                _surface_interp = None
+
+                        def _surface_z_at(xp, yp):
+                            xp, yp = float(xp), float(yp)
+                            try:
+                                if _surface_interp is not None:
+                                    z = float(_surface_interp((yp, xp)))
+                                    if np.isfinite(z):
+                                        return z
                                 if xi_grid_smooth is not None and zi_grid is not None:
                                     xi_1d = xi_grid_smooth[0, :]
                                     yi_1d = yi_grid_smooth[:, 0]
@@ -19579,39 +22243,91 @@ class ThermoQGUI:
                                     return float(zi_grid[y_idx, x_idx])
                             except Exception:
                                 pass
-                            # Fallback: nearest neighbor from available points
                             try:
                                 j = int(np.argmin((wx_arr - xp) ** 2 + (wy_arr - yp) ** 2))
                                 return float(t_arr[j])
                             except Exception:
                                 return float("nan")
+
+                        def _liquidus_vector_on_surface(x0, y0, dx_comp, dy_comp, len_scale=1.0):
+                            """Return tail/base and tip on liquidus surface (x,y,T)."""
+                            xs = float(x0)
+                            ys = float(y0)
+                            zs = _surface_z_at(xs, ys)
+                            xe = xs + float(dx_comp) * float(len_scale)
+                            ye = ys + float(dy_comp) * float(len_scale)
+                            ze = _surface_z_at(xe, ye)
+                            return xs, ys, zs, xe, ye, ze
+
+                        z_surface_values = np.array([
+                            _surface_z_at(xv, yv)
+                            for xv, yv in zip(wx_arr, wy_arr)
+                        ])
                         
                         if viz == "2D Heatmap":
                             if not MATPLOTLIB_AVAILABLE:
                                 messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'))
                                 return
-                            plt.figure(figsize=(10, 8))
-                            plt.xlabel(f"{col_wx} (%)")
-                            plt.ylabel(f"{col_wy} (%)")
-                            if xi_grid_smooth is not None:
-                                # Use smooth surface
-                                contour = plt.contourf(xi_grid_smooth, yi_grid_smooth, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
-                                plt.colorbar(contour, label='T (Temperature)')
+                            fig_hm, ax_hm = plt.subplots(figsize=(7.2, 7))
+                            ax_hm.set_xlabel(format_w_element_label(ex, ' (%)'))
+                            ax_hm.set_ylabel(format_w_element_label(ey, ' (%)'))
+                            heat_kwargs = {}
+                            if t_vmin is not None and t_vmax is not None and t_vmin < t_vmax:
+                                heat_kwargs['vmin'] = t_vmin
+                                heat_kwargs['vmax'] = t_vmax
+                            hm_mappable = None
+                            if xi_plot is not None:
+                                hm_mappable = ax_hm.imshow(
+                                    zi_plot,
+                                    extent=[plot_x_min, plot_x_max, plot_y_min, plot_y_max],
+                                    origin='lower',
+                                    aspect='equal',
+                                    cmap='coolwarm',
+                                    interpolation='bilinear',
+                                    **heat_kwargs,
+                                )
                             else:
-                                # Fallback to scatter
-                                scatter = plt.scatter(wx.values, wy.values, c=t_data.values, cmap='coolwarm', s=40, alpha=0.9)
-                                plt.colorbar(scatter, label='T (Temperature)')
+                                wx_v = wx.values[in_view]
+                                wy_v = wy.values[in_view]
+                                t_v = t_data.values[in_view]
+                                hm_mappable = ax_hm.scatter(
+                                    wx_v, wy_v, c=t_v, cmap='coolwarm', s=40, alpha=0.9, **heat_kwargs,
+                                )
                             
-                            # Overlay Z vectors
-                            plt.quiver(wx.values, wy.values, z_dx_norm, z_dy_norm,
-                                     angles="xy", scale_units="xy", scale=1, width=0.003, color="green", alpha=0.7)
+                            # Overlay Z vectors (same scaling as Z resultant plot)
+                            ax_hm.quiver(
+                                wx.values[in_view], wy.values[in_view],
+                                z_dx_arr[in_view], z_dy_arr[in_view],
+                                angles="xy", scale_units="xy", scale=1, width=0.003,
+                                color="green", alpha=0.7,
+                            )
                             
-                            plt.grid(False)
+                            ax_hm.set_xlim(plot_x_min, plot_x_max)
+                            ax_hm.set_ylim(plot_y_min, plot_y_max)
+                            self._liquidus_apply_axis_ticks(ax_hm, step=1.0)
+                            ax_hm.set_aspect("equal", adjustable="box")
+                            try:
+                                ax_hm.set_box_aspect(1)
+                            except Exception:
+                                pass
+                            ax_hm.grid(False)
+                            if hm_mappable is not None:
+                                try:
+                                    from mpl_toolkits.axes_grid1 import make_axes_locatable
+                                    divider = make_axes_locatable(ax_hm)
+                                    cax = divider.append_axes("right", size="4%", pad=0.12)
+                                    fig_hm.colorbar(hm_mappable, cax=cax, label='T (Temperature, K)')
+                                except Exception:
+                                    fig_hm.colorbar(
+                                        hm_mappable, ax=ax_hm, label='T (Temperature, K)', fraction=0.046, pad=0.04,
+                                    )
+                            exp_pts = lv_exp_ui['get_points'](ex, ey, z_hint='T')
+                            self._overlay_experimental_points_mpl_2d(ax_hm, exp_pts)
+                            fig_hm.tight_layout()
                             out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_Heatmap.{ext}")
-                            plt.savefig(out4, dpi=300, bbox_inches='tight')
-                            plt.close()
+                            fig_hm.savefig(out4, dpi=300, bbox_inches="tight", pad_inches=0.02)
+                            plt.close(fig_hm)
                             status_label.config(text=f"Heatmap saved: {out4}", foreground="green")
-                            self.open_file_and_offer_save_as(out4, vector_window)
                             
                         elif viz == "3D Static":
                             if not MATPLOTLIB_AVAILABLE:
@@ -19619,50 +22335,59 @@ class ThermoQGUI:
                                 return
                             fig4 = plt.figure(figsize=(12, 10))
                             ax4 = fig4.add_subplot(111, projection='3d')
-                            if xi_grid_smooth is not None:
-                                # Use smooth surface
-                                surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, cmap='coolwarm', alpha=0.98, 
-                                                      linewidth=0, antialiased=True, shade=True)
+                            surf_kwargs = {}
+                            if t_vmin is not None and t_vmax is not None and t_vmin < t_vmax:
+                                surf_kwargs['vmin'] = t_vmin
+                                surf_kwargs['vmax'] = t_vmax
+                            if xi_plot is not None:
+                                surf = ax4.plot_surface(
+                                    xi_plot, yi_plot, zi_plot, cmap='coolwarm', alpha=0.98,
+                                    linewidth=0, antialiased=True, shade=True, **surf_kwargs,
+                                )
                                 fig4.colorbar(surf, shrink=0.5, aspect=5, label='T (Temperature)')
                             else:
-                                # Fallback: use triangulated surface
-                                trisurf = ax4.plot_trisurf(wx.values, wy.values, t_data.values, cmap='coolwarm', 
-                                                          linewidth=0.0, antialiased=True, alpha=0.98)
+                                trisurf = ax4.plot_trisurf(
+                                    wx.values[in_view], wy.values[in_view], t_data.values[in_view],
+                                    cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98,
+                                    **surf_kwargs,
+                                )
                                 fig4.colorbar(trisurf, shrink=0.5, aspect=5, label='T (Temperature)')
                             
                             # Plot Z vectors on surface (tails on surface, arrows extend above)
                             mpl_len_scale = float(mpl_arrow_len_scale_var.get())
                             mpl_head_scale = float(mpl_arrow_head_scale_var.get())
                             arrow_head_ratio = max(0.05, min(0.8, 0.30 * mpl_head_scale))
-                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):
-                                x_start = wx.values[i]
-                                y_start = wy.values[i]
-                                z_start = z_surface_values[i] if len(z_surface_values) > i else t_data.values[i]
-                                
-                                dx_3d = z_dx_norm[i] * mpl_len_scale
-                                dy_3d = z_dy_norm[i] * mpl_len_scale
-                                # Only ensure the tail lies on the liquidus surface; keep arrow pointing above surface
-                                dz_3d = 0.0
-                                
-                                ax4.quiver(x_start, y_start, z_start, 
-                                          dx_3d, dy_3d, dz_3d,
-                                          color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5)
+                            view_indices = np.where(in_view)[0]
+                            for i in view_indices[::max(1, len(view_indices) // 100)]:
+                                xs, ys, zs, xe, ye, ze = _liquidus_vector_on_surface(
+                                    wx.values[i], wy.values[i],
+                                    z_dx_arr[i], z_dy_arr[i],
+                                    len_scale=mpl_len_scale,
+                                )
+                                ax4.quiver(
+                                    xs, ys, zs,
+                                    xe - xs, ye - ys, ze - zs,
+                                    color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5,
+                                )
                             
-                            ax4.set_xlabel(f"{col_wx} (%)")
-                            ax4.set_ylabel(f"{col_wy} (%)")
+                            ax4.set_xlabel(format_w_element_label(ex, ' (%)'))
+                            ax4.set_ylabel(format_w_element_label(ey, ' (%)'))
                             ax4.set_zlabel('T (Temperature)')
+                            ax4.set_xlim(plot_x_min, plot_x_max)
+                            ax4.set_ylim(plot_y_min, plot_y_max)
                             ax4.set_title('Z Vectors on Liquidus Surface')
                             # Apply user-selected view angles for 3D Static
                             try:
                                 ax4.view_init(elev=float(lv_elev_var.get()), azim=float(lv_azim_var.get()))
                             except Exception:
                                 pass
+                            exp_pts = lv_exp_ui['get_points'](ex, ey, z_hint='T')
+                            self._overlay_experimental_points_mpl_3d(ax4, exp_pts)
                             
                             out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d.{ext}")
                             plt.savefig(out4, **save_kwargs)
                             plt.close()
                             status_label.config(text=f"3D plot saved: {out4}", foreground="green")
-                            self.open_file_and_offer_save_as(out4, vector_window)
                             
                         elif viz == "3D Rotation GIF":
                             if not MATPLOTLIB_AVAILABLE:
@@ -19670,37 +22395,46 @@ class ThermoQGUI:
                                 return
                             fig4 = plt.figure(figsize=(12, 10))
                             ax4 = fig4.add_subplot(111, projection='3d')
-                            if xi_grid_smooth is not None:
-                                # Use smooth surface
-                                surf = ax4.plot_surface(xi_grid_smooth, yi_grid_smooth, zi_grid, cmap='coolwarm', alpha=0.98, 
-                                                      linewidth=0, antialiased=True, shade=True)
+                            surf_kwargs = {}
+                            if t_vmin is not None and t_vmax is not None and t_vmin < t_vmax:
+                                surf_kwargs['vmin'] = t_vmin
+                                surf_kwargs['vmax'] = t_vmax
+                            if xi_plot is not None:
+                                surf = ax4.plot_surface(
+                                    xi_plot, yi_plot, zi_plot, cmap='coolwarm', alpha=0.98,
+                                    linewidth=0, antialiased=True, shade=True, **surf_kwargs,
+                                )
                                 fig4.colorbar(surf, shrink=0.5, aspect=5, label='T (Temperature)')
                             else:
-                                # Fallback: use triangulated surface
-                                trisurf = ax4.plot_trisurf(wx.values, wy.values, t_data.values, cmap='coolwarm', 
-                                                          linewidth=0.0, antialiased=True, alpha=0.98)
+                                trisurf = ax4.plot_trisurf(
+                                    wx.values[in_view], wy.values[in_view], t_data.values[in_view],
+                                    cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98,
+                                    **surf_kwargs,
+                                )
                                 fig4.colorbar(trisurf, shrink=0.5, aspect=5, label='T (Temperature)')
                             
                             # Plot Z vectors on surface (tails on surface, arrows extend above)
                             mpl_len_scale = float(mpl_arrow_len_scale_var.get())
                             mpl_head_scale = float(mpl_arrow_head_scale_var.get())
                             arrow_head_ratio = max(0.05, min(0.8, 0.30 * mpl_head_scale))
-                            for i in range(0, len(wx.values), max(1, len(wx.values) // 100)):
-                                x_start = wx.values[i]
-                                y_start = wy.values[i]
-                                z_start = z_surface_values[i] if len(z_surface_values) > i else t_data.values[i]
-                                
-                                dx_3d = z_dx_norm[i] * mpl_len_scale
-                                dy_3d = z_dy_norm[i] * mpl_len_scale
-                                dz_3d = 0.0
-                                
-                                ax4.quiver(x_start, y_start, z_start, 
-                                          dx_3d, dy_3d, dz_3d,
-                                          color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5)
+                            view_indices = np.where(in_view)[0]
+                            for i in view_indices[::max(1, len(view_indices) // 100)]:
+                                xs, ys, zs, xe, ye, ze = _liquidus_vector_on_surface(
+                                    wx.values[i], wy.values[i],
+                                    z_dx_arr[i], z_dy_arr[i],
+                                    len_scale=mpl_len_scale,
+                                )
+                                ax4.quiver(
+                                    xs, ys, zs,
+                                    xe - xs, ye - ys, ze - zs,
+                                    color='green', arrow_length_ratio=arrow_head_ratio, linewidth=1.5,
+                                )
                             
-                            ax4.set_xlabel(f"{col_wx} (%)")
-                            ax4.set_ylabel(f"{col_wy} (%)")
+                            ax4.set_xlabel(format_w_element_label(ex, ' (%)'))
+                            ax4.set_ylabel(format_w_element_label(ey, ' (%)'))
                             ax4.set_zlabel('T (Temperature)')
+                            ax4.set_xlim(plot_x_min, plot_x_max)
+                            ax4.set_ylim(plot_y_min, plot_y_max)
                             ax4.set_title('Z Vectors on Liquidus Surface')
                             
                             def _rotate(angle):
@@ -19726,45 +22460,74 @@ class ThermoQGUI:
                             ani.save(out4, writer='pillow', fps=fps_val, dpi=100)
                             plt.close()
                             status_label.config(text=f"GIF saved: {out4}", foreground="green")
-                            self.open_file_and_offer_save_as(out4, vector_window)
                             
                         else:  # Plotly 3D
                             if PLOTLY_AVAILABLE:
-                                if xi_grid_smooth is not None:
-                                    # Use smooth surface
+                                surf_cbar = dict(title='T (Temperature)')
+                                surf_kwargs = dict(
+                                    colorscale='RdBu', reversescale=True, opacity=0.98,
+                                    colorbar=surf_cbar,
+                                )
+                                if t_vmin is not None and t_vmax is not None and t_vmin < t_vmax:
+                                    surf_kwargs['cmin'] = t_vmin
+                                    surf_kwargs['cmax'] = t_vmax
+                                if xi_plot is not None:
                                     fig_plotly = go.Figure(data=[
-                                        go.Surface(x=xi_grid_smooth, y=yi_grid_smooth, z=zi_grid, 
-                                                  colorscale='RdBu', reversescale=True, opacity=0.98,
-                                                  colorbar=dict(title='T (Temperature)'))
+                                        go.Surface(
+                                            x=xi_plot, y=yi_plot, z=zi_plot,
+                                            **surf_kwargs,
+                                        )
                                     ])
                                 else:
-                                    # Fallback to scatter
+                                    marker_kwargs = dict(
+                                        size=3, colorscale='RdBu', reversescale=True, opacity=0.85,
+                                        colorbar=surf_cbar,
+                                    )
+                                    if t_vmin is not None and t_vmax is not None and t_vmin < t_vmax:
+                                        marker_kwargs['cmin'] = t_vmin
+                                        marker_kwargs['cmax'] = t_vmax
                                     fig_plotly = go.Figure(data=[go.Scatter3d(
-                                        x=wx.values, y=wy.values, z=t_data.values,
+                                        x=wx.values[in_view], y=wy.values[in_view], z=t_data.values[in_view],
                                         mode='markers',
-                                        marker=dict(size=3, color=t_data.values, colorscale='RdBu', reversescale=True, opacity=0.85,
-                                                    colorbar=dict(title='T (Temperature)'))
+                                        marker=dict(
+                                            color=t_data.values[in_view],
+                                            **marker_kwargs,
+                                        ),
                                     )])
                                 
-                                # Add Z vectors as quiver (using cone markers)
-                                # Sample vectors for clarity
-                                sample_indices = list(range(0, len(wx.values), max(1, len(wx.values) // 50)))
-                                x_starts = wx.values[sample_indices]
-                                y_starts = wy.values[sample_indices]
-                                z_starts = z_surface_values[sample_indices] if len(z_surface_values) > 0 else t_data.values[sample_indices]
+                                view_indices = np.where(in_view)[0]
+                                sample_indices = list(view_indices[::max(1, len(view_indices) // 50)])
+                                plotly_vec_scale = float(plotly_arrow_len_scale_var.get())
+                                x_starts = []
+                                y_starts = []
+                                z_starts = []
+                                x_ends = []
+                                y_ends = []
+                                z_ends = []
+                                for i in sample_indices:
+                                    xs, ys, zs, xe, ye, ze = _liquidus_vector_on_surface(
+                                        wx.values[i], wy.values[i],
+                                        z_dx_arr[i], z_dy_arr[i],
+                                        len_scale=plotly_vec_scale,
+                                    )
+                                    if not (np.isfinite(zs) and np.isfinite(ze)):
+                                        continue
+                                    x_starts.append(xs)
+                                    y_starts.append(ys)
+                                    z_starts.append(zs)
+                                    x_ends.append(xe)
+                                    y_ends.append(ye)
+                                    z_ends.append(ze)
+                                x_starts = np.asarray(x_starts, dtype=float)
+                                y_starts = np.asarray(y_starts, dtype=float)
+                                z_starts = np.asarray(z_starts, dtype=float)
+                                x_ends = np.asarray(x_ends, dtype=float)
+                                y_ends = np.asarray(y_ends, dtype=float)
+                                z_ends = np.asarray(z_ends, dtype=float)
+                                u_vec = x_ends - x_starts
+                                v_vec = y_ends - y_starts
+                                w_vec = z_ends - z_starts
                                 
-                                # Plotly 3D: keep arrow HEAD size uniform/small; show differences mainly by arrow LENGTH.
-                                # Draw shafts with Scatter3d(lines), then draw only arrowheads with fixed-size cones.
-                                plotly_vec_scale = float(plotly_arrow_len_scale_var.get())  # length multiplier only
-                                u_vec = z_dx_arr[sample_indices] * plotly_vec_scale
-                                v_vec = z_dy_arr[sample_indices] * plotly_vec_scale
-                                w_vec = np.zeros_like(u_vec)
-                                
-                                x_ends = x_starts + u_vec
-                                y_ends = y_starts + v_vec
-                                z_ends = z_starts + w_vec
-                                
-                                # Shafts (no markers/dots)
                                 x_lines, y_lines, z_lines = [], [], []
                                 for xs, ys, zs, xe, ye, ze in zip(x_starts, y_starts, z_starts, x_ends, y_ends, z_ends):
                                     x_lines.extend([xs, xe, None])
@@ -19779,7 +22542,6 @@ class ThermoQGUI:
                                     name="Z vector shafts"
                                 ))
                                 
-                                # Arrowheads: unit directions + fixed-size cones at tips
                                 mags = np.sqrt(u_vec**2 + v_vec**2 + w_vec**2)
                                 mags = np.where((~np.isfinite(mags)) | (mags == 0), 1.0, mags)
                                 u_dir = u_vec / mags
@@ -19798,9 +22560,10 @@ class ThermoQGUI:
                                 ))
                                 
                                 fig_plotly.update_layout(
+                                    showlegend=False,
                                     scene=dict(
-                                        xaxis_title=f"{col_wx} (%)",
-                                        yaxis_title=f"{col_wy} (%)",
+                                        xaxis=dict(title=format_w_element_label(ex, ' (%)'), range=[plot_x_min, plot_x_max]),
+                                        yaxis=dict(title=format_w_element_label(ey, ' (%)'), range=[plot_y_min, plot_y_max]),
                                         zaxis_title='T (Temperature)',
                                     ),
                                     width=900, height=700,
@@ -19808,7 +22571,6 @@ class ThermoQGUI:
                                 out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
                                 fig_plotly.write_html(out4)
                                 status_label.config(text=f"Interactive 3D plot saved: {out4}", foreground="green")
-                                self.open_file_and_offer_save_as(out4, vector_window)
                             else:
                                 # Fallback HTML without plotly
                                 out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
@@ -19846,19 +22608,25 @@ class ThermoQGUI:
                                     # but apply the same visual multiplier as Plotly cones.
                                     plotly_vec_scale = float(plotly_arrow_len_scale_var.get())
                                     for i in sample_indices:
-                                        x_start = float(wx.values[i])
-                                        y_start = float(wy.values[i])
-                                        z_start = float(z_surface_values[i] if len(z_surface_values) > i else t_data.values[i])
-                                        dx_3d = float(z_dx_arr[i] * plotly_vec_scale)
-                                        dy_3d = float(z_dy_arr[i] * plotly_vec_scale)
-                                        f.write('  {type: "scatter3d", mode: "lines", x: [' + str(x_start) + ', ' + str(x_start + dx_3d) + '], y: [' + str(y_start) + ', ' + str(y_start + dy_3d) + '], z: [' + str(z_start) + ', ' + str(z_start) + '], line: {color: "green", width: 3}, showlegend: false},\n')
+                                        xs, ys, zs, xe, ye, ze = _liquidus_vector_on_surface(
+                                            wx.values[i], wy.values[i],
+                                            z_dx_arr[i], z_dy_arr[i],
+                                            len_scale=plotly_vec_scale,
+                                        )
+                                        f.write(
+                                            '  {type: "scatter3d", mode: "lines", x: ['
+                                            + str(xs) + ', ' + str(xe)
+                                            + '], y: [' + str(ys) + ', ' + str(ye)
+                                            + '], z: [' + str(zs) + ', ' + str(ze)
+                                            + '], line: {color: "green", width: 3}, showlegend: false},\n'
+                                        )
                                     f.write('];\n')
                                     
                                     f.write('var data = [surface, ...vectors];\n')
                                     f.write('var layout = {\n')
                                     f.write('  scene: {\n')
-                                    f.write(f'    xaxis: {{title: "{col_wx} (%)"}},\n')
-                                    f.write(f'    yaxis: {{title: "{col_wy} (%)"}},\n')
+                                    f.write(f'    xaxis: {{title: "{format_w_element_label(ex, " (%)")}", range: [{plot_x_min}, {plot_x_max}]}},\n')
+                                    f.write(f'    yaxis: {{title: "{format_w_element_label(ey, " (%)")}", range: [{plot_y_min}, {plot_y_max}]}},\n')
                                     f.write('    zaxis: {title: "T (Temperature)"}\n')
                                     f.write('  }\n')
                                     f.write('};\n')
@@ -19866,7 +22634,6 @@ class ThermoQGUI:
                                     f.write('</script>\n')
                                     f.write('</body></html>')
                                 status_label.config(text=f"Interactive 3D plot saved: {out4}", foreground="green")
-                                self.open_file_and_offer_save_as(out4, vector_window)
                         
                         # Update success message
                         if out4:
@@ -19959,6 +22726,14 @@ class ThermoQGUI:
             excel_export_frame.config(text=self.tr('liqvec_export_clean_frame', 'Export Cleaned Data (Excel)'))
             btn_lv_xlbrowse.config(text=self.tr('pandat_browse', 'Browse'))
             btn_lv_xlexp.config(text=self.tr('ui_export', 'Export'))
+            coord_frame.config(text=self.tr('liqvec_coord_frame', 'Coordinate Range'))
+            lbl_lv_coord_hint.config(text=self.tr('liqvec_coord_hint', ''))
+            lbl_lv_xmin.config(text=self.tr('liqvec_x_min', 'X Min:'))
+            lbl_lv_xmax.config(text=self.tr('liqvec_x_max', 'X Max:'))
+            lbl_lv_ymin.config(text=self.tr('liqvec_y_min', 'Y Min:'))
+            lbl_lv_ymax.config(text=self.tr('liqvec_y_max', 'Y Max:'))
+            btn_lv_coord_reset.config(text=self.tr('liqvec_coord_reset', 'Reset to default (square)'))
+            self._refresh_plot_exp_lang(lv_exp_widgets)
             viz_frame.config(text=self.tr('liqvec_viz_frame', 'Visualization'))
             rb_lv_v2.config(text=self.tr('batch_viz_2d', '2D Heatmap'))
             rb_lv_v3.config(text=self.tr('batch_viz_3d', '3D Static'))

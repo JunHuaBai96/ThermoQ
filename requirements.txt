@@ -7,13 +7,14 @@ numpy>=1.21.0
 pandas>=2.0.0
 openpyxl>=3.1.0       # Read/write .xlsx (Pandat/Thermo-Calc import & extract)
 xlrd==1.2.0           # Read legacy .xls (xlrd>=2.0 dropped .xls support)
-Pillow>=9.0.0         # Image handling in the GUI
+Pillow>=9.0.0         # GUI icons; BMP/GIF export via PIL when Matplotlib cannot write directly
 
 # --- Plotting (recommended; required for Plot menu tools) ---
-matplotlib>=3.5.0     # 2D/3D static plots, rotation GIFs (phase surfaces, miscibility gap, …)
-plotly>=5.0.0         # Interactive 3D HTML (Plotly 3D, TriST visualize)
+matplotlib>=3.5.0     # 2D/3D static plots, rotation GIFs, k–T curves, liquidus vectors, …
+plotly>=5.0.0         # Interactive 3D HTML (Plotly 3D, isocomposition, TriST visualize)
 
 # --- Plot export & smoothing (optional but recommended) ---
 kaleido               # Plotly static image export (write_image)
 scikit-learn>=1.0.0   # Gaussian-process smooth surfaces (phase / miscibility gap surfaces)
-scipy>=1.8.0          # Interpolation fallback when sklearn is unavailable
+scipy>=1.8.0          # CubicSpline & griddata (isocomposition curves, liquidus-surface vectors, GP fallback)
+scikit-image>=0.19.0  # Optional: smooth TriST f=0 dome in Matplotlib 3D (marching cubes)

@@ -1,0 +1,25 @@
+go da
+sw u
+d-sys
+Ti Cu Fe
+rej ph *
+res ph LIQUID:L BCC_A2
+get
+go  p-3
+s-c n=1 p=101325 t=700 w(FE)=0.01 w(CU)=0.00
+l-c
+C-E
+S-A-V 1
+w(FE)
+0
+0.15
+0.005
+save TiFe-0.00Cu_T0.POL y
+step
+t-z
+BCC_A2
+liquid
+po
+s-d-a x w(FE) 
+s-d-a y t-k
+make file TiFe-0.00Cu_T0.exp

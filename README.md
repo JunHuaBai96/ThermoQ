@@ -10,23 +10,6 @@
 
 ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Calc data ingestion, batch computations, and rich visualization).
 
-### Recent updates (after 2026-04-30)
-
-- **Miscibility Gap workflow (Thermo-Calc)**
-  - **Extract Thermo-calc Results → Miscibility Gap**: parse temperature-sweep `.exp` files; read axis labels from `XTEXT`/`YTEXT`; extract boundary points between `$ PLOTTED` … `BLOCKEND`; label curves by **Phase** (e.g. `LIQUID#1`); export **`miscibility_gap.xlsx`** (columns: `File`, `Temperature_K`, `Phase`, composition axes).
-  - **Plot → Plot Miscibility Gap**: two pages — **At Temperature** (2D/3D boundary lines per Phase, with interpolation when the target *T* is missing) and **Temperature Surfaces** (single stacked smooth surface over all temperatures, **isotherm interval** labeling, *Z* clipped to data minimum temperature).
-  - Default filename filter for miscibility-gap exports: temperature-style names such as `AlCuLi_800.exp` / `AlCuLi_300K.exp`.
-- **Thermo-calc Batch File Generator**
-  - Loop-body template supports **`%T%`** with UI temperature min / max / step (Cartesian product: compositions × temperatures).
-  - When a generated loop iteration duplicates the **Template0 baseline** (`s-c t=…`, `s-c w(...)` / `s-c x(...)`), that entire loop block is **skipped** in the output `.tcm` (avoids double calculation at the same *T* or composition).
-- **Extract Thermo-calc Results → Melting Range**
-  - Optional **filename filter** (regex); default `*_np-T.exp`.
-- **UI / i18n**
-  - Miscibility Gap tools fully wired to **Help → Language** (EN / 中文).
-  - Plot Miscibility Gap window: scrollable layout; plot buttons on the active tab only.
-
-Sample data: `test/Liquid Miscibility Gap/`, `test/Fcc Miscibility Gap/`, `test/Generate Thermo-calc Batch File-np-T/`.
-
 ### Highlights
 
 - **GUI-first** workflow with batch generators, extractors, and plotters.
@@ -45,20 +28,30 @@ Sample data: `test/Liquid Miscibility Gap/`, `test/Fcc Miscibility Gap/`, `test/
   - **Export columns**: select columns, then **Save CSV** / **Save Excel** to export *only selected columns*.
   - **Ternary corner fill**: for ternary systems, missing values in **Q/P/Beta** at composition edges can be filled using a Newton forward-difference extrapolation near \(w=0\).
   - **Quantity (Z)=All**: mass-generate plots for all numeric columns and plot types into the chosen output directory.
+  - **Plot curves (composition)**: fix one element at one or more wt% values; plot **ΔT**, **ΔTs**, **Qtrue**, **Q/P/β**, etc. vs a varying element; multi-quantity overlay on one figure; customizable coordinate range.
+  - **Image export**: BMP/GIF and other formats use a unified save path (PIL conversion where Matplotlib cannot write directly).
 
 ### Plot tools
 
 - **Plot Phase Surfaces**: 2D heatmap, 3D static, 3D rotation GIF, Plotly 3D (interactive HTML).
 - **Plot Qtrue Values**
 - **Plot Liquidus Vectors**
+  - U/V/Z vector plots from Pandat P or P-S data.
+  - Optional **Z vectors on liquidus surface** (3D static / GIF / Plotly): arrow tips follow the local liquidus temperature field.
+  - Saved files are not opened automatically; use **Save As** when prompted.
 - **Plot Solid-Liquid Partition Coefficients**
+  - **Liquidus tab**: k-vector field and |k−1| heatmap / 3D / GIF / Plotly from imported P or P-S data.
+  - **isotherm tab**: U/V/Z at a user-defined temperature from All table_Lever / All table_Scheil (with interpolation).
+  - **isocomposition tab**: tie-line projection and 3D animation for a fixed alloy O; optional **k vs T curves** (k = w(*@solid)/w(*@LIQUID)) with sampled **temperature tick labels**; separate coordinate ranges for composition plots and k–T curves; full EN/中文 i18n.
 - **Plot T-zero Surface**
   - **Thermo-Calc** workflow: load `t_zero.xlsx` produced by **Extract Thermo-calc Results → T-zero**.
   - **Pandat** workflow: load `T0.xlsx` produced by **Extract Pandat Results → T-zero**.
+  - User-defined **isotherm interval (K)** for labeled T0 contours on 2D/3D surfaces.
 - **Plot Miscibility Gap**
   - Load **`miscibility_gap.xlsx`** from **Extract Thermo-calc Results → Miscibility Gap**.
   - **At Temperature**: user-specified *T* (K); missing temperatures are interpolated from bracketing values; boundaries colored/labeled by **Phase**; 2D lines or 3D/GIF/Plotly.
   - **Temperature Surfaces**: all boundary points stacked into one smooth *T* surface; **isotherm interval (K)** for labeled contours; surface not drawn below minimum *T* in the Excel data.
+  - Chemistry axis labels use canonical element casing (e.g. w(Cu), MOLE_PERCENT_Cu).
   - Shared output settings: visualization mode, smoothness, 3D view angles, image format, GIF parameters.
 
 ### Tools
@@ -112,7 +105,10 @@ Optional packages enable extra plots:
 - `matplotlib` — 2D/3D static plots and rotation GIFs
 - `plotly` — interactive 3D HTML
 - `kaleido` — Plotly static image export
-- `scikit-learn` / `scipy` — smooth surfaces (phase surfaces, miscibility gap temperature surfaces)
+- `scikit-learn` / `scipy` — smooth surfaces (phase surfaces, miscibility gap, isocomposition curve smoothing, liquidus-surface interpolation)
+- `scikit-image` — optional TriST f=0 dome rendering in Matplotlib 3D (marching cubes)
+
+Sample data: `test/` (Al-Cu-Li, miscibility gap, batch generators, Pandat extract examples).
 
 ### Run
 
@@ -125,23 +121,6 @@ python main.py
 ## 中文
 
 ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat / Thermo-Calc 数据导入、批量计算与可视化）。
-
-### 近期更新（2026-04-30 之后）
-
-- **混溶隙工作流（Thermo-Calc）**
-  - **Extract Thermo-calc Results → 混溶隙**：解析按温度导出的 `.exp`；从 `XTEXT`/`YTEXT` 读取轴标签；在 `$ PLOTTED` … `BLOCKEND` 之间提取边界点；按 **Phase**（如 `LIQUID#1`）标记；导出 **`miscibility_gap.xlsx`**（`File`、`Temperature_K`、`Phase`、成分列）。
-  - **Plot → 绘制混溶隙**：两个页面 — **指定温度**（按 Phase 分色边界线，目标温度不存在时在邻近温度间插值）与 **温度曲面**（全部温度叠加为单一平滑曲面、**等温线间隔**标注、曲面不低于数据最低温度）。
-  - 混溶隙导出默认文件名过滤：如 `AlCuLi_800.exp`、`AlCuLi_300K.exp`。
-- **Thermo-calc 批处理文件生成器**
-  - 循环体模板支持 **`%T%`** 及界面中的温度最小值/最大值/步长（成分 × 温度笛卡尔积）。
-  - 若某次循环的 **温度或成分与 Template0 基准**（`s-c t=…`、`s-c w(...)` / `s-c x(...)`）重复，则**整段循环体不写入**输出 `.tcm`，避免重复计算（例如 Template0 已算 300 K 时不再生成 300 K 循环块）。
-- **Extract Thermo-calc Results → 熔程**
-  - 可选 **文件名过滤**（正则）；默认 `*_np-T.exp`。
-- **界面 / 国际化**
-  - 混溶隙相关工具已接入 **Help → Language**（中/英切换）。
-  - 绘制混溶隙窗口可滚动；绘图按钮仅在当前标签页显示。
-
-示例数据：`test/Liquid Miscibility Gap/`、`test/Fcc Miscibility Gap/`、`test/Generate Thermo-calc Batch File-np-T/`。
 
 ### 亮点功能
 
@@ -161,20 +140,30 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - **Export columns**：选择列后用 **Save CSV / Save Excel** 导出（只导出勾选列）。
   - **三元角点填充**：三元体系下 **Q/P/Beta** 在边界 \(w=0\) 附近可用 Newton 前向差分外推进行填充。
   - **Quantity(Z)=All**：对所有数值列与多种图形类型批量输出到指定目录。
+  - **绘制成分曲线**：固定一种组元及一个或多个含量，以另一组元为横轴绘制 **ΔT**、**ΔTs**、**Qtrue**、**Q/P/β** 等；支持多物理量叠加与坐标范围设置。
+  - **图像导出**：BMP/GIF 等格式经统一保存路径处理（Matplotlib 不能直接写入时由 PIL 转换）。
 
 ### Plot 绘图工具
 
 - **Plot Phase Surfaces**：2D 热图、3D 静态、3D 旋转 GIF、Plotly 3D（交互 HTML）。
 - **Plot Qtrue Values**
-- **Plot Liquidus Vectors**
-- **Plot Solid-Liquid Partition Coefficients**
+- **Plot Liquidus Vectors（液相面向量）**
+  - 由 Pandat P 或 P-S 数据生成 U/V/Z 向量图。
+  - 可选 **液相面上的 Z 向量**（3D 静态 / GIF / Plotly）：箭头终点贴合局部液相面温度场。
+  - 保存后不再自动打开文件，可按提示另存为。
+- **Plot Solid-Liquid Partition Coefficients（固-液分配系数）**
+  - **液相线页**：由已导入 P/P-S 绘制 k 向量场及 |k−1| 热力图 / 3D / GIF / Plotly。
+  - **等温页**：从 All table_Lever / All table_Scheil 在指定温度 T 计算 U/V/Z（含插值）。
+  - **等成分页**：固定合金成分 O 的固-液配分投影与 3D 动画；可选 **k–T 曲线**（k = w(*@固相)/w(*@LIQUID)），横轴标注采样**温度刻度**；成分图与 k–T 曲线分别可设坐标范围；完整中/英 i18n。
 - **Plot T-zero Surface**
   - **Thermo-Calc**：加载 **Extract Thermo-calc Results → T-zero** 生成的 `t_zero.xlsx`。
   - **Pandat**：加载 **Extract Pandat Results → T-zero** 生成的 `T0.xlsx`。
+  - 可设置 **等温线间隔 (K)**，用于 2D/3D 曲面上 T0 等温线标注。
 - **Plot Miscibility Gap（绘制混溶隙）**
   - 加载 **Extract Thermo-calc Results → 混溶隙** 导出的 **`miscibility_gap.xlsx`**。
   - **指定温度**：用户输入 *T* (K)；缺失温度在邻近值间插值；按 **Phase** 分色与图例；支持 2D / 3D / GIF / Plotly。
   - **温度曲面**：全部边界叠加为单一平滑温度曲面；**等温线间隔 (K)**；曲面不低于 Excel 中最低温度。
+  - 化学轴标签采用规范元素大小写（如 w(Cu)、MOLE_PERCENT_Cu）。
   - 共用：可视化方式、平滑度、3D 视角、输出路径/格式、GIF 参数。
 
 ### Tools 工具集
@@ -213,6 +202,8 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 ### 安装与运行
 
 - 推荐 **Python 3.8+**（GUI 依赖标准库 `tkinter`；Linux 需安装 `python3-tk`）。
+- 可选依赖说明：`matplotlib` / `plotly` / `kaleido` 用于各类绘图与 Plotly 静态导出；`scikit-learn` / `scipy` 用于曲面平滑、等成分曲线及液相面插值；`scikit-image` 用于 TriST 可选 3D 渲染。
+- 示例数据：`test/`（Al-Cu-Li、混溶隙、批处理生成、Pandat 提取等）。
 
 ```bash
 pip install -r requirements.txt
