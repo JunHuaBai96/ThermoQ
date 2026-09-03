@@ -28,7 +28,8 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
   - **Export columns**: select columns, then **Save CSV** / **Save Excel** to export *only selected columns*.
   - **Ternary corner fill**: for ternary systems, missing values in **Q/P/Beta** at composition edges can be filled using a Newton forward-difference extrapolation near \(w=0\).
   - **Quantity (Z)=All**: mass-generate plots for all numeric columns and plot types into the chosen output directory.
-  - **Plot curves (composition)**: fix one element at one or more wt% values; plot **ΔT**, **ΔTs**, **Qtrue**, **Q/P/β**, etc. vs a varying element; multi-quantity overlay on one figure; customizable coordinate range.
+  - **Plot curves (composition)**: pick a **fixed element** and **fixed content (wt%)** (single value or comma-separated list, e.g. `5, 10, 15`); plot **ΔT**, **ΔTs**, **Qtrue**, **Q/P/β**, etc. vs a **varying element**; multi-quantity overlay on one figure; customizable coordinate range.
+  - **Plot Labels**: optional custom figure title and X/Y/Z axis names (empty fields use defaults).
   - **Image export**: BMP/GIF and other formats use a unified save path (PIL conversion where Matplotlib cannot write directly).
 
 ### Plot tools
@@ -53,6 +54,7 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
   - **Temperature Surfaces**: all boundary points stacked into one smooth *T* surface; **isotherm interval (K)** for labeled contours; surface not drawn below minimum *T* in the Excel data.
   - Chemistry axis labels use canonical element casing (e.g. w(Cu), MOLE_PERCENT_Cu).
   - Shared output settings: visualization mode, smoothness, 3D view angles, image format, GIF parameters.
+- **Plot Labels** (where available): optional title and axis names on exported figures; language follows **Help → Language**.
 
 ### Tools
 
@@ -75,10 +77,16 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
     - Remove exactly **one** element row to make it the balance element: `balance = total − Σ(swept)`; or
     - Keep all rows and enable **balance last in list** to sweep the first \(n-1\) and compute the last.
   - **Default output filename pattern** preserves canonical element casing (e.g. `Si`, `Li`) instead of forcing upper-case.
-- **Extract Thermo-calc Results**
+- **Extract Thermo-calc Results** (four tabs; scrollable window)
   - **Melting Range**: scan `.exp` blocks and export liquidus/solidus/melting-range to Excel; optional regex filename filter (default `*_np-T.exp`).
   - **Miscibility Gap**: export phase boundary curves vs temperature to **`miscibility_gap.xlsx`**; temperature from filename; Phase from `$ PLOTTED` lines.
   - **T-zero**: extract `T0 (K)` vs composition and export `t_zero.xlsx`.
+  - **TriST Zone** (Thermo-Calc Gibbs):
+    - Recursively read `*_Gibbs.exp` (default filter `.*_Gibbs.exp$`); parse `$ PLOTTED COLUMNS ARE : W(*) and GMR(PHASE)` sections.
+    - Pair LIQUID and a solid phase at the same *T* and composition; export TriST workbook (`T0_tie_1D`, `T0_lines`, `TriST_boundaries`, `TriST_mask`) and optional `_trist_cube.npz`.
+    - **Settings**: user-selected 2D composition plane (X/Y `w(*)`); grid size *N* for cubic interpolation; axes auto-detected from folder sample.
+    - **Visualize TriST**: Plotly / 2D / 3D / GIF (shared panel with Pandat TriST); optional **Plot Labels**.
+  - **Template1 (optional, all four tabs)**: after processing, generate abnormal-point **`.tcm`** files from Status error records using a Template1 reference (`%Element%`, `%T%` placeholders).
 - **Extract Pandat Results**
   - **P/Ts (Lever/Scheil)**: read Pandat All table folders (`.csv` / `.dat`) and generate `P.xlsx`, `Ts.xlsx`, `P-S.xlsx`, `Ts-S.xlsx`; supports **Import to ThermoQ** for one-click import after extraction.
   - **T-zero**: read `All table_T0` and export `T0.xlsx` with normalized `w(Element)` columns.
@@ -101,14 +109,19 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
 pip install -r requirements.txt
 ```
 
-Optional packages enable extra plots:
-- `matplotlib` — 2D/3D static plots and rotation GIFs
-- `plotly` — interactive 3D HTML
+**Recommended / feature-specific packages** (see `requirements.txt`):
+- `matplotlib` — 2D/3D static plots, rotation GIFs, **TriST workbook build** (Thermo-Calc & Pandat)
+- `scipy` — cubic interpolation & griddata; **required for TriST extraction** and several smooth-surface tools
+- `plotly` — interactive 3D HTML (TriST visualize, phase surfaces, …)
 - `kaleido` — Plotly static image export
-- `scikit-learn` / `scipy` — smooth surfaces (phase surfaces, miscibility gap, isocomposition curve smoothing, liquidus-surface interpolation)
+- `scikit-learn` — Gaussian-process smooth surfaces (phase / miscibility gap)
 - `scikit-image` — optional TriST f=0 dome rendering in Matplotlib 3D (marching cubes)
 
-Sample data: `test/` (Al-Cu-Li, miscibility gap, batch generators, Pandat extract examples).
+Sample data under `test/`:
+- `Extract Thermo-calc Results-Gibbs/` — Al-Cu-Li COST Gibbs `.exp` for TriST extract
+- `Extract Thermo-calc Results-Melting Range/` — melting-range `.exp` examples
+- `Generate Thermo-calc Batch File-Melting Range/` & `Generate Thermo-calc Batch File-Gibbs/` — `.tcm` batch templates
+- Pandat extract / batch examples (Al-Cu-Li, miscibility gap, …)
 
 ### Run
 
@@ -140,7 +153,8 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - **Export columns**：选择列后用 **Save CSV / Save Excel** 导出（只导出勾选列）。
   - **三元角点填充**：三元体系下 **Q/P/Beta** 在边界 \(w=0\) 附近可用 Newton 前向差分外推进行填充。
   - **Quantity(Z)=All**：对所有数值列与多种图形类型批量输出到指定目录。
-  - **绘制成分曲线**：固定一种组元及一个或多个含量，以另一组元为横轴绘制 **ΔT**、**ΔTs**、**Qtrue**、**Q/P/β** 等；支持多物理量叠加与坐标范围设置。
+  - **绘制成分曲线**：选择**固定组元**与**固定含量 (wt%)**（单个数值或逗号分隔，如 `5, 10, 15`），以**变化组元**为横轴绘制 **ΔT**、**ΔTs**、**Qtrue**、**Q/P/β** 等；支持多物理量叠加与坐标范围设置。
+  - **图名与坐标轴**：可自定义图标题与 X/Y/Z 轴名称（留空则使用默认）。
   - **图像导出**：BMP/GIF 等格式经统一保存路径处理（Matplotlib 不能直接写入时由 PIL 转换）。
 
 ### Plot 绘图工具
@@ -165,6 +179,7 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - **温度曲面**：全部边界叠加为单一平滑温度曲面；**等温线间隔 (K)**；曲面不低于 Excel 中最低温度。
   - 化学轴标签采用规范元素大小写（如 w(Cu)、MOLE_PERCENT_Cu）。
   - 共用：可视化方式、平滑度、3D 视角、输出路径/格式、GIF 参数。
+- **图名与坐标轴**（适用处）：导出图可选自定义标题与坐标轴名；语言随 **Help → Language** 切换。
 
 ### Tools 工具集
 
@@ -183,10 +198,16 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
     - 温度单位来自 `<unit name="T" value="K|C|F" />`（用于文件名后缀）。
   - **平衡组元**：删除恰好 1 行作为平衡组元（`total − Σ`），或保留全部并勾选“按列表平衡最后一个”。
   - **默认文件名模式**保持规范元素大小写（如 `Si`、`Li`）。
-- **Extract Thermo-calc Results**
+- **Extract Thermo-calc Results**（四个标签页；可滚动窗口）
   - **Melting Range（熔程）**：扫描 `.exp` 导出液相线/固相线/熔程；可选文件名正则过滤（默认 `*_np-T.exp`）。
   - **Miscibility Gap（混溶隙）**：导出相边界曲线与温度至 **`miscibility_gap.xlsx`**；温度来自文件名；Phase 来自 `$ PLOTTED`。
   - **T-zero**：提取 `T0 (K)` 与成分，导出 `t_zero.xlsx`。
+  - **TriST 区域（Thermo-Calc Gibbs）**：
+    - 递归读取 `*_Gibbs.exp`（默认 `.*_Gibbs.exp$`）；解析 `$ PLOTTED COLUMNS ARE : W(*) and GMR(相名)` 数据段。
+    - 在相同 *T* 与成分下配对 LIQUID 与固相；导出 TriST 工作簿（`T0_tie_1D`、`T0_lines`、`TriST_boundaries`、`TriST_mask`）及可选 `_trist_cube.npz`。
+    - **设置**：用户指定 2D 成分平面（X/Y `w(*)`）；插值网格 *N*；浏览文件夹后自动识别可用轴。
+    - **Visualize TriST**：Plotly / 2D / 3D / GIF（与 Pandat TriST 共用面板）；可选**图名与坐标轴**。
+  - **Template1（可选，四个标签页共用逻辑）**：处理完成后，根据 Status 中的错误记录与 Template1 参考文件（`%元素%`、`%T%`）生成异常点 **`.tcm`**。
 - **Extract Pandat Results**
   - **P/Ts (Lever/Scheil)**：读取 Pandat All table 文件夹（支持 `.csv/.dat`）生成 `P.xlsx`、`Ts.xlsx`、`P-S.xlsx`、`Ts-S.xlsx`；并支持 **Import to ThermoQ** 一键导入。
   - **T-zero**：读取 `All table_T0` 导出 `T0.xlsx`（`w(Element)` 列会规范化合并）。
@@ -202,8 +223,12 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 ### 安装与运行
 
 - 推荐 **Python 3.8+**（GUI 依赖标准库 `tkinter`；Linux 需安装 `python3-tk`）。
-- 可选依赖说明：`matplotlib` / `plotly` / `kaleido` 用于各类绘图与 Plotly 静态导出；`scikit-learn` / `scipy` 用于曲面平滑、等成分曲线及液相面插值；`scikit-image` 用于 TriST 可选 3D 渲染。
-- 示例数据：`test/`（Al-Cu-Li、混溶隙、批处理生成、Pandat 提取等）。
+- 依赖说明见 `requirements.txt`：`matplotlib` + `scipy` 为 **TriST 工作簿构建**（Thermo-Calc / Pandat）所必需；`plotly` / `kaleido` 用于交互 3D 与静态导出；`scikit-learn` / `scikit-image` 用于曲面平滑与可选 TriST 3D 渲染。
+- 示例数据（`test/`）：
+  - `Extract Thermo-calc Results-Gibbs/` — Al-Cu-Li COST Gibbs `.exp`（TriST 提取）
+  - `Extract Thermo-calc Results-Melting Range/` — 熔程 `.exp` 示例
+  - `Generate Thermo-calc Batch File-Melting Range/`、`Generate Thermo-calc Batch File-Gibbs/` — `.tcm` 批处理模板
+  - Pandat 提取 / 批处理示例（Al-Cu-Li、混溶隙等）
 
 ```bash
 pip install -r requirements.txt

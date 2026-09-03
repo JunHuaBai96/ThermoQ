@@ -6,20 +6,22 @@ rej ph *
 res ph LIQUID:L FCC_A1
 get
 go  p-3
-s-c n=1 p=101325 t=700 w(MG)=0.01 w(LI)=0.00
+set-ref * FCC_A1 298.15 101325
+s-c n=1 p=101325 t=300 
+s-c w(mg)=0.00001
+s-c w(li)=0.00001
 l-c
 C-E
 S-A-V 1
-w(Mg)
+w(mg)
 0
-0.2
+0.4
 0.005
-save AlMg-0.00Li_T0.POL y
+save AlMg-0.00Li_300T_Gibbs.POL y
 step
-t-z
-FCC_A1
-liquid
+SEPARATE
 po
-s-d-a x w(MG) 
-s-d-a y t-k
-make file AlMg-0.00Li_T0.exp
+s-d-a x w(mg) 
+s-d-a y GMR(*)
+
+make file AlMg-0.00Li_300T_Gibbs.exp

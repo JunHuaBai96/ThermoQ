@@ -1,25 +1,27 @@
 go da
 sw u
 d-sys
-Ti Cu Fe
+ti fe cu
 rej ph *
 res ph LIQUID:L BCC_A2
 get
 go  p-3
-s-c n=1 p=101325 t=700 w(FE)=0.01 w(CU)=0.00
+set-ref * BCC_A2 298.15 101325
+s-c n=1 p=101325 t=300 
+s-c w(fe)=0.00001
+s-c w(cu)=0.00001
 l-c
 C-E
 S-A-V 1
-w(FE)
+w(fe)
 0
-0.15
+0.4
 0.005
-save TiFe-0.00Cu_T0.POL y
+save TiFe-0.00Cu_300T_Gibbs.POL y
 step
-t-z
-BCC_A2
-liquid
+SEPARATE
 po
-s-d-a x w(FE) 
-s-d-a y t-k
-make file TiFe-0.00Cu_T0.exp
+s-d-a x w(fe) 
+s-d-a y GMR(*)
+
+make file TiFe-0.00Cu_300T_Gibbs.exp

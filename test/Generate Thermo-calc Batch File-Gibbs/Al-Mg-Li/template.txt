@@ -1,21 +1,21 @@
 back
 
-s-c w(LI)=%LI%
+s-c T=%T%
+s-c w(li)=%LI%
 l-c
 
 c-e
 
 S-A-V 1
-w(Mg)
+w(mg)
 0
-0.2
+0.4
 0.005
-save AlMg-%LI%Li_T0.POL y
+save AlMg-%LI%Li_%T%T_Gibbs.POL y
 step
-t-z
-FCC_A1
-liquid
+SEPARATE
 po
 s-d-a x w(MG) 
-s-d-a y t-k
-make file AlMg-%LI%Li_T0.exp
+s-d-a y GMR(*)
+
+make file AlMg-%LI%Li_%T%T_Gibbs.exp

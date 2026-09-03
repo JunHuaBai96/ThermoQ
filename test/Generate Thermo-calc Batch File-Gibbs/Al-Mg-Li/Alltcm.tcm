@@ -1,0 +1,17188 @@
+go da
+sw u
+d-sys
+al mg li
+rej ph *
+res ph LIQUID:L FCC_A1
+get
+go  p-3
+set-ref * FCC_A1 298.15 101325
+s-c n=1 p=101325 t=300 
+s-c w(mg)=0.00001
+s-c w(li)=0.00001
+l-c
+C-E
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.00Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(mg) 
+s-d-a y GMR(*)
+
+make file AlMg-0.00Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.00001
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.000Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.000Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.005
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.005Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.005Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.010
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.010Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.010Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.015
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.015Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.015Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.020
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.020Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.020Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.025
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.025Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.025Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.030
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.030Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.030Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.035
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.035Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.035Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.040
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.040Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.040Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.045
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.045Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.045Li_1000T_Gibbs.exp
+
+back
+
+s-c T=300
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_300T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_300T_Gibbs.exp
+
+back
+
+s-c T=310
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_310T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_310T_Gibbs.exp
+
+back
+
+s-c T=320
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_320T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_320T_Gibbs.exp
+
+back
+
+s-c T=330
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_330T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_330T_Gibbs.exp
+
+back
+
+s-c T=340
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_340T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_340T_Gibbs.exp
+
+back
+
+s-c T=350
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_350T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_350T_Gibbs.exp
+
+back
+
+s-c T=360
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_360T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_360T_Gibbs.exp
+
+back
+
+s-c T=370
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_370T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_370T_Gibbs.exp
+
+back
+
+s-c T=380
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_380T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_380T_Gibbs.exp
+
+back
+
+s-c T=390
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_390T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_390T_Gibbs.exp
+
+back
+
+s-c T=400
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_400T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_400T_Gibbs.exp
+
+back
+
+s-c T=410
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_410T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_410T_Gibbs.exp
+
+back
+
+s-c T=420
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_420T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_420T_Gibbs.exp
+
+back
+
+s-c T=430
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_430T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_430T_Gibbs.exp
+
+back
+
+s-c T=440
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_440T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_440T_Gibbs.exp
+
+back
+
+s-c T=450
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_450T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_450T_Gibbs.exp
+
+back
+
+s-c T=460
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_460T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_460T_Gibbs.exp
+
+back
+
+s-c T=470
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_470T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_470T_Gibbs.exp
+
+back
+
+s-c T=480
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_480T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_480T_Gibbs.exp
+
+back
+
+s-c T=490
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_490T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_490T_Gibbs.exp
+
+back
+
+s-c T=500
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_500T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_500T_Gibbs.exp
+
+back
+
+s-c T=510
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_510T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_510T_Gibbs.exp
+
+back
+
+s-c T=520
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_520T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_520T_Gibbs.exp
+
+back
+
+s-c T=530
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_530T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_530T_Gibbs.exp
+
+back
+
+s-c T=540
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_540T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_540T_Gibbs.exp
+
+back
+
+s-c T=550
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_550T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_550T_Gibbs.exp
+
+back
+
+s-c T=560
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_560T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_560T_Gibbs.exp
+
+back
+
+s-c T=570
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_570T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_570T_Gibbs.exp
+
+back
+
+s-c T=580
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_580T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_580T_Gibbs.exp
+
+back
+
+s-c T=590
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_590T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_590T_Gibbs.exp
+
+back
+
+s-c T=600
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_600T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_600T_Gibbs.exp
+
+back
+
+s-c T=610
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_610T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_610T_Gibbs.exp
+
+back
+
+s-c T=620
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_620T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_620T_Gibbs.exp
+
+back
+
+s-c T=630
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_630T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_630T_Gibbs.exp
+
+back
+
+s-c T=640
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_640T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_640T_Gibbs.exp
+
+back
+
+s-c T=650
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_650T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_650T_Gibbs.exp
+
+back
+
+s-c T=660
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_660T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_660T_Gibbs.exp
+
+back
+
+s-c T=670
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_670T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_670T_Gibbs.exp
+
+back
+
+s-c T=680
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_680T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_680T_Gibbs.exp
+
+back
+
+s-c T=690
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_690T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_690T_Gibbs.exp
+
+back
+
+s-c T=700
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_700T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_700T_Gibbs.exp
+
+back
+
+s-c T=710
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_710T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_710T_Gibbs.exp
+
+back
+
+s-c T=720
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_720T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_720T_Gibbs.exp
+
+back
+
+s-c T=730
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_730T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_730T_Gibbs.exp
+
+back
+
+s-c T=740
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_740T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_740T_Gibbs.exp
+
+back
+
+s-c T=750
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_750T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_750T_Gibbs.exp
+
+back
+
+s-c T=760
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_760T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_760T_Gibbs.exp
+
+back
+
+s-c T=770
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_770T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_770T_Gibbs.exp
+
+back
+
+s-c T=780
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_780T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_780T_Gibbs.exp
+
+back
+
+s-c T=790
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_790T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_790T_Gibbs.exp
+
+back
+
+s-c T=800
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_800T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_800T_Gibbs.exp
+
+back
+
+s-c T=810
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_810T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_810T_Gibbs.exp
+
+back
+
+s-c T=820
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_820T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_820T_Gibbs.exp
+
+back
+
+s-c T=830
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_830T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_830T_Gibbs.exp
+
+back
+
+s-c T=840
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_840T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_840T_Gibbs.exp
+
+back
+
+s-c T=850
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_850T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_850T_Gibbs.exp
+
+back
+
+s-c T=860
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_860T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_860T_Gibbs.exp
+
+back
+
+s-c T=870
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_870T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_870T_Gibbs.exp
+
+back
+
+s-c T=880
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_880T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_880T_Gibbs.exp
+
+back
+
+s-c T=890
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_890T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_890T_Gibbs.exp
+
+back
+
+s-c T=900
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_900T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_900T_Gibbs.exp
+
+back
+
+s-c T=910
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_910T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_910T_Gibbs.exp
+
+back
+
+s-c T=920
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_920T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_920T_Gibbs.exp
+
+back
+
+s-c T=930
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_930T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_930T_Gibbs.exp
+
+back
+
+s-c T=940
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_940T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_940T_Gibbs.exp
+
+back
+
+s-c T=950
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_950T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_950T_Gibbs.exp
+
+back
+
+s-c T=960
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_960T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_960T_Gibbs.exp
+
+back
+
+s-c T=970
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_970T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_970T_Gibbs.exp
+
+back
+
+s-c T=980
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_980T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_980T_Gibbs.exp
+
+back
+
+s-c T=990
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_990T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_990T_Gibbs.exp
+
+back
+
+s-c T=1000
+s-c w(li)=0.050
+l-c
+
+c-e
+
+S-A-V 1
+w(mg)
+0
+0.4
+0.005
+save AlMg-0.050Li_1000T_Gibbs.POL y
+step
+SEPARATE
+po
+s-d-a x w(MG) 
+s-d-a y GMR(*)
+
+make file AlMg-0.050Li_1000T_Gibbs.exp
+

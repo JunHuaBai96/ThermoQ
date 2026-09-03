@@ -1,6 +1,7 @@
 back
 
 s-c T=%T%
+s-c w(si)=%SI%
 l-c
 
 c-e
@@ -8,14 +9,13 @@ c-e
 S-A-V 1
 w(CU)
 0
-0.1
+0.4
 0.005
-save AlCu-%SI%Si_T0.POL y
+save AlCu-%SI%Si_%T%T_Gibbs.POL y
 step
-t-z
-FCC_A1
-liquid
+SEPARATE
 po
 s-d-a x w(CU) 
-s-d-a y t-k
-make file AlCu-%SI%Si_T0.exp
+s-d-a y GMR(*)
+
+make file AlCu-%SI%Si_%T%T_Gibbs.exp

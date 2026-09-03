@@ -73,6 +73,14 @@ def format_chemistry_axis_label(label):
     return s
 
 
+def _resolve_plot_label(custom, default):
+    """Use custom label when non-empty; otherwise keep the computed default."""
+    if custom is None:
+        return default
+    s = str(custom).strip()
+    return s if s else default
+
+
 def standardize_dataframe_element_columns(df):
     """Rename w(*)/dwdT_L(*) columns to canonical element symbol casing."""
     if df is None or getattr(df, 'empty', True):
@@ -723,7 +731,21 @@ def _tcm_parse_baseline_from_template0(template0_path):
     return baseline
 
 
-def _tcm_should_skip_loop_iteration(baseline, element_names, combo, t_val):
+def _tcm_baseline_effective_zero(baseline_val):
+    """True when Template0 uses a tiny w(*) substitute for a zero composition label."""
+    bv = float(baseline_val)
+    return bv <= 1e-4 or np.isclose(bv, float(TCM_SC_W_ZERO_COMP_STR), rtol=0.0, atol=1e-9)
+
+
+def _tcm_composition_values_match(combo_val, baseline_val, out_decimals):
+    if np.isclose(float(combo_val), float(baseline_val), rtol=0.0, atol=1e-9):
+        return True
+    if _tcm_is_zero_batch_comp(combo_val, out_decimals) and _tcm_baseline_effective_zero(baseline_val):
+        return True
+    return False
+
+
+def _tcm_should_skip_loop_iteration(baseline, element_names, combo, t_val, out_decimals=2):
     """
     Skip emitting the loop-body block when this (composition, temperature) combination
     duplicates the single-point calculation already present in Template0.
@@ -738,7 +760,7 @@ def _tcm_should_skip_loop_iteration(baseline, element_names, combo, t_val):
             if bel is None:
                 comp_matches = False
                 break
-            if not np.isclose(float(combo[i]), float(bel), rtol=0.0, atol=1e-9):
+            if not _tcm_composition_values_match(combo[i], bel, out_decimals):
                 comp_matches = False
                 break
     else:
@@ -907,6 +929,327 @@ def _exptc_generate_abnormal_tcm_files(template1_path, output_dir, error_records
             f.write(content)
         written.append(out_path)
     return len(written), written
+
+
+EXPTC_GIBBS_FILTER_DEFAULT = r'.*_Gibbs\.exp$'
+
+_TCM_GIBBS_PLOTTED_RE = re.compile(
+    r'^\s*\$\s*PLOTTED\s+COLUMNS\s+ARE\s*:\s*W\(([^)]+)\)\s+and\s+GMR\(([^)]+)\)\s*$',
+    re.IGNORECASE,
+)
+
+
+def _exptc_gibbs_snap_mass_fraction(v, eps=1e-7):
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return v
+    return 0.0 if abs(fv) < eps else fv
+
+
+def _exptc_gibbs_parse_filename(file_name):
+    """
+    Parse Thermo-Calc Gibbs .exp names such as AlCu-0.050Li_650T_Gibbs.exp
+    -> (fixed_element, fixed_w, T_K).
+    """
+    patterns = (
+        r'[-_](\d+(?:\.\d+)?)([A-Za-z]{1,2})_(\d+(?:\.\d+)?)T_Gibbs\.exp$',
+        r'(\d+(?:\.\d+)?)([A-Za-z]{1,2})_(\d+(?:\.\d+)?)T_Gibbs\.exp$',
+    )
+    for pat in patterns:
+        m = re.search(pat, file_name, flags=re.IGNORECASE)
+        if m:
+            return canonical_element_symbol(m.group(2)), float(m.group(1)), float(m.group(3))
+    return None, None, None
+
+
+def _exptc_gibbs_normalize_phase(gmr_phase):
+    ph = str(gmr_phase).strip().upper()
+    ph = re.sub(r'#+\d+$', '', ph)
+    return ph
+
+
+def _exptc_gibbs_extract_from_exp(file_path):
+    """
+    Parse Thermo-Calc Gibbs .exp: XTEXT W(*) scan axis and GMR(phase) sections
+    marked by '$ PLOTTED COLUMNS ARE : W(*) and GMR(PHASE)'.
+    Returns (scan_element, {phase: [(w_scan, gmr_j_mol), ...]}).
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except Exception:
+        return None, {}
+
+    scan_el = None
+    for line in lines[:80]:
+        m = re.search(r'^\s*XTEXT\s+W\(([^)]+)\)', line.strip(), flags=re.IGNORECASE)
+        if m:
+            scan_el = canonical_element_symbol(m.group(1))
+            break
+
+    phase_data = {}
+    current_phase = None
+    for line in lines:
+        s = line.strip()
+        m_pl = _TCM_GIBBS_PLOTTED_RE.match(s)
+        if m_pl:
+            if scan_el is None:
+                scan_el = canonical_element_symbol(m_pl.group(1))
+            current_phase = _exptc_gibbs_normalize_phase(m_pl.group(2))
+            phase_data.setdefault(current_phase, [])
+            continue
+        if s.startswith('BLOCKEND'):
+            current_phase = None
+            continue
+        if current_phase and s and not s.startswith('$'):
+            parts = s.split()
+            if len(parts) >= 2:
+                try:
+                    x = float(parts[0])
+                    y = float(parts[1])
+                    phase_data[current_phase].append((x, y))
+                except ValueError:
+                    continue
+
+    # De-duplicate scan points per phase (keep last occurrence)
+    for ph, pts in list(phase_data.items()):
+        dedup = {}
+        for x, y in pts:
+            dedup[round(float(x), 12)] = float(y)
+        phase_data[ph] = sorted(dedup.items(), key=lambda t: t[0])
+
+    return scan_el, phase_data
+
+
+def _exptc_gibbs_pick_solid_phase(phase_data):
+    solids = {k: v for k, v in phase_data.items() if 'LIQUID' not in str(k).upper()}
+    if not solids:
+        return None
+    return max(solids.keys(), key=lambda k: len(solids[k]))
+
+
+def _exptc_gibbs_file_to_merged_df(file_path, file_name):
+    fixed_el, fixed_val, t_k = _exptc_gibbs_parse_filename(file_name)
+    if fixed_el is None or t_k is None:
+        return None, 'bad_filename'
+    scan_el, phase_data = _exptc_gibbs_extract_from_exp(file_path)
+    if not scan_el or not phase_data:
+        return None, 'no_gmr_data'
+    liq_key = next((k for k in phase_data if 'LIQUID' in str(k).upper()), None)
+    if liq_key is None:
+        return None, 'no_liquid'
+    sol_key = _exptc_gibbs_pick_solid_phase(phase_data)
+    if sol_key is None:
+        return None, 'no_solid'
+
+    liq_map = dict(phase_data[liq_key])
+    sol_map = dict(phase_data[sol_key])
+    rows = []
+    for x, g_liq in liq_map.items():
+        g_sol = sol_map.get(x)
+        if g_sol is None:
+            for xk, gs in sol_map.items():
+                if abs(float(xk) - float(x)) <= 1e-8:
+                    g_sol = gs
+                    break
+        if g_sol is None:
+            continue
+        w_fixed = _exptc_gibbs_snap_mass_fraction(fixed_val)
+        w_scan = _exptc_gibbs_snap_mass_fraction(x)
+        dg = float(g_sol) - float(g_liq)
+        rows.append(
+            {
+                'File': file_name,
+                'Path': file_path,
+                'T (K)': float(t_k),
+                f'w({fixed_el})': w_fixed,
+                f'w({scan_el})': w_scan,
+                'G_liquid (J/mol)': float(g_liq),
+                'G_solid (J/mol)': float(g_sol),
+                'phase (solid)': sol_key,
+                'phase (liquid)': 'LIQUID',
+                'dG = G_solid - G_liquid (J/mol)': dg,
+                'in_TriST dG le 0': int(dg <= 0),
+            }
+        )
+    if not rows:
+        return None, 'no_pairs'
+    return pd.DataFrame(rows), None
+
+
+def _exptc_collect_gibbs_exp_files(folder, name_filter=None):
+    """Collect .exp files from folder (recursive)."""
+    out = []
+    for root, _dirs, files in os.walk(folder):
+        for fn in files:
+            if not fn.lower().endswith('.exp'):
+                continue
+            if name_filter is not None and not name_filter.match(fn):
+                continue
+            out.append(os.path.join(root, fn))
+    return sorted(out)
+
+
+def _exptc_gibbs_peek_axis_sample(folder, name_filter=None, max_files=12):
+    """
+    Parse a few Gibbs .exp files in folder and return available w(*) columns
+    plus a small merged sample (for _extp_trist_pick_axes_2d).
+    """
+    files = _exptc_collect_gibbs_exp_files(folder, name_filter)
+    blocks = []
+    for path in files[:max_files]:
+        m, _err = _exptc_gibbs_file_to_merged_df(path, os.path.basename(path))
+        if m is not None:
+            blocks.append(m)
+    if not blocks:
+        return [], None
+    sample = pd.concat(blocks, ignore_index=True)
+    wcols = [
+        c for c in sample.columns
+        if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)
+    ]
+    wcols = list(dict.fromkeys(wcols))
+    return wcols, sample
+
+
+def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_path, log_fn=None, tr=None):
+    """
+    Compute T0_lines / TriST_boundaries / TriST_mask / optional _trist_cube.npz
+    from merged Gibbs rows (same schema as Pandat TriST extract).
+    """
+    if tr is None:
+        tr = lambda k, d='': d
+    if log_fn is None:
+        log_fn = lambda _m: None
+    if not SCIPY_AVAILABLE or not MATPLOTLIB_AVAILABLE:
+        raise RuntimeError('scipy and matplotlib are required for TriST workbook generation.')
+
+    tcol = 'T (K)'
+    gl_col = 'G_liquid (J/mol)'
+    gs_col = 'G_solid (J/mol)'
+    df_pts = merged_all[[tcol, x_col, y_col, gl_col, gs_col]].copy()
+    for c in (tcol, x_col, y_col, gl_col, gs_col):
+        df_pts[c] = pd.to_numeric(df_pts[c], errors='coerce')
+    df_pts = df_pts.dropna(subset=[tcol, x_col, y_col, gl_col, gs_col])
+    if df_pts.empty:
+        raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
+
+    ngrid = max(25, min(160, int(ngrid)))
+    t0_rows, bnd_rows, mask_rows = [], [], []
+    f_cube_list, T_cube_list = [], []
+    temps = sorted(df_pts[tcol].unique().tolist())
+    g_xmin = float(np.nanmin(df_pts[x_col].to_numpy(dtype=np.float64)))
+    g_xmax = float(np.nanmax(df_pts[x_col].to_numpy(dtype=np.float64)))
+    g_ymin = float(np.nanmin(df_pts[y_col].to_numpy(dtype=np.float64)))
+    g_ymax = float(np.nanmax(df_pts[y_col].to_numpy(dtype=np.float64)))
+    if g_xmax - g_xmin < 1e-9 or g_ymax - g_ymin < 1e-9:
+        raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
+    x_lin = np.linspace(g_xmin, g_xmax, ngrid)
+    y_lin = np.linspace(g_ymin, g_ymax, ngrid)
+    gx, gy = np.meshgrid(x_lin, y_lin)
+
+    for ti, Tval in enumerate(temps, start=1):
+        if ti % 10 == 1:
+            log_fn(tr('extp_trist_progress', 'Processing {i} / {n}…').format(i=ti, n=len(temps)))
+        sub = df_pts[df_pts[tcol] == Tval]
+        if len(sub) < 8:
+            continue
+        xs = sub[x_col].to_numpy(dtype=np.float64)
+        ys = sub[y_col].to_numpy(dtype=np.float64)
+        gls = sub[gl_col].to_numpy(dtype=np.float64)
+        gss = sub[gs_col].to_numpy(dtype=np.float64)
+        gl_grid = _extp_trist_grid_surface(np.column_stack([xs, ys]), gls, gx, gy)
+        gs_grid = _extp_trist_grid_surface(np.column_stack([xs, ys]), gss, gx, gy)
+        if gl_grid is None or gs_grid is None:
+            continue
+        gl_grid = np.asarray(gl_grid, dtype=np.float64)
+        gs_grid = np.asarray(gs_grid, dtype=np.float64)
+        valid = np.isfinite(gl_grid) & np.isfinite(gs_grid)
+        if valid.sum() < 25:
+            continue
+        dg_grid = gs_grid - gl_grid
+        dg_masked = np.ma.array(dg_grid, mask=~valid)
+        for ci, v in enumerate(_extp_trist_contours_xy(x_lin, y_lin, dg_masked, level=0.0)):
+            for pi, (xv, yv) in enumerate(v):
+                t0_rows.append({'T (K)': float(Tval), 'curve_id': int(ci), 'point_i': int(pi), x_col: float(xv), y_col: float(yv)})
+
+        dx = float(x_lin[1] - x_lin[0])
+        dy = float(y_lin[1] - y_lin[0])
+        dGL_dy, dGL_dx = np.gradient(gl_grid, dy, dx)
+        mu_x = np.asarray(dGL_dx, dtype=np.float64)
+        mu_y = np.asarray(dGL_dy, dtype=np.float64)
+        Xg = gx.astype(np.float64)
+        Yg = gy.astype(np.float64)
+        t0_side = valid & (gl_grid <= gs_grid)
+        cand_mask = t0_side & np.isfinite(mu_x) & np.isfinite(mu_y)
+        if cand_mask.sum() < 25:
+            continue
+        GSf = gs_grid.reshape(-1)
+        Xf = Xg.reshape(-1)
+        Yf = Yg.reshape(-1)
+        dom = valid.reshape(-1) & np.isfinite(GSf) & np.isfinite(Xf) & np.isfinite(Yf)
+        GSf, Xf, Yf = GSf[dom], Xf[dom], Yf[dom]
+        if len(GSf) < 50:
+            continue
+        mux0 = mu_x[cand_mask]
+        muy0 = mu_y[cand_mask]
+        x0 = Xg[cand_mask]
+        y0 = Yg[cand_mask]
+        gl0 = gl_grid[cand_mask]
+        mvals = np.empty(len(mux0), dtype=np.float64)
+        chunk = 256
+        for s in range(0, len(mux0), chunk):
+            e = min(s + chunk, len(mux0))
+            mu_xc = mux0[s:e][:, None]
+            mu_yc = muy0[s:e][:, None]
+            vals = GSf[None, :] - mu_xc * Xf[None, :] - mu_yc * Yf[None, :]
+            mvals[s:e] = np.nanmin(vals, axis=1)
+        fvals = mvals - (gl0 - mux0 * x0 - muy0 * y0)
+        f_grid = np.full_like(gl_grid, np.nan, dtype=np.float64)
+        f_grid[cand_mask] = fvals
+        f_cube_list.append(np.ascontiguousarray(f_grid, dtype=np.float32))
+        T_cube_list.append(float(Tval))
+        f_masked = np.ma.array(f_grid, mask=~cand_mask | ~np.isfinite(f_grid))
+        for ci, v in enumerate(_extp_trist_contours_xy(x_lin, y_lin, f_masked, level=0.0)):
+            for pi, (xv, yv) in enumerate(v):
+                bnd_rows.append({'T (K)': float(Tval), 'curve_id': int(ci), 'point_i': int(pi), x_col: float(xv), y_col: float(yv)})
+        inside = cand_mask & np.isfinite(f_grid) & (f_grid <= 0.0)
+        if inside.any():
+            ii, jj = np.where(inside)
+            cap = 12000
+            if len(ii) > cap:
+                step = int(np.ceil(len(ii) / cap))
+                ii, jj = ii[::step], jj[::step]
+            for k2 in range(len(ii)):
+                i2, j2 = int(ii[k2]), int(jj[k2])
+                mask_rows.append({'T (K)': float(Tval), x_col: float(gx[i2, j2]), y_col: float(gy[i2, j2]), 'inside_TriST': 1, 'f(C0) (J/mol)': float(f_grid[i2, j2])})
+
+    if len(f_cube_list) >= 2:
+        try:
+            cube_path = os.path.splitext(out_path)[0] + '_trist_cube.npz'
+            np.savez_compressed(
+                cube_path,
+                T_vals=np.asarray(T_cube_list, dtype=np.float64),
+                x_lin=np.asarray(x_lin, dtype=np.float64),
+                y_lin=np.asarray(y_lin, dtype=np.float64),
+                f_cube=np.stack(f_cube_list, axis=0),
+                x_col=str(x_col),
+                y_col=str(y_col),
+            )
+            log_fn(tr('extp_trist_cube_log', 'Saved 3D f(C0) field (for smooth f=0 surface, cubic in T): {path}').format(path=cube_path))
+        except Exception as e:
+            log_fn(tr('extp_trist_cube_err', 'Could not save 3D f-field: {e}').format(e=str(e)))
+
+    t0_df = pd.DataFrame(t0_rows)
+    bnd_df = pd.DataFrame(bnd_rows)
+    mask_df = pd.DataFrame(mask_rows)
+    with pd.ExcelWriter(out_path, engine='openpyxl') as xw:
+        pd.DataFrame().to_excel(xw, sheet_name='T0_tie_1D', index=False)
+        t0_df.to_excel(xw, sheet_name='T0_lines', index=False)
+        bnd_df.to_excel(xw, sheet_name='TriST_boundaries', index=False)
+        mask_df.to_excel(xw, sheet_name='TriST_mask', index=False)
+    return t0_df, bnd_df, mask_df
 
 
 def _extp_trist_find_col_df(df, names):
@@ -2199,6 +2542,15 @@ class ThermoQGUI:
                 'plot_coord_partial': 'Please fill all four coordinate fields or leave them all blank for the default square range.',
                 'plot_coord_reset_ok': 'Coordinate range reset to default square window.',
                 'plot_coord_reset_fail': 'Could not compute default range: {e}',
+                'plot_labels_frame': 'Plot Labels',
+                'plot_labels_hint': (
+                    'Optional custom plot title and axis names. Leave blank to use automatic defaults '
+                    '(element symbols, quantity names, etc.).'
+                ),
+                'plot_labels_title': 'Title:',
+                'plot_labels_x': 'X axis:',
+                'plot_labels_y': 'Y axis:',
+                'plot_labels_z': 'Z axis:',
                 'plot_exp_frame': 'Experimental Points',
                 'plot_exp_enable': 'Show experimental points on plot',
                 'plot_exp_file': 'Batch file (Excel/CSV/TSV):',
@@ -2722,6 +3074,19 @@ class ThermoQGUI:
                 'exptc_tab_mr': 'Melting Range',
                 'exptc_tab_lmg': 'Miscibility Gap',
                 'exptc_tab_t0': 'T-zero',
+                'exptc_tab_trist': 'TriST Zone',
+                'exptc_trist_intro': (
+                    'Extract Gibbs energies GMR(PHASE) vs composition from Thermo-Calc *_Gibbs.exp files '
+                    '(sections marked by "$ PLOTTED COLUMNS ARE : W(*) and GMR(PHASE)"), build a TriST workbook, '
+                    'and visualize TriST boundaries like Extract Pandat Results → TriST Zone.'
+                ),
+                'exptc_trist_folder': 'Folder with Gibbs .exp files (recursive)',
+                'exptc_fd_trist_folder': 'Select folder with Thermo-Calc Gibbs .exp files',
+                'exptc_trist_filter': 'Filename Filter (Optional)',
+                'exptc_trist_filter_hint': 'Default: *_Gibbs.exp. Leave blank for all .exp files.',
+                'exptc_trist_filter_default': EXPTC_GIBBS_FILTER_DEFAULT,
+                'exptc_trist_out_default': 'TriST_tc.xlsx',
+                'exptc_trist_no_files': 'No matching Gibbs .exp files found in the folder!',
                 'exptc_lmg_folder': 'Select Folder Containing .exp Files (one temperature per file)',
                 'exptc_fd_lmg_folder': 'Select Folder with miscibility gap .exp Files',
                 'exptc_lmg_filter': 'Filename Filter (Optional)',
@@ -3068,6 +3433,14 @@ class ThermoQGUI:
                 'plot_coord_partial': '请填写全部四个坐标字段，或全部留空以使用默认正方形范围。',
                 'plot_coord_reset_ok': '已恢复为默认正方形坐标范围。',
                 'plot_coord_reset_fail': '无法计算默认范围：{e}',
+                'plot_labels_frame': '图名与坐标轴',
+                'plot_labels_hint': (
+                    '可选：自定义图标题与坐标轴名称。留空则使用自动默认（元素符号、物理量名等）。'
+                ),
+                'plot_labels_title': '图标题：',
+                'plot_labels_x': 'X 轴：',
+                'plot_labels_y': 'Y 轴：',
+                'plot_labels_z': 'Z 轴：',
                 'plot_exp_frame': '实验点',
                 'plot_exp_enable': '在图上显示实验点',
                 'plot_exp_file': '批量文件（Excel/CSV/TSV）：',
@@ -3568,6 +3941,19 @@ class ThermoQGUI:
                 'exptc_tab_mr': '熔程',
                 'exptc_tab_lmg': '混溶隙',
                 'exptc_tab_t0': 'T-zero',
+                'exptc_tab_trist': 'TriST 区域',
+                'exptc_trist_intro': (
+                    '从 Thermo-Calc 的 *_Gibbs.exp 文件提取 Gibbs 能 GMR(相) 随成分变化的数据'
+                    '（由 "$ PLOTTED COLUMNS ARE : W(*) and GMR(相名)" 标记的数据段），'
+                    '生成 TriST 工作簿并可视化 TriST 边界（与 Extract Pandat Results → TriST Zone 类似）。'
+                ),
+                'exptc_trist_folder': 'Gibbs .exp 文件夹（递归搜索）',
+                'exptc_fd_trist_folder': '选择 Thermo-Calc Gibbs .exp 文件夹',
+                'exptc_trist_filter': '文件名过滤（可选）',
+                'exptc_trist_filter_hint': '默认：*_Gibbs.exp。留空则处理全部 .exp。',
+                'exptc_trist_filter_default': EXPTC_GIBBS_FILTER_DEFAULT,
+                'exptc_trist_out_default': 'TriST_tc.xlsx',
+                'exptc_trist_no_files': '文件夹中未找到匹配的 Gibbs .exp 文件！',
                 'exptc_lmg_folder': '选择包含 .exp 文件的文件夹（每个文件对应一个温度）',
                 'exptc_fd_lmg_folder': '选择混溶隙 .exp 文件夹',
                 'exptc_lmg_filter': '文件名过滤（可选）',
@@ -3921,6 +4307,12 @@ class ThermoQGUI:
                 self._refresh_plot_coord_lang(bccw)
             except Exception:
                 pass
+        blw = getattr(self, '_batch_labels_widgets', None)
+        if blw:
+            try:
+                self._refresh_plot_labels_lang(self.batch_labels_ui)
+            except Exception:
+                pass
         if hasattr(self, 'batch_curve_x_combo'):
             try:
                 ev = self.available_elements if self.available_elements else sorted(PERIODIC_TABLE.keys())
@@ -4233,6 +4625,10 @@ class ThermoQGUI:
         self.batch_coord_ui = self._build_plot_coord_range_ui(plot_fr, reset_command=_batch_reset_coord)
         self.batch_coord_ui['frame'].pack(fill=tk.X, pady=4)
         self._batch_coord_widgets = self.batch_coord_ui['widgets']
+
+        self.batch_labels_ui = self._build_plot_labels_ui(plot_fr, show_z=True)
+        self.batch_labels_ui['frame'].pack(fill=tk.X, pady=4)
+        self._batch_labels_widgets = self.batch_labels_ui['widgets']
 
         self.batch_exp_ui = self._build_plot_experimental_points_ui(plot_fr, self.root)
         self.batch_exp_ui['frame'].pack(fill=tk.X, pady=4)
@@ -5426,6 +5822,116 @@ class ThermoQGUI:
             'resolve': resolve,
         }
 
+    def _build_plot_labels_ui(self, parent, show_z=True, key_prefix='plot_labels'):
+        labels_frame = ttk.LabelFrame(
+            parent, text=self.tr(f'{key_prefix}_frame', 'Plot Labels'), padding="10",
+        )
+        lbl_hint = ttk.Label(
+            labels_frame,
+            text=self.tr(f'{key_prefix}_hint', ''),
+            wraplength=650,
+            justify='left',
+        )
+        lbl_hint.pack(anchor=tk.W, pady=(0, 6))
+        title_var = tk.StringVar(value='')
+        xlabel_var = tk.StringVar(value='')
+        ylabel_var = tk.StringVar(value='')
+        zlabel_var = tk.StringVar(value='')
+
+        title_row = ttk.Frame(labels_frame)
+        title_row.pack(fill=tk.X, pady=2)
+        lbl_title = ttk.Label(title_row, text=self.tr(f'{key_prefix}_title', 'Title:'))
+        lbl_title.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Entry(title_row, textvariable=title_var, width=52).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4),
+        )
+
+        xy_row = ttk.Frame(labels_frame)
+        xy_row.pack(fill=tk.X, pady=2)
+        lbl_x = ttk.Label(xy_row, text=self.tr(f'{key_prefix}_x', 'X axis:'))
+        lbl_x.pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Entry(xy_row, textvariable=xlabel_var, width=18).pack(side=tk.LEFT, padx=(0, 10))
+        lbl_y = ttk.Label(xy_row, text=self.tr(f'{key_prefix}_y', 'Y axis:'))
+        lbl_y.pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Entry(xy_row, textvariable=ylabel_var, width=18).pack(side=tk.LEFT)
+
+        lbl_z = None
+        if show_z:
+            z_row = ttk.Frame(labels_frame)
+            z_row.pack(fill=tk.X, pady=2)
+            lbl_z = ttk.Label(z_row, text=self.tr(f'{key_prefix}_z', 'Z axis:'))
+            lbl_z.pack(side=tk.LEFT, padx=(0, 4))
+            ttk.Entry(z_row, textvariable=zlabel_var, width=18).pack(side=tk.LEFT)
+
+        def resolve(default_title='', default_x='', default_y='', default_z=''):
+            return {
+                'title': _resolve_plot_label(title_var.get(), default_title),
+                'x': _resolve_plot_label(xlabel_var.get(), default_x),
+                'y': _resolve_plot_label(ylabel_var.get(), default_y),
+                'z': _resolve_plot_label(zlabel_var.get(), default_z),
+            }
+
+        widgets = {
+            'frame': labels_frame,
+            'hint': lbl_hint,
+            'title_lbl': lbl_title,
+            'x_lbl': lbl_x,
+            'y_lbl': lbl_y,
+            'z_lbl': lbl_z,
+            'key_prefix': key_prefix,
+        }
+        return {
+            'frame': labels_frame,
+            'vars': (title_var, xlabel_var, ylabel_var, zlabel_var),
+            'widgets': widgets,
+            'resolve': resolve,
+            'show_z': show_z,
+        }
+
+    def _refresh_plot_labels_lang(self, labels_ui):
+        if not labels_ui:
+            return
+        widgets = labels_ui.get('widgets') or {}
+        kp = widgets.get('key_prefix', 'plot_labels')
+        widgets['frame'].config(text=self.tr(f'{kp}_frame', 'Plot Labels'))
+        widgets['hint'].config(text=self.tr(f'{kp}_hint', ''))
+        widgets['title_lbl'].config(text=self.tr(f'{kp}_title', 'Title:'))
+        widgets['x_lbl'].config(text=self.tr(f'{kp}_x', 'X axis:'))
+        widgets['y_lbl'].config(text=self.tr(f'{kp}_y', 'Y axis:'))
+        if labels_ui.get('show_z') and widgets.get('z_lbl') is not None:
+            widgets['z_lbl'].config(text=self.tr(f'{kp}_z', 'Z axis:'))
+
+    def _apply_plot_labels_mpl(self, ax, labels, is_3d=False):
+        if not labels:
+            return
+        if labels.get('x'):
+            ax.set_xlabel(labels['x'])
+        if labels.get('y'):
+            ax.set_ylabel(labels['y'])
+        if is_3d and labels.get('z'):
+            ax.set_zlabel(labels['z'])
+        if labels.get('title'):
+            ax.set_title(labels['title'])
+
+    def _apply_plot_labels_plotly(self, fig, labels, scene=True, merge_scene=None):
+        if not labels:
+            return
+        upd = {}
+        if labels.get('title'):
+            upd['title'] = labels['title']
+        if scene:
+            sc = dict(merge_scene or {})
+            if labels.get('x'):
+                sc['xaxis_title'] = labels['x']
+            if labels.get('y'):
+                sc['yaxis_title'] = labels['y']
+            if labels.get('z'):
+                sc['zaxis_title'] = labels['z']
+            if sc:
+                upd['scene'] = sc
+        if upd:
+            fig.update_layout(**upd)
+
     def _build_plot_output_settings_ui(self, parent, default_prefix='plot', default_format='PNG'):
         output_settings_frame = ttk.LabelFrame(
             parent, text=self.tr('plot_phase_output_settings', 'Output Settings'), padding="10",
@@ -5835,8 +6341,18 @@ class ThermoQGUI:
         iso_line_color="#2c3e50", iso_text_color="#1a252f",
         iso_clabel_fmt="%d", iso_level_fmt=".0f",
         show_legend=True, suppress_smooth_warn=False, open_after=True,
+        plot_labels=None,
     ):
         """Shared 2D/3D/GIF/Plotly surface renderer with optional experimental point overlay."""
+        def _plbl(key, default):
+            if plot_labels and plot_labels.get(key):
+                return plot_labels[key]
+            return default
+
+        xl = _plbl('x', format_w_element_label(ex))
+        yl = _plbl('y', format_w_element_label(ey))
+        zl = _plbl('z', label_z)
+        plot_title = (plot_labels or {}).get('title') or ''
         status_widget.config(text=self.tr('plot_status_smooth', 'Creating smooth surface...'), foreground="orange")
         parent_window.update()
 
@@ -5891,11 +6407,13 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('plot_dep_2d', 'Matplotlib is not installed. Cannot generate 2D heatmap.'), parent=parent_window)
                 return None
             fig_hm, ax_hm = plt.subplots(figsize=(10, 8))
-            ax_hm.set_xlabel(format_w_element_label(ex))
-            ax_hm.set_ylabel(format_w_element_label(ey))
+            ax_hm.set_xlabel(xl)
+            ax_hm.set_ylabel(yl)
+            if plot_title:
+                ax_hm.set_title(plot_title)
             if xi_grid is not None:
                 contour = ax_hm.contourf(xi_grid, yi_grid, zi_grid, levels=50, cmap='coolwarm', alpha=1.0)
-                fig_hm.colorbar(contour, label=label_z)
+                fig_hm.colorbar(contour, label=zl)
                 if iso_levels is not None and iso_levels.size:
                     cs_iso = ax_hm.contour(
                         xi_grid, yi_grid, zi_grid, levels=iso_levels,
@@ -5904,7 +6422,7 @@ class ThermoQGUI:
                     _mpl_clabel_2d(ax_hm, cs_iso)
             else:
                 scatter = ax_hm.scatter(x, y, c=z, cmap='coolwarm', s=40, alpha=0.9)
-                fig_hm.colorbar(scatter, label=label_z)
+                fig_hm.colorbar(scatter, label=zl)
             ax_hm.grid(False)
             if plot_limits:
                 self._apply_plot_xy_limits(ax_hm, px0, px1, py0, py1)
@@ -5927,7 +6445,7 @@ class ThermoQGUI:
             ax = fig.add_subplot(111, projection='3d')
             if xi_grid is not None:
                 surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True)
-                fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                fig.colorbar(surf, shrink=0.5, aspect=5, label=zl)
                 if iso_levels is not None and iso_levels.size:
                     _extp_trist_draw_iso_3d_mpl(
                         ax, xi_grid, yi_grid, zi_grid, iso_levels,
@@ -5936,10 +6454,12 @@ class ThermoQGUI:
                     )
             else:
                 trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-            ax.set_xlabel(format_w_element_label(ex))
-            ax.set_ylabel(format_w_element_label(ey))
-            ax.set_zlabel(label_z)
+                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=zl)
+            ax.set_xlabel(xl)
+            ax.set_ylabel(yl)
+            ax.set_zlabel(zl)
+            if plot_title:
+                ax.set_title(plot_title)
             if plot_limits:
                 ax.set_xlim(px0, px1)
                 ax.set_ylim(py0, py1)
@@ -5965,7 +6485,7 @@ class ThermoQGUI:
             ax = fig.add_subplot(111, projection='3d')
             if xi_grid is not None:
                 surf = ax.plot_surface(xi_grid, yi_grid, zi_grid, cmap='coolwarm', alpha=0.98, linewidth=0, antialiased=True, shade=True)
-                fig.colorbar(surf, shrink=0.5, aspect=5, label=label_z)
+                fig.colorbar(surf, shrink=0.5, aspect=5, label=zl)
                 if iso_levels is not None and iso_levels.size:
                     _extp_trist_draw_iso_3d_mpl(
                         ax, xi_grid, yi_grid, zi_grid, iso_levels,
@@ -5974,10 +6494,12 @@ class ThermoQGUI:
                     )
             else:
                 trisurf = ax.plot_trisurf(x, y, z, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.98)
-                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=label_z)
-            ax.set_xlabel(format_w_element_label(ex))
-            ax.set_ylabel(format_w_element_label(ey))
-            ax.set_zlabel(label_z)
+                fig.colorbar(trisurf, shrink=0.5, aspect=5, label=zl)
+            ax.set_xlabel(xl)
+            ax.set_ylabel(yl)
+            ax.set_zlabel(zl)
+            if plot_title:
+                ax.set_title(plot_title)
             if plot_limits:
                 ax.set_xlim(px0, px1)
                 ax.set_ylim(py0, py1)
@@ -6014,7 +6536,7 @@ class ThermoQGUI:
                 traces.append(go.Surface(
                     x=xi_grid, y=yi_grid, z=zi_grid,
                     colorscale='RdBu', reversescale=True, opacity=0.98,
-                    colorbar=dict(title=label_z),
+                    colorbar=dict(title=zl),
                 ))
                 if iso_levels is not None and iso_levels.size:
                     for lvl, seg in _lmg_contour_segments(xi_grid, yi_grid, zi_grid, iso_levels):
@@ -6025,16 +6547,16 @@ class ThermoQGUI:
             else:
                 traces.append(go.Scatter3d(
                     x=x, y=y, z=z, mode='markers',
-                    marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85, colorbar=dict(title=label_z)),
+                    marker=dict(size=3, color=z, colorscale='RdBu', reversescale=True, opacity=0.85, colorbar=dict(title=zl)),
                 ))
             fig_plotly = go.Figure(data=traces)
             self._overlay_experimental_points_plotly(fig_plotly, exp_points, ex, ey, show_legend=show_legend)
+            self._apply_plot_labels_plotly(
+                fig_plotly,
+                {'title': plot_title, 'x': xl, 'y': yl, 'z': zl},
+                scene=True,
+            )
             fig_plotly.update_layout(
-                scene=dict(
-                    xaxis_title=format_w_element_label(ex),
-                    yaxis_title=format_w_element_label(ey),
-                    zaxis_title=label_z,
-                ),
                 width=900, height=700,
                 showlegend=show_legend,
             )
@@ -6381,6 +6903,15 @@ class ThermoQGUI:
         if iso_interval is None and hasattr(self, 'batch_iso_interval_var'):
             iso_interval = self.batch_iso_interval_var.get()
 
+        plot_labels = None
+        if hasattr(self, 'batch_labels_ui') and self.batch_labels_ui:
+            plot_labels = self.batch_labels_ui['resolve'](
+                default_title='',
+                default_x=format_w_element_label(ex),
+                default_y=format_w_element_label(ey),
+                default_z=label_z,
+            )
+
         try:
             out_path = self._plot_xyz_surface_render(
                 x, y, z, ex, ey, base, label_z, viz,
@@ -6401,6 +6932,7 @@ class ThermoQGUI:
                 show_legend=False,
                 suppress_smooth_warn=suppress_smooth_warn,
                 open_after=open_after,
+                plot_labels=plot_labels,
             )
             if out_path is None:
                 if viz == "Plotly 3D" and not PLOTLY_AVAILABLE:
@@ -6650,21 +7182,27 @@ class ThermoQGUI:
         fmt = (self.batch_image_format_var.get() or "PNG").upper()
         ext, _ = self._plot_image_ext_and_save_kwargs(fmt)
 
-        fig, ax = plt.subplots(figsize=(11, 6.5))
-        ax.set_xlabel(format_w_element_label(ex, ' (%)'))
-        ax.set_ylabel(self.tr('batch_curve_multi_ylabel', 'Value'))
         if len(fixed_values) == 1:
-            ax.set_title(
-                self.tr('batch_curve_multi_title', 'Batch quantities vs w({ex}); w({fixed})={fv} wt%').format(
-                    ex=ex, fixed=fixed_el, fv=fixed_values[0],
-                )
+            default_title = self.tr('batch_curve_multi_title', 'Batch quantities vs w({ex}); w({fixed})={fv} wt%').format(
+                ex=ex, fixed=fixed_el, fv=fixed_values[0],
             )
         else:
-            ax.set_title(
-                self.tr('batch_curve_multi_title_multi', 'Batch quantities vs w({ex}); fixed w({fixed})').format(
-                    ex=ex, fixed=fixed_el,
-                )
+            default_title = self.tr('batch_curve_multi_title_multi', 'Batch quantities vs w({ex}); fixed w({fixed})').format(
+                ex=ex, fixed=fixed_el,
             )
+        curve_labels = {}
+        if hasattr(self, 'batch_labels_ui') and self.batch_labels_ui:
+            curve_labels = self.batch_labels_ui['resolve'](
+                default_title=default_title,
+                default_x=format_w_element_label(ex, ' (%)'),
+                default_y=self.tr('batch_curve_multi_ylabel', 'Value'),
+                default_z='',
+            )
+
+        fig, ax = plt.subplots(figsize=(11, 6.5))
+        ax.set_xlabel(curve_labels.get('x', format_w_element_label(ex, ' (%)')))
+        ax.set_ylabel(curve_labels.get('y', self.tr('batch_curve_multi_ylabel', 'Value')))
+        ax.set_title(curve_labels.get('title', default_title))
 
         cmap = plt.cm.tab10
         linestyles = ['-', '--', '-.', ':']
@@ -8464,6 +9002,12 @@ class ThermoQGUI:
 
         def _plot_xyz_surface(x, y, z, ex, ey, base, label_z, status_widget, plot_limits=None):
             exp_pts = exp_ui['get_points'](ex, ey, z_hint='T')
+            pl = phase_labels_ui['resolve'](
+                default_title='',
+                default_x=format_w_element_label(ex),
+                default_y=format_w_element_label(ey),
+                default_z=label_z,
+            )
             self._plot_xyz_surface_render(
                 x, y, z, ex, ey, base, label_z, viz_var.get(),
                 smoothness_var.get(), image_format_var.get(),
@@ -8473,6 +9017,7 @@ class ThermoQGUI:
                 plot_limits=plot_limits, exp_points=exp_pts,
                 iso_interval=iso_interval_var.get(),
                 show_legend=False,
+                plot_labels=pl,
             )
 
         elements_frame = ttk.Frame(controls)
@@ -8601,6 +9146,10 @@ class ThermoQGUI:
         coord_ui = self._build_plot_coord_range_ui(controls, reset_command=_phase_reset_coord)
         coord_ui['frame'].pack(fill=tk.X, pady=5)
         ps_coord_widgets = coord_ui['widgets']
+
+        phase_labels_ui = self._build_plot_labels_ui(controls, show_z=True)
+        phase_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        ps_labels_widgets = phase_labels_ui['widgets']
 
         exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
         exp_ui['frame'].pack(fill=tk.X, pady=5)
@@ -8897,8 +9446,15 @@ class ThermoQGUI:
                     )
                     return
                 fig, ax = plt.subplots(figsize=(10, 8))
-                ax.set_xlabel(format_w_element_label(ex))
-                ax.set_ylabel(format_w_element_label(ey))
+                _ps_pl = phase_labels_ui['resolve'](
+                    default_title=self.tr("plot_phase_overlay", "Liquidus + Solidus overlay"),
+                    default_x=format_w_element_label(ex),
+                    default_y=format_w_element_label(ey),
+                    default_z='T (K)',
+                )
+                ax.set_xlabel(_ps_pl['x'])
+                ax.set_ylabel(_ps_pl['y'])
+                ax.set_title(_ps_pl['title'])
                 if xi_l is not None and zi_l is not None:
                     cs_l = ax.contour(xi_l, yi_l, zi_l, levels=levels, colors="#c0392b", linewidths=1.6)
                     _phase_clabel_2d(ax, cs_l, "#922b21")
@@ -8919,7 +9475,6 @@ class ThermoQGUI:
                         _phase_clabel_2d(ax, cs_s, "#1a5276")
                     except Exception:
                         pass
-                ax.set_title(self.tr("plot_phase_overlay", "Liquidus + Solidus overlay"))
                 ax.grid(False)
                 if plot_limits:
                     self._apply_plot_xy_limits(ax, px0, px1, py0, py1)
@@ -9456,6 +10011,7 @@ class ThermoQGUI:
             lbl_ps_azim.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_ps_azim_rng.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(ps_coord_widgets)
+            self._refresh_plot_labels_lang(phase_labels_ui)
             self._refresh_plot_exp_lang(ps_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_ps_outdir.config(text=self.tr('batch_output_dir', 'Output Directory:'))
@@ -9876,6 +10432,10 @@ class ThermoQGUI:
         coord_ui['frame'].pack(fill=tk.X, pady=5)
         q_coord_widgets = coord_ui['widgets']
 
+        q_labels_ui = self._build_plot_labels_ui(controls, show_z=True)
+        q_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        q_labels_widgets = q_labels_ui['widgets']
+
         exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
         exp_ui['frame'].pack(fill=tk.X, pady=5)
         q_exp_widgets = exp_ui['widgets']
@@ -10049,6 +10609,12 @@ class ThermoQGUI:
                     float(x.min()), float(x.max()), float(y.min()), float(y.max()),
                 )
                 exp_pts = exp_ui['get_points'](ex, ey, z_hint=col_q_found)
+                q_pl = q_labels_ui['resolve'](
+                    default_title='',
+                    default_x=format_w_element_label(ex),
+                    default_y=format_w_element_label(ey),
+                    default_z=label_z,
+                )
                 self._plot_xyz_surface_render(
                     x, y, z, ex, ey, base, label_z, viz_var.get(),
                     smoothness_var.get(), image_format_var.get(),
@@ -10059,6 +10625,7 @@ class ThermoQGUI:
                     iso_interval=iso_interval_var.get(),
                     iso_clabel_fmt="%g", iso_level_fmt=".3g",
                     show_legend=False,
+                    plot_labels=q_pl,
                 )
 
             except Exception as e:
@@ -10112,6 +10679,7 @@ class ThermoQGUI:
             lbl_q_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_q_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(q_coord_widgets)
+            self._refresh_plot_labels_lang(q_labels_ui)
             self._refresh_plot_exp_lang(q_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_q_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
@@ -10383,6 +10951,10 @@ class ThermoQGUI:
         lmg_coord_ui['frame'].pack(fill=tk.X, pady=5)
         lmg_coord_widgets = lmg_coord_ui['widgets']
 
+        lmg_labels_ui = self._build_plot_labels_ui(controls, show_z=True)
+        lmg_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        lmg_labels_widgets = lmg_labels_ui['widgets']
+
         lmg_exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
         lmg_exp_ui['frame'].pack(fill=tk.X, pady=5)
         lmg_exp_widgets = lmg_exp_ui['widgets']
@@ -10498,6 +11070,15 @@ class ThermoQGUI:
                 return
             viz = viz_var.get()
             z_label = self.tr('plot_lmg_axis_z_temp', 'Temperature (K)')
+            default_title = self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
+                t=t_plot, note=title_suffix,
+            )
+            lmg_pl = lmg_labels_ui['resolve'](
+                default_title=default_title,
+                default_x=format_chemistry_axis_label(x_col),
+                default_y=format_chemistry_axis_label(y_col),
+                default_z=z_label if not flat_z else '',
+            )
             phase_colors = _lmg_phase_color_map([c['label'] for c in curves])
 
             if viz == "2D Boundary":
@@ -10508,11 +11089,9 @@ class ThermoQGUI:
                         c['x'], c['y'],
                         color=phase_colors.get(ph), linewidth=1.8,
                     )
-                ax.set_xlabel(format_chemistry_axis_label(x_col))
-                ax.set_ylabel(format_chemistry_axis_label(y_col))
-                ax.set_title(self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
-                    t=t_plot, note=title_suffix,
-                ))
+                ax.set_xlabel(lmg_pl['x'])
+                ax.set_ylabel(lmg_pl['y'])
+                ax.set_title(lmg_pl['title'])
                 ax.grid(True, alpha=0.3)
                 if plot_limits:
                     self._apply_plot_xy_limits(ax, *plot_limits)
@@ -10540,12 +11119,10 @@ class ThermoQGUI:
                     c['x'], c['y'], zc,
                     color=phase_colors.get(ph), linewidth=1.8,
                 )
-            ax.set_xlabel(format_chemistry_axis_label(x_col))
-            ax.set_ylabel(format_chemistry_axis_label(y_col))
-            ax.set_zlabel(z_label if not flat_z else '')
-            ax.set_title(self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
-                t=t_plot, note=title_suffix,
-            ))
+            ax.set_xlabel(lmg_pl['x'])
+            ax.set_ylabel(lmg_pl['y'])
+            ax.set_zlabel(lmg_pl['z'] if not flat_z else '')
+            ax.set_title(lmg_pl['title'])
             _apply_3d_view(ax)
             if plot_limits:
                 ax.set_xlim(plot_limits[0], plot_limits[1])
@@ -10600,16 +11177,13 @@ class ThermoQGUI:
                             line=dict(width=4, color=line_color),
                         ))
                     fig_p = go.Figure(data=traces)
+                    self._apply_plot_labels_plotly(
+                        fig_p,
+                        lmg_pl,
+                        scene=True,
+                    )
                     fig_p.update_layout(
-                        title=self.tr('plot_lmg_title_at_t', 'Miscibility Gap @ {t:g} K{note}').format(
-                            t=t_plot, note=title_suffix,
-                        ),
                         showlegend=False,
-                        scene=dict(
-                            xaxis_title=format_chemistry_axis_label(x_col),
-                            yaxis_title=format_chemistry_axis_label(y_col),
-                            zaxis_title=z_label,
-                        ),
                         width=900, height=700,
                     )
                     out_path = f"{_output_base(base_suffix)}_3d_interactive.html"
@@ -10659,6 +11233,12 @@ class ThermoQGUI:
             viz = viz_var.get()
             z_label = self.tr('plot_lmg_axis_z_temp', 'Temperature (K)')
             plot_title = self.tr('plot_lmg_surfaces_title', 'Miscibility Gap — Stacked Temperature Surface')
+            lmg_stack_pl = lmg_labels_ui['resolve'](
+                default_title=plot_title,
+                default_x=format_chemistry_axis_label(x_col),
+                default_y=format_chemistry_axis_label(y_col),
+                default_z=z_label,
+            )
             t_min = float(np.nanmin(z))
             levels = _lmg_iso_levels(z, iso_interval_var.get())
             levels = levels[levels >= t_min - 1e-6]
@@ -10706,17 +11286,17 @@ class ThermoQGUI:
                         xi, yi, zi, cmap='coolwarm', alpha=0.65, linewidth=0,
                         antialiased=True, shade=True,
                     )
-                    fig.colorbar(surf, shrink=0.5, aspect=5, label=z_label)
+                    fig.colorbar(surf, shrink=0.5, aspect=5, label=lmg_stack_pl['z'])
                     _lmg_draw_iso_3d(ax, xi, yi, zi, levels, iso_line, iso_text, mid_frac=0.5)
                 elif len(x) >= 3:
                     trisurf = ax.plot_trisurf(
                         x, y, z_plot, cmap='coolwarm', linewidth=0.0, antialiased=True, alpha=0.65,
                     )
-                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=z_label)
-                ax.set_xlabel(format_chemistry_axis_label(x_col))
-                ax.set_ylabel(format_chemistry_axis_label(y_col))
-                ax.set_zlabel(z_label)
-                ax.set_title(plot_title)
+                    fig.colorbar(trisurf, shrink=0.5, aspect=5, label=lmg_stack_pl['z'])
+                ax.set_xlabel(lmg_stack_pl['x'])
+                ax.set_ylabel(lmg_stack_pl['y'])
+                ax.set_zlabel(lmg_stack_pl['z'])
+                ax.set_title(lmg_stack_pl['title'])
                 try:
                     ax.set_zlim(bottom=t_min)
                 except Exception:
@@ -10795,16 +11375,17 @@ class ThermoQGUI:
                                 fig_p, exp_pts, ex_el, ey_el, show_legend=False,
                             )
                     fig_p.update_layout(
-                        title=plot_title,
                         showlegend=False,
                         scene=dict(
-                            xaxis_title=format_chemistry_axis_label(x_col),
-                            yaxis_title=format_chemistry_axis_label(y_col),
-                            zaxis_title=z_label,
+                            xaxis_title=lmg_stack_pl['x'],
+                            yaxis_title=lmg_stack_pl['y'],
+                            zaxis_title=lmg_stack_pl['z'],
                             zaxis=dict(range=[t_min, None]),
                         ),
                         width=950, height=750,
                     )
+                    if lmg_stack_pl.get('title'):
+                        fig_p.update_layout(title=lmg_stack_pl['title'])
                     out_path = f"{_output_base(base_suffix)}_surfaces_interactive.html"
                     fig_p.write_html(out_path)
                     status_label.config(text=f"Interactive 3D saved: {out_path}", foreground='green')
@@ -10926,6 +11507,7 @@ class ThermoQGUI:
             lbl_lmg_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_lmg_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(lmg_coord_widgets)
+            self._refresh_plot_labels_lang(lmg_labels_ui)
             self._refresh_plot_exp_lang(lmg_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_lmg_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
@@ -11151,6 +11733,10 @@ class ThermoQGUI:
         tz_coord_ui['frame'].pack(fill=tk.X, pady=5)
         tz_coord_widgets = tz_coord_ui['widgets']
 
+        tz_labels_ui = self._build_plot_labels_ui(controls, show_z=True)
+        tz_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        tz_labels_widgets = tz_labels_ui['widgets']
+
         exp_ui = self._build_plot_experimental_points_ui(controls, plot_window)
         exp_ui['frame'].pack(fill=tk.X, pady=5)
         tz_exp_widgets = exp_ui['widgets']
@@ -11288,6 +11874,12 @@ class ThermoQGUI:
                     float(x.min()), float(x.max()), float(y.min()), float(y.max()),
                 )
                 exp_pts = exp_ui['get_points'](ex, ey, z_hint='T0 (K)')
+                tz_pl = tz_labels_ui['resolve'](
+                    default_title='',
+                    default_x=format_w_element_label(ex),
+                    default_y=format_w_element_label(ey),
+                    default_z=label_z,
+                )
                 self._plot_xyz_surface_render(
                     x, y, z, ex, ey, base, label_z, viz_var.get(),
                     smoothness_var.get(), image_format_var.get(),
@@ -11296,6 +11888,7 @@ class ThermoQGUI:
                     status_label, plot_window,
                     plot_limits=plot_limits, exp_points=exp_pts,
                     iso_interval=iso_interval_var.get(),
+                    plot_labels=tz_pl,
                 )
 
             except Exception as e:
@@ -11350,6 +11943,7 @@ class ThermoQGUI:
             lbl_tz_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_tz_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(tz_coord_widgets)
+            self._refresh_plot_labels_lang(tz_labels_ui)
             self._refresh_plot_exp_lang(tz_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
             lbl_tz_od.config(text=self.tr('batch_output_dir', 'Output Directory:'))
@@ -12433,7 +13027,7 @@ class ThermoQGUI:
                     for combo in combinations:
                         if constraint_sum_var.get() and np.sum(combo) > 1.0 + 1e-6:
                             continue
-                        if constraint_exclude_zero_var.get() and np.all(combo < 1e-6):
+                        if constraint_exclude_zero_var.get() and len(combo) >= 2 and np.all(combo < 1e-6):
                             continue
                         valid_combinations.append(combo)
                 else:
@@ -12453,7 +13047,7 @@ class ThermoQGUI:
                 for combo in valid_combinations:
                     for t_val in temp_values:
                         if _tcm_should_skip_loop_iteration(
-                            t0_baseline, element_names, combo, t_val,
+                            t0_baseline, element_names, combo, t_val, out_decimals=out_decimals,
                         ):
                             skipped_dup += 1
                             done += 1
@@ -13737,6 +14331,1067 @@ class ThermoQGUI:
         self._register_tool_lang_refresh(_refresh_pbatch_lang)
         _refresh_pbatch_lang()
 
+    def _build_trist_viz_panel(
+        self,
+        parent,
+        window,
+        workbook_var=None,
+        settings_axis_x=None,
+        settings_axis_y=None,
+        default_prefix='TriST_plot',
+        button_bar=None,
+    ):
+        """Reusable TriST visualization panel (Plotly / 2D / 3D / GIF)."""
+        widgets = {}
+
+        # Visualization (Plotly)
+        viz_frame = ttk.LabelFrame(parent, text=self.tr('extp_trist_viz', 'Visualize TriST'), padding="10")
+        viz_frame.pack(fill=tk.X, pady=(0, 10))
+
+        viz_src_row = ttk.Frame(viz_frame)
+        viz_src_row.pack(fill=tk.X, pady=2)
+        trist_lbl_viz_src = ttk.Label(viz_src_row, text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
+        trist_lbl_viz_src.pack(side=tk.LEFT, padx=(0, 6))
+        viz_src_var = workbook_var if workbook_var is not None else tk.StringVar(value="")
+        ttk.Entry(viz_src_row, textvariable=viz_src_var, width=52).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+        def _browse_trist_viz_src():
+            p = filedialog.askopenfilename(
+                title=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'),
+                filetypes=[
+                    (self.tr('pandat_fd_excel', 'Excel files'), "*.xlsx"),
+                    (self.tr('filetype_all', 'All files'), "*.*"),
+                ],
+            )
+            if p:
+                viz_src_var.set(p)
+                # Immediately populate A/B/C choices after selecting a workbook.
+                _load_viz_wcols_from_xlsx()
+
+        ttk.Button(viz_src_row, text=self.tr('pandat_browse', 'Browse'), command=_browse_trist_viz_src).pack(side=tk.RIGHT, padx=5)
+
+        viz_opts_row = ttk.Frame(viz_frame)
+        viz_opts_row.pack(fill=tk.X, pady=2)
+        trist_lbl_viz_sheet = ttk.Label(viz_opts_row, text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
+        trist_lbl_viz_sheet.pack(side=tk.LEFT, padx=(0, 6))
+        viz_sheet_var = tk.StringVar(value="TriST_boundaries")
+        viz_sheet_combo = ttk.Combobox(
+            viz_opts_row,
+            textvariable=viz_sheet_var,
+            values=["TriST_boundaries", "T0_lines", "TriST_mask"],
+            width=18,
+            state="readonly",
+        )
+        viz_sheet_combo.pack(side=tk.LEFT, padx=(0, 10))
+
+        only_trist_var = tk.BooleanVar(value=True)
+        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var)
+        trist_cb_only_trist.pack(side=tk.LEFT)
+
+        viz_t_row = ttk.Frame(viz_frame)
+        viz_t_row.pack(fill=tk.X, pady=2)
+        trist_lbl_viz_tmin = ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmin', 'T min:'))
+        trist_lbl_viz_tmin.pack(side=tk.LEFT, padx=(0, 6))
+        viz_tmin = tk.StringVar(value="")
+        ttk.Entry(viz_t_row, textvariable=viz_tmin, width=10).pack(side=tk.LEFT, padx=(0, 10))
+        trist_lbl_viz_tmax = ttk.Label(viz_t_row, text=self.tr('extp_trist_viz_tmax', 'T max:'))
+        trist_lbl_viz_tmax.pack(side=tk.LEFT, padx=(0, 6))
+        viz_tmax = tk.StringVar(value="")
+        ttk.Entry(viz_t_row, textvariable=viz_tmax, width=10).pack(side=tk.LEFT, padx=(0, 10))
+
+        viz_bnd_surf_row = ttk.Frame(viz_frame)
+        viz_bnd_surf_row.pack(fill=tk.X, pady=2)
+        trist_lbl_bnd_int = ttk.Label(
+            viz_bnd_surf_row, text=self.tr("extp_trist_viz_bnd_interval", "Boundary lines every (K):")
+        )
+        trist_lbl_bnd_int.pack(side=tk.LEFT, padx=(0, 6))
+        viz_bnd_t_interval = tk.StringVar(value="10")
+        ttk.Entry(viz_bnd_surf_row, textvariable=viz_bnd_t_interval, width=6).pack(side=tk.LEFT, padx=(0, 8))
+        trist_lbl_bnd_int_hint = ttk.Label(
+            viz_bnd_surf_row, text=self.tr("extp_trist_viz_bnd_interval_hint", "0 = all temperatures")
+        )
+        trist_lbl_bnd_int_hint.pack(side=tk.LEFT, padx=(0, 10))
+        viz_smooth_bnd_var = tk.BooleanVar(value=True)
+        trist_cb_smooth_bnd = ttk.Checkbutton(
+            viz_bnd_surf_row,
+            text=self.tr(
+                "extp_trist_viz_smooth_surf",
+                "Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)",
+            ),
+            variable=viz_smooth_bnd_var,
+        )
+        trist_cb_smooth_bnd.pack(side=tk.LEFT)
+
+        viz_iso_row = ttk.Frame(viz_frame)
+        viz_iso_row.pack(fill=tk.X, pady=2)
+        trist_lbl_iso_int = ttk.Label(
+            viz_iso_row, text=self.tr("extp_trist_viz_iso_interval", "Isotherm interval (K):")
+        )
+        trist_lbl_iso_int.pack(side=tk.LEFT, padx=(0, 6))
+        viz_iso_interval = tk.StringVar(value="10")
+        ttk.Entry(viz_iso_row, textvariable=viz_iso_interval, width=6).pack(side=tk.LEFT, padx=(0, 8))
+        trist_lbl_iso_int_hint = ttk.Label(
+            viz_iso_row,
+            text=self.tr(
+                "extp_trist_viz_iso_interval_hint",
+                "Contour spacing for temperature isotherms on the smooth surface",
+            ),
+            foreground='gray',
+        )
+        trist_lbl_iso_int_hint.pack(side=tk.LEFT, padx=(0, 10))
+
+        viz_smooth_row = ttk.Frame(viz_frame)
+        viz_smooth_row.pack(fill=tk.X, pady=2)
+        trist_lbl_smooth = ttk.Label(viz_smooth_row, text=self.tr('batch_smooth', 'Smoothness:'))
+        trist_lbl_smooth.pack(side=tk.LEFT, padx=(0, 6))
+        viz_smoothness_var = tk.DoubleVar(value=70.0)
+        trist_lbl_smooth_val = ttk.Label(viz_smooth_row, text="70", width=4)
+        trist_lbl_smooth_val.pack(side=tk.RIGHT, padx=(6, 0))
+
+        def _trist_on_smoothness(_evt=None):
+            try:
+                trist_lbl_smooth_val.config(text=f"{int(float(viz_smoothness_var.get()))}")
+            except Exception:
+                pass
+
+        ttk.Scale(
+            viz_smooth_row,
+            from_=0, to=100, orient=tk.HORIZONTAL,
+            variable=viz_smoothness_var, command=_trist_on_smoothness,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        _trist_on_smoothness()
+
+        viz_cols_row = ttk.Frame(viz_frame)
+        viz_cols_row.pack(fill=tk.X, pady=2)
+        trist_lbl_viz_cols = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
+        trist_lbl_viz_cols.pack(side=tk.LEFT, padx=(0, 6))
+        viz_x = tk.StringVar(value="")
+        viz_y = tk.StringVar(value="")
+        viz_x_combo = ttk.Combobox(viz_cols_row, textvariable=viz_x, values=[], width=10, state="readonly")
+        viz_y_combo = ttk.Combobox(viz_cols_row, textvariable=viz_y, values=[], width=10, state="readonly")
+        trist_lbl_viz_x = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_x', 'X:'))
+        trist_lbl_viz_x.pack(side=tk.LEFT, padx=(10, 2))
+        viz_x_combo.pack(side=tk.LEFT, padx=(0, 6))
+        trist_lbl_viz_y = ttk.Label(viz_cols_row, text=self.tr('extp_trist_viz_y', 'Y:'))
+        trist_lbl_viz_y.pack(side=tk.LEFT, padx=(0, 2))
+        viz_y_combo.pack(side=tk.LEFT, padx=(0, 6))
+
+        def _trist_viz_filtered_df():
+            xlsx = viz_src_var.get().strip()
+            if not xlsx or not os.path.isfile(xlsx):
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            sheet = viz_sheet_var.get().strip() or "TriST_boundaries"
+            dfp = pd.read_excel(xlsx, sheet_name=sheet, engine='openpyxl')
+            if dfp is None or dfp.empty:
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            dgcol = 'dG = G_solid - G_liquid (J/mol)'
+            if sheet not in ("TriST_boundaries", "T0_lines", "TriST_mask"):
+                if dgcol in dfp.columns and only_trist_var.get():
+                    dfp[dgcol] = pd.to_numeric(dfp[dgcol], errors='coerce')
+                    dfp = dfp[dfp[dgcol] <= 0].copy()
+            if 'T (K)' in dfp.columns:
+                dfp['T (K)'] = pd.to_numeric(dfp['T (K)'], errors='coerce')
+                try:
+                    if viz_tmin.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] >= float(viz_tmin.get())]
+                except Exception:
+                    pass
+                try:
+                    if viz_tmax.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] <= float(viz_tmax.get())]
+                except Exception:
+                    pass
+            if dfp.empty:
+                raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+            return dfp
+
+        def _trist_viz_reset_coord():
+            try:
+                dfp = _trist_viz_filtered_df()
+                a_col, b_col = viz_x.get().strip(), viz_y.get().strip()
+                if not a_col or a_col not in dfp.columns or not b_col or b_col not in dfp.columns or a_col == b_col:
+                    cand = [c for c in dfp.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                    if len(cand) < 2:
+                        raise ValueError(self.tr('extp_trist_viz_no_data', 'No TriST workbook selected.'))
+                    a_col, b_col = cand[0], cand[1]
+                av = pd.to_numeric(dfp[a_col], errors='coerce')
+                bv = pd.to_numeric(dfp[b_col], errors='coerce')
+                mask = av.notna() & bv.notna()
+                if not mask.any():
+                    raise ValueError(self.tr('plot_no_valid', 'No valid data points after filtering.'))
+                px0, px1, py0, py1 = _extp_trist_default_coord_limits(
+                    float(av[mask].min()), float(av[mask].max()),
+                    float(bv[mask].min()), float(bv[mask].max()),
+                )
+                trist_viz_coord_ui['set_fields'](px0, px1, py0, py1)
+            except Exception as e:
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_coord_reset_fail', 'Could not compute default range: {e}').format(e=str(e)),
+                )
+
+        trist_viz_coord_ui = self._build_plot_coord_range_ui(viz_frame, reset_command=_trist_viz_reset_coord)
+        trist_viz_coord_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_viz_coord_widgets = trist_viz_coord_ui['widgets']
+
+        trist_labels_ui = self._build_plot_labels_ui(viz_frame, show_z=True)
+        trist_labels_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_viz_labels_widgets = trist_labels_ui['widgets']
+
+        viz_mesh_row = ttk.Frame(viz_frame)
+        viz_mesh_row.pack(fill=tk.X, pady=2)
+        viz_mask_mesh_var = tk.BooleanVar(value=True)
+        trist_cb_mask_dome = ttk.Checkbutton(
+            viz_mesh_row,
+            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)'),
+            variable=viz_mask_mesh_var,
+        )
+        trist_cb_mask_dome.pack(side=tk.LEFT)
+
+        trist_viz_mode_row = ttk.Frame(viz_frame)
+        trist_viz_mode_row.pack(fill=tk.X, pady=4)
+        trist_lbl_viz_mode = ttk.Label(trist_viz_mode_row, text=self.tr('plot_vis_label', 'Visualization:'))
+        trist_lbl_viz_mode.pack(side=tk.LEFT, padx=(0, 6))
+        trist_viz_var = tk.StringVar(value="Plotly 3D")
+        trist_rb_v2 = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_2d', '2D Heatmap'),
+            variable=trist_viz_var, value="2D Heatmap",
+        )
+        trist_rb_v2.pack(side=tk.LEFT, padx=4)
+        trist_rb_v3 = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_3d', '3D Static'),
+            variable=trist_viz_var, value="3D Static",
+        )
+        trist_rb_v3.pack(side=tk.LEFT, padx=4)
+        trist_rb_vg = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_gif', '3D Rotation GIF'),
+            variable=trist_viz_var, value="3D Rotation GIF",
+        )
+        trist_rb_vg.pack(side=tk.LEFT, padx=4)
+        trist_rb_vp = ttk.Radiobutton(
+            trist_viz_mode_row, text=self.tr('batch_viz_plotly', 'Plotly 3D'),
+            variable=trist_viz_var, value="Plotly 3D",
+        )
+        trist_rb_vp.pack(side=tk.LEFT, padx=4)
+
+        trist_out_ui = self._build_plot_output_settings_ui(viz_frame, default_prefix=default_prefix)
+        trist_out_ui['frame'].pack(fill=tk.X, pady=5)
+        trist_output_dir_var = trist_out_ui['output_dir_var']
+        trist_output_prefix_var = trist_out_ui['output_prefix_var']
+        trist_image_format_var = trist_out_ui['image_format_var']
+        trist_out_widgets = trist_out_ui['widgets']
+
+        trist_exp_ui = self._build_plot_experimental_points_ui(viz_frame, window)
+        trist_exp_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_exp_widgets = trist_exp_ui['widgets']
+
+        def _trist_exp_points(a_col, b_col, z_hint='T'):
+            mx = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(a_col), re.I)
+            my = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(b_col), re.I)
+            if mx and my:
+                return trist_exp_ui['get_points'](mx.group(1), my.group(1), z_hint=z_hint)
+            return None
+
+        trist_view_frame = ttk.LabelFrame(
+            viz_frame, text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'), padding="8",
+        )
+        trist_view_frame.pack(fill=tk.X, pady=4)
+        trist_elev_var = tk.DoubleVar(value=30.0)
+        trist_azim_var = tk.DoubleVar(value=-60.0)
+        trist_elev_row = ttk.Frame(trist_view_frame)
+        trist_elev_row.pack(fill=tk.X, pady=2)
+        trist_lbl_elev = ttk.Label(trist_elev_row, text=self.tr('batch_elev', 'Elevation (deg):'))
+        trist_lbl_elev.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_elev_row, textvariable=trist_elev_var, width=8).pack(side=tk.LEFT, padx=5)
+        trist_lbl_elev_rng = ttk.Label(trist_elev_row, text=self.tr('plot_elev_range', '(0–90)'))
+        trist_lbl_elev_rng.pack(side=tk.LEFT, padx=5)
+        trist_azim_row = ttk.Frame(trist_view_frame)
+        trist_azim_row.pack(fill=tk.X, pady=2)
+        trist_lbl_azim = ttk.Label(trist_azim_row, text=self.tr('batch_azim', 'Azimuth (deg):'))
+        trist_lbl_azim.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_azim_row, textvariable=trist_azim_var, width=8).pack(side=tk.LEFT, padx=5)
+        trist_lbl_azim_rng = ttk.Label(trist_azim_row, text=self.tr('plot_azim_range', '(-180–180)'))
+        trist_lbl_azim_rng.pack(side=tk.LEFT, padx=5)
+
+        trist_gif_frame = ttk.LabelFrame(
+            viz_frame, text=self.tr('batch_gif_params', '3D Rotation GIF Parameters'), padding="8",
+        )
+        trist_gif_frame.pack(fill=tk.X, pady=4)
+        trist_gif_speed_var = tk.StringVar(value="5")
+        trist_gif_interval_var = tk.StringVar(value="50")
+        trist_gif_fps_var = tk.StringVar(value="20")
+        trist_gspd_row = ttk.Frame(trist_gif_frame)
+        trist_gspd_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gspd = ttk.Label(trist_gspd_row, text=self.tr('batch_gif_speed', 'Rotation Speed (degrees/frame):'))
+        trist_lbl_gspd.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gspd_row, textvariable=trist_gif_speed_var, width=10).pack(side=tk.LEFT, padx=5)
+        trist_gint_row = ttk.Frame(trist_gif_frame)
+        trist_gint_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gint = ttk.Label(trist_gint_row, text=self.tr('batch_gif_interval', 'Frame Interval (ms):'))
+        trist_lbl_gint.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gint_row, textvariable=trist_gif_interval_var, width=10).pack(side=tk.LEFT, padx=5)
+        trist_gfps_row = ttk.Frame(trist_gif_frame)
+        trist_gfps_row.pack(fill=tk.X, pady=2)
+        trist_lbl_gfps = ttk.Label(trist_gfps_row, text=self.tr('batch_gif_fps', 'FPS:'))
+        trist_lbl_gfps.pack(side=tk.LEFT, padx=5)
+        ttk.Entry(trist_gfps_row, textvariable=trist_gif_fps_var, width=10).pack(side=tk.LEFT, padx=5)
+
+        def _default_viz_paths():
+            base = workbook_var.get().strip() if workbook_var is not None else ""
+            if base and base.lower().endswith('.xlsx'):
+                viz_src_var.set(base)
+            out_dir = os.path.dirname(base) if base else ""
+            if out_dir and os.path.isdir(out_dir):
+                trist_output_dir_var.set(out_dir)
+
+        _default_viz_paths()
+        # Populate ternary axis comboboxes if a default workbook exists.
+        try:
+            _load_viz_wcols_from_xlsx()
+        except Exception:
+            pass
+
+        def _load_viz_wcols_from_xlsx():
+            p = viz_src_var.get().strip()
+            if not p or not os.path.isfile(p):
+                return
+            try:
+                df0 = pd.read_excel(p, sheet_name=viz_sheet_var.get() or "TriST_boundaries", engine='openpyxl')
+            except Exception:
+                return
+            wcols = [c for c in df0.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+            if not wcols:
+                return
+            viz_x_combo.config(values=wcols)
+            viz_y_combo.config(values=wcols)
+            # Prefer the TriST Settings axes if available and present
+            sx = settings_axis_x.get().strip() if settings_axis_x is not None else ""
+            sy = settings_axis_y.get().strip() if settings_axis_y is not None else ""
+            if sx in wcols and sy in wcols and sx != sy:
+                viz_x.set(sx)
+                viz_y.set(sy)
+                return
+            # Otherwise pick two columns (highest variance)
+            x_pick, y_pick = _extp_trist_pick_axes_2d(df0)
+            if x_pick in wcols and y_pick in wcols and x_pick != y_pick:
+                viz_x.set(x_pick); viz_y.set(y_pick)
+            elif len(wcols) >= 2:
+                viz_x.set(wcols[0]); viz_y.set(wcols[1])
+
+        def _run_trist_viz():
+            viz_mode = trist_viz_var.get()
+            if viz_mode == "Plotly 3D" and not PLOTLY_AVAILABLE:
+                messagebox.showerror(self.tr('plot_dep_title', 'Dependency Missing'), self.tr('extp_trist_viz_need_plotly', ''))
+                return
+            if viz_mode != "Plotly 3D" and not MATPLOTLIB_AVAILABLE:
+                messagebox.showerror(
+                    self.tr('plot_dep_title', 'Dependency Missing'),
+                    self.tr('plot_dep_3d', 'Matplotlib is not installed. Cannot generate 3D image.'),
+                )
+                return
+
+            xlsx = viz_src_var.get().strip()
+            if not xlsx:
+                _default_viz_paths()
+                xlsx = viz_src_var.get().strip()
+            if not xlsx or not os.path.isfile(xlsx):
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            sheet = viz_sheet_var.get().strip() or "TriST_boundaries"
+            try:
+                dfp = pd.read_excel(xlsx, sheet_name=sheet, engine='openpyxl')
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                return
+            if dfp is None or dfp.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            dgcol = 'dG = G_solid - G_liquid (J/mol)'
+            if sheet not in ("TriST_boundaries", "T0_lines", "TriST_mask"):
+                if dgcol in dfp.columns and only_trist_var.get():
+                    dfp[dgcol] = pd.to_numeric(dfp[dgcol], errors='coerce')
+                    dfp = dfp[dfp[dgcol] <= 0].copy()
+            if 'T (K)' in dfp.columns:
+                dfp['T (K)'] = pd.to_numeric(dfp['T (K)'], errors='coerce')
+                try:
+                    if viz_tmin.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] >= float(viz_tmin.get())]
+                except Exception:
+                    pass
+                try:
+                    if viz_tmax.get().strip() != '':
+                        dfp = dfp[dfp['T (K)'] <= float(viz_tmax.get())]
+                except Exception:
+                    pass
+            if dfp.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            a_col, b_col = viz_x.get().strip(), viz_y.get().strip()
+            if not a_col or a_col not in dfp.columns or not b_col or b_col not in dfp.columns or a_col == b_col:
+                cand = [c for c in dfp.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                if len(cand) >= 2:
+                    a_col, b_col = cand[0], cand[1]
+                    viz_x.set(a_col)
+                    viz_y.set(b_col)
+                else:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                    return
+
+            a = pd.to_numeric(dfp[a_col], errors='coerce')
+            b = pd.to_numeric(dfp[b_col], errors='coerce')
+            t = pd.to_numeric(dfp.get('T (K)', np.nan), errors='coerce')
+            dg = pd.to_numeric(dfp.get(dgcol, np.nan), errors='coerce')
+            row_mask = a.notna() & b.notna() & t.notna()
+            dfp2 = dfp.loc[row_mask].copy()
+            if dfp2.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            a2 = pd.to_numeric(dfp2[a_col], errors='coerce').to_numpy(dtype=np.float64)
+            b2 = pd.to_numeric(dfp2[b_col], errors='coerce').to_numpy(dtype=np.float64)
+            t2 = pd.to_numeric(dfp2['T (K)'], errors='coerce').to_numpy(dtype=np.float64)
+            if dgcol in dfp2.columns:
+                dg2 = pd.to_numeric(dfp2[dgcol], errors='coerce').to_numpy(dtype=np.float64)
+            else:
+                dg2 = np.full(len(dfp2), np.nan, dtype=np.float64)
+            f2 = (
+                pd.to_numeric(dfp2.get('f(C0) (J/mol)', np.nan), errors='coerce').to_numpy(dtype=np.float64)
+                if 'f(C0) (J/mol)' in dfp2.columns else np.full(len(dfp2), np.nan, dtype=np.float64)
+            )
+
+            keep = np.isfinite(a2) & np.isfinite(b2) & np.isfinite(t2)
+            x, y, t2, dg2, f2 = a2[keep], b2[keep], t2[keep], dg2[keep], f2[keep]
+            if len(x) < 3:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            try:
+                px0, px1, py0, py1 = trist_viz_coord_ui['resolve'](
+                    float(np.nanmin(x)), float(np.nanmax(x)),
+                    float(np.nanmin(y)), float(np.nanmax(y)),
+                    square_default=False,
+                )
+            except ValueError as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                return
+
+            t_lo = viz_tmin.get().strip()
+            t_hi = viz_tmax.get().strip()
+            dfp2 = _extp_trist_filter_df_xy(dfp2, a_col, b_col, px0, px1, py0, py1)
+            if dfp2.empty:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+            a2 = pd.to_numeric(dfp2[a_col], errors='coerce').to_numpy(dtype=np.float64)
+            b2 = pd.to_numeric(dfp2[b_col], errors='coerce').to_numpy(dtype=np.float64)
+            t2 = pd.to_numeric(dfp2['T (K)'], errors='coerce').to_numpy(dtype=np.float64)
+            if dgcol in dfp2.columns:
+                dg2 = pd.to_numeric(dfp2[dgcol], errors='coerce').to_numpy(dtype=np.float64)
+            else:
+                dg2 = np.full(len(dfp2), np.nan, dtype=np.float64)
+            f2 = (
+                pd.to_numeric(dfp2.get('f(C0) (J/mol)', np.nan), errors='coerce').to_numpy(dtype=np.float64)
+                if 'f(C0) (J/mol)' in dfp2.columns else np.full(len(dfp2), np.nan, dtype=np.float64)
+            )
+            keep = np.isfinite(a2) & np.isfinite(b2) & np.isfinite(t2)
+            x, y, t2, dg2, f2 = a2[keep], b2[keep], t2[keep], dg2[keep], f2[keep]
+            if len(x) < 3:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                return
+
+            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+            pts_lbl = self.tr("extp_trist_legend_mask_pts", "TriST inside (points)")
+
+            def _trist_load_bnd_df():
+                try:
+                    dfb = pd.read_excel(xlsx, sheet_name="TriST_boundaries", engine="openpyxl")
+                except Exception:
+                    return None
+                if dfb is None or dfb.empty:
+                    return None
+                dfb = dfb.copy()
+                if "T (K)" in dfb.columns:
+                    dfb["T (K)"] = pd.to_numeric(dfb["T (K)"], errors="coerce")
+                    try:
+                        if t_lo != "":
+                            dfb = dfb[dfb["T (K)"] >= float(t_lo)]
+                    except Exception:
+                        pass
+                    try:
+                        if t_hi != "":
+                            dfb = dfb[dfb["T (K)"] <= float(t_hi)]
+                    except Exception:
+                        pass
+                return _extp_trist_filter_df_xy(dfb, a_col, b_col, px0, px1, py0, py1)
+
+            f_cb_title = self.tr(
+                "extp_trist_colorbar_f",
+                "f (C0) (J/mol) — margin to tangent common tangent (Viridis: lower = deeper inside TriST)",
+            )
+            try:
+                d_bnd = float((viz_bnd_t_interval.get() or "").strip() or "0")
+            except Exception:
+                d_bnd = 0.0
+            if d_bnd < 0:
+                d_bnd = 0.0
+
+            def _trist_bnd_t_step_ok(tval, enable):
+                if (not enable) or d_bnd <= 0.0 or not np.isfinite(tval):
+                    return bool(np.isfinite(tval))
+                return bool(abs(tval - d_bnd * np.round(tval / d_bnd)) <= max(0.11, 0.12 * d_bnd))
+
+            prefix = trist_output_prefix_var.get().strip() or "TriST_plot"
+            base_path = trist_out_ui['get_base_path']()
+            sheet_tag = sheet.replace(' ', '_')
+            base = os.path.join(base_path, f"{prefix}_{sheet_tag}")
+
+            def _trist_lbl(default_title=''):
+                return trist_labels_ui['resolve'](
+                    default_title=default_title,
+                    default_x=format_chemistry_axis_label(a_col),
+                    default_y=format_chemistry_axis_label(b_col),
+                    default_z='T (K)',
+                )
+
+            def _trist_boundary_groups(dfb):
+                dfb = dfb.copy()
+                dfb['T (K)'] = pd.to_numeric(dfb['T (K)'], errors='coerce')
+                if 'curve_id' in dfb.columns and 'point_i' in dfb.columns:
+                    dfb['curve_id'] = pd.to_numeric(dfb['curve_id'], errors='coerce')
+                    dfb['point_i'] = pd.to_numeric(dfb['point_i'], errors='coerce')
+                    return dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)', 'curve_id'], sort=True)
+                return dfb.dropna(subset=['T (K)', a_col, b_col]).groupby(['T (K)'], sort=True)
+
+            def _trist_iso_levels_from_z(z_arr):
+                return _lmg_iso_levels(z_arr, viz_iso_interval.get())
+
+            def _trist_line_smooth_sheet():
+                return sheet in ("TriST_boundaries", "T0_lines")
+
+            def _trist_line_smooth_surf_label():
+                if sheet == "T0_lines":
+                    return self.tr(
+                        "extp_trist_legend_t0_smooth_surf",
+                        "T0 line (Gaussian smooth surface, dG=0)",
+                    )
+                return self.tr(
+                    "extp_trist_legend_smooth_surf", "TriST boundary (Gaussian smooth surface)",
+                )
+
+            def _trist_boundary_smooth_surface():
+                """GPR smooth surface from all boundary / T0 line (x,y,T) points."""
+                bx, by, bt = _extp_trist_boundary_xyz(dfp2, a_col, b_col)
+                if len(bx) < 3:
+                    return None
+                xi, yi, zi = self.create_smooth_surface(
+                    bx, by, bt, grid_resolution=100,
+                    smoothness=viz_smoothness_var.get(),
+                    x_bounds=(px0, px1), y_bounds=(py0, py1),
+                )
+                if xi is None or zi is None:
+                    return None
+                levels = _trist_iso_levels_from_z(bt)
+                return xi, yi, zi, levels
+
+            iso_lbl = self.tr("extp_trist_legend_isotherms", "Temperature isotherms")
+            iso_line = '#2c3e50'
+            iso_text = '#1a252f'
+
+            def _trist_plot_line_smooth_mpl(ax, fig, show_legend=True, show_colorbar=True):
+                if not (_trist_line_smooth_sheet() and viz_smooth_bnd_var.get() and SKLEARN_AVAILABLE):
+                    return False
+                surf = _trist_boundary_smooth_surface()
+                if surf is None:
+                    return False
+                xi, yi, zi, levels = surf
+                surf_lbl = _trist_line_smooth_surf_label()
+                s = ax.plot_surface(
+                    xi, yi, zi, cmap='coolwarm', alpha=0.55, linewidth=0, antialiased=True,
+                )
+                if show_colorbar:
+                    fig.colorbar(s, ax=ax, shrink=0.6, pad=0.08, label='T (K)')
+                _extp_trist_draw_iso_3d_mpl(ax, xi, yi, zi, levels, iso_line, iso_text, mid_frac=0.5)
+                if show_legend:
+                    from matplotlib.lines import Line2D
+                    ax.legend(
+                        handles=[
+                            Line2D([0], [0], color='gray', lw=4, label=surf_lbl),
+                            Line2D([0], [0], color=iso_line, lw=2, label=iso_lbl),
+                        ],
+                        loc='upper left',
+                    )
+                return True
+
+            def _trist_plot_line_smooth_plotly(traces):
+                if not (_trist_line_smooth_sheet() and viz_smooth_bnd_var.get() and SKLEARN_AVAILABLE):
+                    return False
+                surf = _trist_boundary_smooth_surface()
+                if surf is None:
+                    return False
+                xi, yi, zi, levels = surf
+                surf_lbl = _trist_line_smooth_surf_label()
+                t_min = float(np.nanmin(zi))
+                traces.append(
+                    go.Surface(
+                        x=xi, y=yi, z=zi, colorscale='RdBu', reversescale=True,
+                        opacity=0.65, cmin=t_min,
+                        colorbar=dict(title='T (K)'), showscale=True,
+                        name=surf_lbl,
+                    )
+                )
+                for lvl, seg in _lmg_contour_segments(xi, yi, zi, levels):
+                    _extp_trist_plotly_iso_traces(traces, lvl, seg, iso_line, iso_text, mid_frac=0.5)
+                return True
+
+            def _trist_plot_plotly():
+                fig = go.Figure()
+                traces = []
+                smooth_line_ok = _trist_plot_line_smooth_plotly(traces)
+                for trc in traces:
+                    fig.add_trace(trc)
+                if sheet in ("TriST_boundaries", "T0_lines") and not smooth_line_ok:
+                    do_step = sheet == "TriST_boundaries"
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        fig.add_trace(
+                            go.Scatter3d(
+                                x=pd.to_numeric(gdf[a_col], errors='coerce'),
+                                y=pd.to_numeric(gdf[b_col], errors='coerce'),
+                                z=np.full(len(gdf), tt, dtype=float),
+                                mode='lines',
+                                line=dict(width=3),
+                                name=f"{sheet} @ {tt:.0f}K",
+                                hovertemplate=f"T={tt:.0f}K<br>{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<extra></extra>",
+                            )
+                        )
+                elif sheet == "TriST_mask":
+                    dome_ok = False
+                    if viz_mask_mesh_var.get():
+                        cube = _extp_trist_try_load_cube(xlsx, a_col, b_col)
+                        if cube is not None:
+                            T_c, yg, xg, f_c = cube
+                            dome_traces = list(_extp_trist_plotly_mask_dome(
+                                self.tr, T_c, yg, xg, f_c, show_volume=True,
+                                px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                            ))
+                            for _dtr in dome_traces:
+                                fig.add_trace(_dtr)
+                            dome_ok = len(dome_traces) > 0
+                        if not dome_ok:
+                            dfb = _trist_load_bnd_df()
+                            if dfb is not None and not dfb.empty:
+                                rings = _extp_trist_collect_rings_per_T(dfb, a_col, b_col)
+                                loft = _extp_trist_loft_surface_plotly(
+                                    self.tr, rings,
+                                    px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                                )
+                                if loft is not None:
+                                    fig.add_trace(loft)
+                                    dome_ok = True
+                    if not dome_ok:
+                        hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>f=%{{marker.color:.3g}}"
+                        fig.add_trace(
+                            go.Scatter3d(
+                                x=x, y=y, z=t2, mode="markers",
+                                marker=dict(size=2, color=f2, colorscale="Viridis", opacity=0.55,
+                                          colorbar=dict(title=f_cb_title, titleside="right", len=0.6)),
+                                hovertemplate=hover,
+                                name=pts_lbl,
+                            )
+                        )
+                elif sheet not in ("TriST_boundaries", "T0_lines"):
+                    hover = f"{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<br>T=%{{z:.1f}}K<br>dG=%{{marker.color:.3g}} J/mol"
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=x, y=y, z=t2, mode='markers',
+                            marker=dict(size=3, color=dg2, colorscale='RdBu', reversescale=True, opacity=0.85,
+                                      colorbar=dict(title="dG")),
+                            hovertemplate=hover, name="Merged points",
+                        )
+                    )
+                mx = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(a_col), re.I)
+                my = re.match(r'^\s*w\s*\(\s*([A-Za-z0-9]+)\s*\)\s*$', str(b_col), re.I)
+                if mx and my:
+                    self._overlay_experimental_points_plotly(
+                        fig, _trist_exp_points(a_col, b_col), mx.group(1), my.group(1),
+                    )
+                if not fig.data:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
+                    return None
+                try:
+                    z0 = float(t_lo) if t_lo.strip() else float(np.nanmin(t2))
+                    z1 = float(t_hi) if t_hi.strip() else float(np.nanmax(t2))
+                    if not (np.isfinite(z0) and np.isfinite(z1) and z1 > z0):
+                        z0, z1 = None, None
+                except Exception:
+                    z0, z1 = None, None
+                scene_cfg = _extp_trist_plotly_scene_config(
+                    a_col, b_col, px0, px1, py0, py1, z0=z0, z1=z1,
+                )
+                _tplp = _trist_lbl(f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}")
+                scene_cfg['xaxis_title'] = _tplp['x']
+                scene_cfg['yaxis_title'] = _tplp['y']
+                scene_cfg['zaxis_title'] = _tplp['z']
+                fig.update_layout(
+                    title=_tplp['title'],
+                    scene=scene_cfg,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    showlegend=True,
+                    width=1000,
+                    height=820,
+                )
+                out_path = f"{base}_3d_interactive.html"
+                try:
+                    fig.write_html(out_path)
+                except Exception as e:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), str(e))
+                    return None
+                return out_path
+
+            def _trist_plot_mpl_2d():
+                from matplotlib.collections import LineCollection
+                fig, ax = plt.subplots(figsize=(10, 8))
+                _tpl2 = _trist_lbl(f"TriST ({sheet})")
+                if sheet in ("TriST_boundaries", "T0_lines"):
+                    do_step = sheet == "TriST_boundaries"
+                    segments, seg_t = [], []
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                        gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                        ok = np.isfinite(gx) & np.isfinite(gy)
+                        gx, gy = gx[ok], gy[ok]
+                        if len(gx) < 2:
+                            continue
+                        segments.append(np.column_stack([gx, gy]))
+                        seg_t.append(tt)
+                    if segments:
+                        lc = LineCollection(segments, cmap='coolwarm', linewidths=1.8)
+                        lc.set_array(np.asarray(seg_t, dtype=float))
+                        ax.add_collection(lc)
+                        ax.autoscale()
+                        fig.colorbar(lc, ax=ax, label='T (K)')
+                elif sheet == "TriST_mask" and np.isfinite(f2).any():
+                    t_pick = float(np.median(t2))
+                    try:
+                        if viz_tmin.get().strip() and viz_tmax.get().strip():
+                            t_pick = 0.5 * (float(viz_tmin.get()) + float(viz_tmax.get()))
+                    except Exception:
+                        pass
+                    tol = max(1.0, 0.05 * (float(np.nanmax(t2)) - float(np.nanmin(t2)) + 1.0))
+                    sel = np.abs(t2 - t_pick) <= tol
+                    xs, ys, fs = x[sel], y[sel], f2[sel]
+                    if len(xs) < 10:
+                        xs, ys, fs = x, y, f2
+                    if len(xs) >= 3:
+                        tc = ax.tricontourf(xs, ys, fs, levels=30, cmap='viridis')
+                        fig.colorbar(tc, ax=ax, label=f_cb_title)
+                    _tpl2 = _trist_lbl(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
+                else:
+                    sc = ax.scatter(x, y, c=t2, cmap='coolwarm', s=24, alpha=0.85)
+                    fig.colorbar(sc, ax=ax, label='T (K)')
+                ax.set_xlabel(_tpl2['x'])
+                ax.set_ylabel(_tpl2['y'])
+                ax.set_title(_tpl2['title'])
+                ax.grid(True, alpha=0.25)
+                self._apply_plot_xy_limits(ax, px0, px1, py0, py1)
+                self._overlay_experimental_points_mpl_2d(ax, _trist_exp_points(a_col, b_col))
+                fig.tight_layout()
+                ext, skw = self._plot_image_ext_and_save_kwargs(trist_image_format_var.get())
+                out_path = f"{base}_Heatmap.{ext}"
+                fig.savefig(out_path, **skw)
+                plt.close(fig)
+                return out_path
+
+            def _trist_plot_mpl_3d(gif=False):
+                from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+                fig = plt.figure(figsize=(12, 10))
+                ax = fig.add_subplot(111, projection='3d')
+                bnd_static_plain = sheet == "TriST_boundaries" and not gif
+                smooth_line_ok = _trist_plot_line_smooth_mpl(
+                    ax, fig,
+                    show_legend=not bnd_static_plain,
+                    show_colorbar=True,
+                )
+                if sheet in ("TriST_boundaries", "T0_lines") and not smooth_line_ok:
+                    do_step = sheet == "TriST_boundaries"
+                    import matplotlib.cm as cm
+                    import matplotlib.colors as mcolors
+                    from matplotlib.lines import Line2D
+                    bnd_lbl = self.tr(
+                        "extp_trist_legend_boundary" if sheet == "TriST_boundaries" else "extp_trist_legend_t0",
+                        "TriST boundary (f=0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
+                    )
+                    seg_t = []
+                    for _gk, gdf in _trist_boundary_groups(dfp2):
+                        gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                        tt = float(gdf['T (K)'].iloc[0])
+                        if not _trist_bnd_t_step_ok(tt, do_step):
+                            continue
+                        gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                        gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                        ok = np.isfinite(gx) & np.isfinite(gy)
+                        gx, gy = gx[ok], gy[ok]
+                        if len(gx) >= 2:
+                            seg_t.append(tt)
+                    if seg_t:
+                        t_arr = np.asarray(seg_t, dtype=np.float64)
+                        norm = mcolors.Normalize(vmin=float(t_arr.min()), vmax=float(t_arr.max()))
+                        cmap = cm.coolwarm
+                        for _gk, gdf in _trist_boundary_groups(dfp2):
+                            gdf = gdf.sort_values('point_i') if 'point_i' in gdf.columns else gdf
+                            tt = float(gdf['T (K)'].iloc[0])
+                            if not _trist_bnd_t_step_ok(tt, do_step):
+                                continue
+                            gx = pd.to_numeric(gdf[a_col], errors='coerce').to_numpy(dtype=np.float64)
+                            gy = pd.to_numeric(gdf[b_col], errors='coerce').to_numpy(dtype=np.float64)
+                            ok = np.isfinite(gx) & np.isfinite(gy)
+                            gx, gy = gx[ok], gy[ok]
+                            if len(gx) < 2:
+                                continue
+                            ax.plot(gx, gy, np.full(len(gx), tt), color=cmap(norm(tt)), linewidth=1.8, alpha=0.9)
+                        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+                        sm.set_array([])
+                        fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.08, label='T (K)')
+                        if not bnd_static_plain:
+                            ax.legend(
+                                handles=[Line2D([0], [0], color='gray', lw=2, label=bnd_lbl)],
+                                loc='upper left',
+                            )
+                elif sheet == "TriST_mask":
+                    dome_ok = False
+                    if viz_mask_mesh_var.get():
+                        cube = _extp_trist_try_load_cube(xlsx, a_col, b_col)
+                        if cube is not None:
+                            T_c, yg, xg, f_c = cube
+                            dome_ok = _extp_trist_mpl_isosurface_f_zero(
+                                ax, T_c, yg, xg, f_c, label=dome_lbl,
+                                px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                            )
+                        if not dome_ok:
+                            dfb = _trist_load_bnd_df()
+                            if dfb is not None and not dfb.empty:
+                                rings = _extp_trist_collect_rings_per_T(dfb, a_col, b_col)
+                                dome_ok = _extp_trist_loft_surface_mpl(
+                                    ax, rings, label=dome_lbl,
+                                    px0=px0, px1=px1, py0=py0, py1=py1, tmin=t_lo, tmax=t_hi,
+                                )
+                    if not dome_ok:
+                        p = ax.scatter(x, y, t2, c=f2, cmap='viridis', s=4, alpha=0.55, label=pts_lbl)
+                        fig.colorbar(p, ax=ax, shrink=0.6, label=f_cb_title)
+                        from matplotlib.lines import Line2D
+                        ax.legend(
+                            handles=[Line2D([0], [0], marker='o', color='w', markerfacecolor='#2ecc71',
+                                            markersize=6, label=pts_lbl)],
+                            loc='upper left',
+                        )
+                    else:
+                        from matplotlib.patches import Patch
+                        ax.legend(handles=[Patch(facecolor='#c0392b', alpha=0.48, label=dome_lbl)], loc='upper left')
+                elif sheet not in ("TriST_boundaries", "T0_lines"):
+                    p = ax.scatter(x, y, t2, c=dg2, cmap='RdBu', s=8, alpha=0.85)
+                    fig.colorbar(p, ax=ax, shrink=0.6, label='dG (J/mol)')
+                _tpl3d = _trist_lbl(f"TriST ({sheet})")
+                ax.set_xlabel(_tpl3d['x'])
+                ax.set_ylabel(_tpl3d['y'])
+                ax.set_zlabel(_tpl3d['z'])
+                ax.set_title(_tpl3d['title'])
+                ax.set_xlim(px0, px1)
+                ax.set_ylim(py0, py1)
+                try:
+                    z0 = float(t_lo) if t_lo.strip() else None
+                    z1 = float(t_hi) if t_hi.strip() else None
+                    if z0 is not None and z1 is not None and z1 > z0:
+                        ax.set_zlim(z0, z1)
+                    elif z0 is not None:
+                        ax.set_zlim(z0, ax.get_zlim()[1])
+                    elif z1 is not None:
+                        ax.set_zlim(ax.get_zlim()[0], z1)
+                except Exception:
+                    pass
+                try:
+                    ax.view_init(elev=float(trist_elev_var.get()), azim=float(trist_azim_var.get()))
+                except Exception:
+                    pass
+                self._overlay_experimental_points_mpl_3d(ax, _trist_exp_points(a_col, b_col))
+                if gif:
+                    def _rotate(angle):
+                        ax.view_init(elev=float(trist_elev_var.get()), azim=angle)
+                        return [ax]
+                    try:
+                        rotation_step = int(float(trist_gif_speed_var.get()))
+                    except Exception:
+                        rotation_step = 5
+                    try:
+                        interval_ms = int(float(trist_gif_interval_var.get()))
+                    except Exception:
+                        interval_ms = 50
+                    try:
+                        fps_val = int(float(trist_gif_fps_var.get()))
+                    except Exception:
+                        fps_val = 20
+                    ani = animation.FuncAnimation(
+                        fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms,
+                    )
+                    out_path = f"{base}_3d_rotation.gif"
+                    ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
+                    plt.close(fig)
+                    return out_path
+                fig.tight_layout()
+                ext, skw = self._plot_image_ext_and_save_kwargs(trist_image_format_var.get())
+                out_path = f"{base}_3d.{ext}"
+                fig.savefig(out_path, **skw)
+                plt.close(fig)
+                return out_path
+
+            out_path = None
+            if viz_mode == "Plotly 3D":
+                out_path = _trist_plot_plotly()
+            elif viz_mode == "2D Heatmap":
+                out_path = _trist_plot_mpl_2d()
+            elif viz_mode == "3D Static":
+                out_path = _trist_plot_mpl_3d(gif=False)
+            elif viz_mode == "3D Rotation GIF":
+                out_path = _trist_plot_mpl_3d(gif=True)
+            else:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('plot_vis_label', 'Visualization:'))
+                return
+            if not out_path:
+                return
+            try:
+                self.open_file_and_offer_save_as(out_path, window)
+            except Exception:
+                pass
+            messagebox.showinfo(
+                self.tr('dlg_success', 'Success'),
+                self.tr('extp_trist_viz_saved', 'TriST plot saved: {path}').format(path=out_path),
+            )
+
+
+        # Keep w-column lists in sync
+        try:
+            viz_sheet_combo.bind("<<ComboboxSelected>>", lambda _e: _load_viz_wcols_from_xlsx())
+        except Exception:
+            pass
+        _load_viz_wcols_from_xlsx()
+
+
+        def set_workbook(p):
+            if workbook_var is not None:
+                workbook_var.set(p)
+            else:
+                viz_src_var.set(p)
+            try:
+                _default_viz_paths()
+                _load_viz_wcols_from_xlsx()
+            except Exception:
+                pass
+
+        viz_btn_row = None
+        if button_bar is None:
+            viz_btn_row = ttk.Frame(parent)
+            viz_btn_row.pack(fill=tk.X, pady=4)
+        btn_parent = button_bar if button_bar is not None else viz_btn_row
+        btn_trist_viz = ttk.Button(
+            btn_parent,
+            text=self.tr('extp_trist_viz_btn', 'Plot'),
+            command=_run_trist_viz,
+        )
+        if button_bar is not None:
+            btn_trist_viz.pack(side=tk.LEFT, padx=10)
+        else:
+            btn_trist_viz.pack(anchor=tk.CENTER, pady=4)
+
+        widgets.update({
+            'viz_frame': viz_frame,
+            'lbl_viz_src': trist_lbl_viz_src,
+            'lbl_viz_sheet': trist_lbl_viz_sheet,
+            'cb_only_trist': trist_cb_only_trist,
+            'lbl_viz_tmin': trist_lbl_viz_tmin,
+            'lbl_viz_tmax': trist_lbl_viz_tmax,
+            'lbl_bnd_int': trist_lbl_bnd_int,
+            'lbl_bnd_int_hint': trist_lbl_bnd_int_hint,
+            'cb_smooth_bnd': trist_cb_smooth_bnd,
+            'lbl_iso_int': trist_lbl_iso_int,
+            'lbl_iso_int_hint': trist_lbl_iso_int_hint,
+            'lbl_smooth': trist_lbl_smooth,
+            'lbl_viz_cols': trist_lbl_viz_cols,
+            'lbl_viz_x': trist_lbl_viz_x,
+            'lbl_viz_y': trist_lbl_viz_y,
+            'cb_mask_dome': trist_cb_mask_dome,
+            'lbl_viz_mode': trist_lbl_viz_mode,
+            'rb_v2': trist_rb_v2,
+            'rb_v3': trist_rb_v3,
+            'rb_vg': trist_rb_vg,
+            'rb_vp': trist_rb_vp,
+            'view_frame': trist_view_frame,
+            'lbl_elev': trist_lbl_elev,
+            'lbl_elev_rng': trist_lbl_elev_rng,
+            'lbl_azim': trist_lbl_azim,
+            'lbl_azim_rng': trist_lbl_azim_rng,
+            'gif_frame': trist_gif_frame,
+            'lbl_gspd': trist_lbl_gspd,
+            'lbl_gint': trist_lbl_gint,
+            'lbl_gfps': trist_lbl_gfps,
+            'btn_viz': btn_trist_viz,
+        })
+
+        def refresh_lang():
+            try:
+                viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
+                widgets['lbl_viz_src'].config(text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
+                widgets['lbl_viz_sheet'].config(text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
+                widgets['cb_only_trist'].config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'))
+                widgets['lbl_viz_tmin'].config(text=self.tr('extp_trist_viz_tmin', 'T min:'))
+                widgets['lbl_viz_tmax'].config(text=self.tr('extp_trist_viz_tmax', 'T max:'))
+                widgets['lbl_bnd_int'].config(text=self.tr("extp_trist_viz_bnd_interval", "Boundary lines every (K):"))
+                widgets['lbl_bnd_int_hint'].config(text=self.tr("extp_trist_viz_bnd_interval_hint", "0 = all temperatures"))
+                widgets['cb_smooth_bnd'].config(text=self.tr("extp_trist_viz_smooth_surf", "Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)"))
+                widgets['lbl_iso_int'].config(text=self.tr("extp_trist_viz_iso_interval", "Isotherm interval (K):"))
+                widgets['lbl_iso_int_hint'].config(text=self.tr("extp_trist_viz_iso_interval_hint", "Contour spacing for temperature isotherms on the smooth surface"))
+                widgets['lbl_smooth'].config(text=self.tr('batch_smooth', 'Smoothness:'))
+                widgets['lbl_viz_cols'].config(text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
+                widgets['lbl_viz_x'].config(text=self.tr('extp_trist_viz_x', 'X:'))
+                widgets['lbl_viz_y'].config(text=self.tr('extp_trist_viz_y', 'Y:'))
+                widgets['cb_mask_dome'].config(text=self.tr("extp_trist_viz_mask_mesh", "Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)"))
+                widgets['lbl_viz_mode'].config(text=self.tr('plot_vis_label', 'Visualization:'))
+                widgets['rb_v2'].config(text=self.tr('batch_viz_2d', '2D Heatmap'))
+                widgets['rb_v3'].config(text=self.tr('batch_viz_3d', '3D Static'))
+                widgets['rb_vg'].config(text=self.tr('batch_viz_gif', '3D Rotation GIF'))
+                widgets['rb_vp'].config(text=self.tr('batch_viz_plotly', 'Plotly 3D'))
+                self._refresh_plot_output_lang(trist_out_widgets)
+                self._refresh_plot_coord_lang(trist_viz_coord_widgets)
+                self._refresh_plot_labels_lang(trist_labels_ui)
+                self._refresh_plot_exp_lang(trist_exp_widgets)
+                widgets['view_frame'].config(text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'))
+                widgets['lbl_elev'].config(text=self.tr('batch_elev', 'Elevation (deg):'))
+                widgets['lbl_elev_rng'].config(text=self.tr('plot_elev_range', '(0–90)'))
+                widgets['lbl_azim'].config(text=self.tr('batch_azim', 'Azimuth (deg):'))
+                widgets['lbl_azim_rng'].config(text=self.tr('plot_azim_range', '(-180–180)'))
+                widgets['gif_frame'].config(text=self.tr('batch_gif_params', '3D Rotation GIF Parameters'))
+                widgets['lbl_gspd'].config(text=self.tr('batch_gif_speed', 'Rotation Speed (degrees/frame):'))
+                widgets['lbl_gint'].config(text=self.tr('batch_gif_interval', 'Frame Interval (ms):'))
+                widgets['lbl_gfps'].config(text=self.tr('batch_gif_fps', 'FPS:'))
+                widgets['btn_viz'].config(text=self.tr('extp_trist_viz_btn', 'Plot'))
+            except Exception:
+                pass
+
+        return {
+            'set_workbook': set_workbook,
+            'refresh_lang': refresh_lang,
+            'run_viz': _run_trist_viz,
+            'widgets': widgets,
+        }
+
+
     def open_exp_data_processor(self):
         """Open Thermo-calc results extractor tool (Melting range + T-zero)."""
         processor_window = tk.Toplevel(self.root)
@@ -13762,15 +15417,18 @@ class ThermoQGUI:
         tab_mr_outer = ttk.Frame(notebook, padding="6")
         tab_lmg_outer = ttk.Frame(notebook, padding="6")
         tab_t0_outer = ttk.Frame(notebook, padding="6")
+        tab_trist_outer = ttk.Frame(notebook, padding="6")
         notebook.add(tab_mr_outer, text=self.tr('exptc_tab_mr', 'Melting Range'))
         notebook.add(tab_lmg_outer, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
         notebook.add(tab_t0_outer, text=self.tr('exptc_tab_t0', 'T-zero'))
+        notebook.add(tab_trist_outer, text=self.tr('exptc_tab_trist', 'TriST Zone'))
 
         tab_mr = tab_mr_outer
         tab_lmg = tab_lmg_outer
         tab_t0 = tab_t0_outer
+        tab_trist = tab_trist_outer
 
-        exptc_state = {'mr_errors': [], 'lmg_errors': [], 't0_errors': []}
+        exptc_state = {'mr_errors': [], 'lmg_errors': [], 't0_errors': [], 'trist_errors': []}
         _exptc_txt_ft = (
             (self.tr('filetype_text', 'Text files'), "*.txt"),
             (self.tr('filetype_all', 'All files'), "*.*"),
@@ -14732,14 +16390,398 @@ class ThermoQGUI:
         )
         btn_exptc_t0_close.pack(side=tk.LEFT, padx=10)
 
+        # -----------------------------
+        # Tab: TriST Zone (Thermo-Calc Gibbs .exp)
+        # -----------------------------
+        exptc_trist_info = ttk.Label(
+            tab_trist,
+            text=self.tr('exptc_trist_intro', ''),
+            wraplength=650,
+            justify='left',
+        )
+        exptc_trist_info.pack(anchor=tk.W, pady=(0, 8))
+
+        exptc_trist_folder_frame = ttk.LabelFrame(
+            tab_trist,
+            text=self.tr('exptc_trist_folder', 'Folder with Gibbs .exp files (recursive)'),
+            padding="10",
+        )
+        exptc_trist_folder_frame.pack(fill=tk.X, pady=4)
+        exptc_trist_folder_var = tk.StringVar()
+        ttk.Entry(exptc_trist_folder_frame, textvariable=exptc_trist_folder_var, width=60).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True,
+        )
+
+        btn_exptc_trist_fd = ttk.Button(
+            exptc_trist_folder_frame,
+            text=self.tr('pandat_browse', 'Browse'),
+        )
+        btn_exptc_trist_fd.pack(side=tk.RIGHT, padx=5)
+
+        exptc_trist_filter_frame = ttk.LabelFrame(
+            tab_trist,
+            text=self.tr('exptc_trist_filter', 'Filename Filter (Optional)'),
+            padding="10",
+        )
+        exptc_trist_filter_frame.pack(fill=tk.X, pady=4)
+        exptc_trist_filter_var = tk.StringVar(value=EXPTC_GIBBS_FILTER_DEFAULT)
+        ttk.Label(
+            exptc_trist_filter_frame,
+            text=self.tr('exptc_mr_pattern_lbl', 'Regex:'),
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(exptc_trist_filter_frame, textvariable=exptc_trist_filter_var, width=40).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True,
+        )
+        exptc_lbl_trist_filter_hint = ttk.Label(
+            exptc_trist_filter_frame,
+            text=self.tr('exptc_trist_filter_hint', ''),
+            foreground='gray',
+        )
+        exptc_lbl_trist_filter_hint.pack(side=tk.LEFT, padx=5)
+
+        exptc_trist_out_frame = ttk.LabelFrame(
+            tab_trist,
+            text=self.tr('extp_trist_out', 'Output Excel (TriST)'),
+            padding="10",
+        )
+        exptc_trist_out_frame.pack(fill=tk.X, pady=4)
+        exptc_trist_out_var = tk.StringVar(value=self.tr('exptc_trist_out_default', 'TriST_tc.xlsx'))
+        ttk.Entry(exptc_trist_out_frame, textvariable=exptc_trist_out_var, width=60).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True,
+        )
+
+        def _exptc_browse_trist_out():
+            p = filedialog.asksaveasfilename(
+                title=self.tr('tbatch_fd_save_out', 'Save output file'),
+                defaultextension='.xlsx',
+                filetypes=[
+                    (self.tr('pandat_fd_excel', 'Excel files'), '*.xlsx'),
+                    (self.tr('filetype_all', 'All files'), '*.*'),
+                ],
+                parent=processor_window,
+            )
+            if p:
+                exptc_trist_out_var.set(p)
+
+        btn_exptc_trist_out = ttk.Button(
+            exptc_trist_out_frame,
+            text=self.tr('pandat_browse', 'Browse'),
+            command=_exptc_browse_trist_out,
+        )
+        btn_exptc_trist_out.pack(side=tk.RIGHT, padx=5)
+
+        exptc_trist_settings = ttk.LabelFrame(
+            tab_trist,
+            text=self.tr('extp_trist_settings', 'Settings'),
+            padding="10",
+        )
+        exptc_trist_settings.pack(fill=tk.X, pady=4)
+        exptc_trist_axis_row = ttk.Frame(exptc_trist_settings)
+        exptc_trist_axis_row.pack(fill=tk.X, pady=2)
+        exptc_lbl_trist_axis = ttk.Label(
+            exptc_trist_axis_row,
+            text=self.tr('extp_trist_axis', 'Axes (2D composition plane)'),
+        )
+        exptc_lbl_trist_axis.pack(side=tk.LEFT, padx=(0, 8))
+        exptc_trist_axis_x = tk.StringVar(value='')
+        exptc_trist_axis_y = tk.StringVar(value='')
+        exptc_lbl_trist_ax_x = ttk.Label(exptc_trist_axis_row, text=self.tr('extp_trist_axis_x', 'X:'))
+        exptc_lbl_trist_ax_x.pack(side=tk.LEFT, padx=(0, 3))
+        exptc_trist_axis_x_combo = ttk.Combobox(
+            exptc_trist_axis_row, textvariable=exptc_trist_axis_x, values=[], width=10, state='readonly',
+        )
+        exptc_trist_axis_x_combo.pack(side=tk.LEFT, padx=(0, 10))
+        exptc_lbl_trist_ax_y = ttk.Label(exptc_trist_axis_row, text=self.tr('extp_trist_axis_y', 'Y:'))
+        exptc_lbl_trist_ax_y.pack(side=tk.LEFT, padx=(0, 3))
+        exptc_trist_axis_y_combo = ttk.Combobox(
+            exptc_trist_axis_row, textvariable=exptc_trist_axis_y, values=[], width=10, state='readonly',
+        )
+        exptc_trist_axis_y_combo.pack(side=tk.LEFT, padx=(0, 10))
+
+        def _exptc_trist_name_filter_from_ui():
+            filt = exptc_trist_filter_var.get().strip()
+            if not filt:
+                return None
+            try:
+                return re.compile(filt)
+            except re.error:
+                return None
+
+        def _exptc_trist_refresh_axes_from_folder(folder_path):
+            """Populate Axes X/Y by peeking Gibbs .exp files (same idea as Pandat TriST)."""
+            try:
+                if not folder_path or not os.path.isdir(folder_path):
+                    return
+                wcols_now, sample = _exptc_gibbs_peek_axis_sample(
+                    folder_path, _exptc_trist_name_filter_from_ui(),
+                )
+                if len(wcols_now) < 2:
+                    return
+                exptc_trist_axis_x_combo.config(values=wcols_now)
+                exptc_trist_axis_y_combo.config(values=wcols_now)
+                cx = exptc_trist_axis_x.get().strip()
+                cy = exptc_trist_axis_y.get().strip()
+                x_pick, y_pick = _extp_trist_pick_axes_2d(sample) if sample is not None else (None, None)
+                if x_pick in wcols_now and y_pick in wcols_now and x_pick != y_pick:
+                    if cx not in wcols_now:
+                        exptc_trist_axis_x.set(x_pick)
+                        cx = x_pick
+                    if cy not in wcols_now or cy == cx:
+                        exptc_trist_axis_y.set(y_pick)
+                else:
+                    if cx not in wcols_now:
+                        exptc_trist_axis_x.set(wcols_now[0])
+                        cx = wcols_now[0]
+                    if cy not in wcols_now or cy == cx:
+                        exptc_trist_axis_y.set(wcols_now[1] if len(wcols_now) >= 2 else wcols_now[0])
+            except Exception:
+                pass
+
+        def _exptc_browse_trist_folder():
+            p = filedialog.askdirectory(
+                title=self.tr('exptc_fd_trist_folder', 'Select folder with Thermo-Calc Gibbs .exp files'),
+                parent=processor_window,
+            )
+            if p:
+                exptc_trist_folder_var.set(p)
+                _exptc_trist_refresh_axes_from_folder(p)
+
+        btn_exptc_trist_fd.config(command=_exptc_browse_trist_folder)
+
+        def _exptc_trist_on_filter_change(*_args):
+            folder = exptc_trist_folder_var.get().strip()
+            if folder and os.path.isdir(folder):
+                _exptc_trist_refresh_axes_from_folder(folder)
+
+        try:
+            exptc_trist_filter_var.trace_add('write', _exptc_trist_on_filter_change)
+        except Exception:
+            pass
+
+        exptc_trist_grid_row = ttk.Frame(exptc_trist_settings)
+        exptc_trist_grid_row.pack(fill=tk.X, pady=2)
+        exptc_lbl_trist_grid = ttk.Label(
+            exptc_trist_grid_row,
+            text=self.tr('extp_trist_grid', 'Grid (cubic interpolation)'),
+        )
+        exptc_lbl_trist_grid.pack(side=tk.LEFT, padx=(0, 8))
+        exptc_lbl_trist_grid_n = ttk.Label(exptc_trist_grid_row, text=self.tr('extp_trist_grid_n', 'N:'))
+        exptc_lbl_trist_grid_n.pack(side=tk.LEFT, padx=(0, 3))
+        exptc_trist_grid_n = tk.StringVar(value='60')
+        ttk.Entry(exptc_trist_grid_row, textvariable=exptc_trist_grid_n, width=6).pack(side=tk.LEFT, padx=(0, 10))
+        exptc_lbl_trist_grid_hint = ttk.Label(
+            exptc_trist_grid_row,
+            text=self.tr('extp_trist_grid_hint', 'Higher N = slower; typical 40–80.'),
+        )
+        exptc_lbl_trist_grid_hint.pack(side=tk.LEFT)
+
+        exptc_trist_status_frame = ttk.LabelFrame(
+            tab_trist, text=self.tr('exptc_status', 'Status'), padding="8",
+        )
+        exptc_trist_status_text = tk.Text(
+            exptc_trist_status_frame, height=5, width=70, wrap=tk.WORD, state=tk.DISABLED,
+        )
+        exptc_trist_status_scroll = ttk.Scrollbar(
+            exptc_trist_status_frame, orient=tk.VERTICAL, command=exptc_trist_status_text.yview,
+        )
+        exptc_trist_status_text.configure(yscrollcommand=exptc_trist_status_scroll.set)
+
+        def exptc_trist_log(msg):
+            try:
+                exptc_trist_status_text.config(state=tk.NORMAL)
+                exptc_trist_status_text.insert(tk.END, str(msg) + '\n')
+                exptc_trist_status_text.see(tk.END)
+                exptc_trist_status_text.config(state=tk.DISABLED)
+                processor_window.update()
+            except Exception:
+                pass
+
+        trist_abnormal_ui = _exptc_make_abnormal_tcm_section(tab_trist, 'trist_errors', exptc_trist_log)
+
+        exptc_trist_status_frame.pack(fill=tk.X, pady=4)
+        exptc_trist_status_text.pack(side=tk.LEFT, fill=tk.X, expand=False)
+        exptc_trist_status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def run_exptc_trist_extract():
+            try:
+                folder = exptc_trist_folder_var.get().strip()
+                out_path = exptc_trist_out_var.get().strip()
+                if not folder or not os.path.isdir(folder):
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('extp_trist_need_folder', 'Please select a valid Gibbs folder!'),
+                        parent=processor_window,
+                    )
+                    return
+                if not out_path:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exp_need_out', 'Please specify an output file!'),
+                        parent=processor_window,
+                    )
+                    return
+                if not SCIPY_AVAILABLE or not MATPLOTLIB_AVAILABLE:
+                    messagebox.showerror(
+                        self.tr('plot_dep_title', 'Dependency Missing'),
+                        'scipy and matplotlib are required for TriST extraction.',
+                        parent=processor_window,
+                    )
+                    return
+                filt = exptc_trist_filter_var.get().strip()
+                name_filter = None
+                if filt:
+                    try:
+                        name_filter = re.compile(filt)
+                    except re.error as e:
+                        messagebox.showerror(
+                            self.tr('dlg_error', 'Error'),
+                            self.tr('exp_regex_bad', 'Invalid regex pattern: {e}').format(e=str(e)),
+                            parent=processor_window,
+                        )
+                        return
+                files = _exptc_collect_gibbs_exp_files(folder, name_filter)
+                if not files:
+                    messagebox.showerror(
+                        self.tr('dlg_error', 'Error'),
+                        self.tr('exptc_trist_no_files', 'No matching Gibbs .exp files found in the folder!'),
+                        parent=processor_window,
+                    )
+                    return
+                exptc_trist_status_text.config(state=tk.NORMAL)
+                exptc_trist_status_text.delete('1.0', tk.END)
+                exptc_trist_status_text.config(state=tk.DISABLED)
+                exptc_state['trist_errors'] = []
+                merged_blocks = []
+                n_ok, n_skip = 0, 0
+                for k, path in enumerate(files, start=1):
+                    fn = os.path.basename(path)
+                    if k % 50 == 0 or k == 1:
+                        exptc_trist_log(
+                            self.tr('extp_trist_progress', 'Processing {i} / {n}…').format(i=k, n=len(files)),
+                        )
+                    m, err = _exptc_gibbs_file_to_merged_df(path, fn)
+                    if m is None:
+                        exptc_trist_log(
+                            self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(file=fn, reason=err or 'parse'),
+                        )
+                        fixed_el, fixed_val, t_k = _exptc_gibbs_parse_filename(fn)
+                        comp_cols = None
+                        if fixed_el is not None and fixed_val is not None:
+                            comp_cols = {f'w({fixed_el})': _exptc_gibbs_snap_mass_fraction(fixed_val)}
+                        _exptc_append_error(
+                            'trist_errors', fn,
+                            comp_cols=comp_cols,
+                            temperature_k=t_k if t_k is not None else None,
+                        )
+                        n_skip += 1
+                        continue
+                    merged_blocks.append(m)
+                    n_ok += 1
+                    if n_ok == 1:
+                        wcols = [c for c in m.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                        exptc_trist_axis_x_combo.config(values=wcols)
+                        exptc_trist_axis_y_combo.config(values=wcols)
+                        if wcols:
+                            exptc_trist_axis_x.set(wcols[0])
+                            exptc_trist_axis_y.set(wcols[1] if len(wcols) > 1 else wcols[0])
+                if not merged_blocks:
+                    messagebox.showwarning(
+                        self.tr('dlg_warning', 'Warning'),
+                        self.tr('extp_trist_no_data', 'No merged rows. Check phase_name, G columns, and matching (T, w*).'),
+                        parent=processor_window,
+                    )
+                    return
+                merged_all = pd.concat(merged_blocks, ignore_index=True)
+                wcols_all = [c for c in merged_all.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                exptc_trist_axis_x_combo.config(values=wcols_all)
+                exptc_trist_axis_y_combo.config(values=wcols_all)
+                x_col = exptc_trist_axis_x.get().strip()
+                y_col = exptc_trist_axis_y.get().strip()
+                if (not x_col) or x_col not in wcols_all or (not y_col) or y_col not in wcols_all or x_col == y_col:
+                    x_col, y_col = _extp_trist_pick_axes_2d(merged_all)
+                    exptc_trist_axis_x.set(x_col or '')
+                    exptc_trist_axis_y.set(y_col or '')
+                if not x_col or not y_col:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), 'Need at least two w(*) columns for TriST.', parent=processor_window)
+                    return
+                try:
+                    ngrid = int(exptc_trist_grid_n.get())
+                except Exception:
+                    ngrid = 60
+                _extp_trist_build_and_save_workbook(
+                    merged_all, x_col, y_col, ngrid, out_path,
+                    log_fn=exptc_trist_log,
+                    tr=lambda k, d='': self.tr(k, d),
+                )
+                exptc_trist_log(
+                    self.tr('extp_trist_done_log', 'Done. Files processed: {ok}, skipped: {skip}.').format(
+                        ok=n_ok, skip=n_skip,
+                    ),
+                )
+                messagebox.showinfo(
+                    self.tr('dlg_success', 'Success'),
+                    self.tr(
+                        'extp_trist_saved',
+                        'TriST workbook saved.\n\n{path}\n\nSheets: {sheets}\nMerged rows: {n}',
+                    ).format(
+                        path=out_path,
+                        sheets='T0_tie_1D, T0_lines, TriST_boundaries, TriST_mask',
+                        n=len(merged_all),
+                    ),
+                    parent=processor_window,
+                )
+                try:
+                    exptc_trist_viz_bundle['set_workbook'](out_path)
+                except Exception:
+                    pass
+            except PermissionError:
+                messagebox.showerror(
+                    self.tr('dlg_permission', 'Permission Denied'),
+                    self.tr(
+                        'extp_permission',
+                        'Cannot write {path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.',
+                    ).format(path=exptc_trist_out_var.get()),
+                    parent=processor_window,
+                )
+            except Exception as e:
+                messagebox.showerror(self.tr('dlg_error', 'Error'), str(e), parent=processor_window)
+
+        exptc_trist_build_row = ttk.Frame(tab_trist)
+        exptc_trist_build_row.pack(fill=tk.X, pady=4)
+        btn_exptc_trist_build = ttk.Button(
+            exptc_trist_build_row,
+            text=self.tr('extp_trist_btn', 'Build TriST workbook'),
+            command=run_exptc_trist_extract,
+        )
+        btn_exptc_trist_build.pack(anchor=tk.CENTER, pady=4)
+
+        exptc_trist_btns = ttk.Frame(tab_trist)
+
+        exptc_trist_viz_bundle = self._build_trist_viz_panel(
+            tab_trist,
+            processor_window,
+            workbook_var=exptc_trist_out_var,
+            settings_axis_x=exptc_trist_axis_x,
+            settings_axis_y=exptc_trist_axis_y,
+            button_bar=exptc_trist_btns,
+        )
+
+        btn_exptc_trist_close = ttk.Button(
+            exptc_trist_btns,
+            text=self.tr('extp_close', 'Close'),
+            command=_close_exptc,
+        )
+        btn_exptc_trist_close.pack(side=tk.LEFT, padx=10)
+        exptc_trist_btns.pack(pady=4, anchor=tk.CENTER)
+
         def _exptc_update_wrap(_event=None):
             w = main_frame.winfo_width()
             if w > 80:
                 wl = max(360, w - 24)
-                for lbl in (mr_info_label, lmg_info_label, t0_info_label):
+                for lbl in (mr_info_label, lmg_info_label, t0_info_label, exptc_trist_info):
                     lbl.configure(wraplength=wl)
                 hint_wl = max(320, w - 48)
-                for ui in (mr_abnormal_ui, lmg_abnormal_ui, t0_abnormal_ui):
+                for ui in (mr_abnormal_ui, lmg_abnormal_ui, t0_abnormal_ui, trist_abnormal_ui):
                     ui['lbl_tpl1_hint'].configure(wraplength=hint_wl)
 
         main_frame.bind("<Configure>", _exptc_update_wrap)
@@ -14759,7 +16801,43 @@ class ThermoQGUI:
                 notebook.tab(0, text=self.tr('exptc_tab_mr', 'Melting Range'))
                 notebook.tab(1, text=self.tr('exptc_tab_lmg', 'Miscibility Gap'))
                 notebook.tab(2, text=self.tr('exptc_tab_t0', 'T-zero'))
+                notebook.tab(3, text=self.tr('exptc_tab_trist', 'TriST Zone'))
             except tk.TclError:
+                pass
+            exptc_trist_info.config(text=self.tr('exptc_trist_intro', ''))
+            exptc_trist_folder_frame.config(
+                text=self.tr('exptc_trist_folder', 'Folder with Gibbs .exp files (recursive)'),
+            )
+            btn_exptc_trist_fd.config(text=self.tr('pandat_browse', 'Browse'))
+            exptc_trist_filter_frame.config(text=self.tr('exptc_trist_filter', 'Filename Filter (Optional)'))
+            exptc_lbl_trist_filter_hint.config(text=self.tr('exptc_trist_filter_hint', ''))
+            exptc_trist_out_frame.config(text=self.tr('extp_trist_out', 'Output Excel (TriST)'))
+            btn_exptc_trist_out.config(text=self.tr('pandat_browse', 'Browse'))
+            exptc_trist_settings.config(text=self.tr('extp_trist_settings', 'Settings'))
+            exptc_lbl_trist_axis.config(text=self.tr('extp_trist_axis', 'Axes (2D composition plane)'))
+            exptc_lbl_trist_ax_x.config(text=self.tr('extp_trist_axis_x', 'X:'))
+            exptc_lbl_trist_ax_y.config(text=self.tr('extp_trist_axis_y', 'Y:'))
+            exptc_lbl_trist_grid.config(text=self.tr('extp_trist_grid', 'Grid (cubic interpolation)'))
+            exptc_lbl_trist_grid_n.config(text=self.tr('extp_trist_grid_n', 'N:'))
+            exptc_lbl_trist_grid_hint.config(text=self.tr('extp_trist_grid_hint', 'Higher N = slower; typical 40–80.'))
+            exptc_trist_status_frame.config(text=self.tr('exptc_status', 'Status'))
+            trist_abnormal_ui['tpl1_frame'].config(
+                text=self.tr('exptc_tpl1', 'Template1 File (Optional — TCM for abnormal point calculation)'),
+            )
+            trist_abnormal_ui['lbl_tpl1_hint'].config(text=self.tr('exptc_tpl1_hint', ''))
+            trist_abnormal_ui['btn_tpl1_browse'].config(text=self.tr('pandat_browse', 'Browse'))
+            trist_abnormal_ui['lbl_out_dir'].config(
+                text=self.tr('exptc_abnormal_out_dir', 'Abnormal-point TCM output folder') + ':',
+            )
+            trist_abnormal_ui['btn_abnormal_out'].config(text=self.tr('pandat_browse', 'Browse'))
+            trist_abnormal_ui['btn_gen_abnormal'].config(
+                text=self.tr('exptc_gen_abnormal_tcm', 'Generate abnormal-point TCM files'),
+            )
+            btn_exptc_trist_build.config(text=self.tr('extp_trist_btn', 'Build TriST workbook'))
+            btn_exptc_trist_close.config(text=self.tr('extp_close', 'Close'))
+            try:
+                exptc_trist_viz_bundle['refresh_lang']()
+            except Exception:
                 pass
             mr_folder_frame.config(text=self.tr('exptc_mr_folder', 'Select Folder Containing .exp Files'))
             btn_exptc_mr_fd.config(text=self.tr('pandat_browse', 'Browse'))
@@ -16267,6 +18345,10 @@ class ThermoQGUI:
         trist_viz_coord_ui['frame'].pack(fill=tk.X, pady=4)
         trist_viz_coord_widgets = trist_viz_coord_ui['widgets']
 
+        trist_labels_ui = self._build_plot_labels_ui(viz_frame, show_z=True)
+        trist_labels_ui['frame'].pack(fill=tk.X, pady=4)
+        trist_viz_labels_widgets = trist_labels_ui['widgets']
+
         viz_mesh_row = ttk.Frame(viz_frame)
         viz_mesh_row.pack(fill=tk.X, pady=2)
         viz_mask_mesh_var = tk.BooleanVar(value=True)
@@ -16576,6 +18658,14 @@ class ThermoQGUI:
             sheet_tag = sheet.replace(' ', '_')
             base = os.path.join(base_path, f"{prefix}_{sheet_tag}")
 
+            def _trist_lbl(default_title=''):
+                return trist_labels_ui['resolve'](
+                    default_title=default_title,
+                    default_x=format_chemistry_axis_label(a_col),
+                    default_y=format_chemistry_axis_label(b_col),
+                    default_z='T (K)',
+                )
+
             def _trist_boundary_groups(dfb):
                 dfb = dfb.copy()
                 dfb['T (K)'] = pd.to_numeric(dfb['T (K)'], errors='coerce')
@@ -16754,8 +18844,12 @@ class ThermoQGUI:
                 scene_cfg = _extp_trist_plotly_scene_config(
                     a_col, b_col, px0, px1, py0, py1, z0=z0, z1=z1,
                 )
+                _tplp = _trist_lbl(f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}")
+                scene_cfg['xaxis_title'] = _tplp['x']
+                scene_cfg['yaxis_title'] = _tplp['y']
+                scene_cfg['zaxis_title'] = _tplp['z']
                 fig.update_layout(
-                    title=f"TriST zone (Plotly): {os.path.basename(xlsx)} / {sheet}",
+                    title=_tplp['title'],
                     scene=scene_cfg,
                     margin=dict(l=0, r=0, t=40, b=0),
                     showlegend=True,
@@ -16773,6 +18867,7 @@ class ThermoQGUI:
             def _trist_plot_mpl_2d():
                 from matplotlib.collections import LineCollection
                 fig, ax = plt.subplots(figsize=(10, 8))
+                _tpl2 = _trist_lbl(f"TriST ({sheet})")
                 if sheet in ("TriST_boundaries", "T0_lines"):
                     do_step = sheet == "TriST_boundaries"
                     segments, seg_t = [], []
@@ -16810,14 +18905,13 @@ class ThermoQGUI:
                     if len(xs) >= 3:
                         tc = ax.tricontourf(xs, ys, fs, levels=30, cmap='viridis')
                         fig.colorbar(tc, ax=ax, label=f_cb_title)
-                    ax.set_title(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
+                    _tpl2 = _trist_lbl(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
                 else:
                     sc = ax.scatter(x, y, c=t2, cmap='coolwarm', s=24, alpha=0.85)
                     fig.colorbar(sc, ax=ax, label='T (K)')
-                ax.set_xlabel(format_chemistry_axis_label(a_col))
-                ax.set_ylabel(format_chemistry_axis_label(b_col))
-                if not ax.get_title():
-                    ax.set_title(f"TriST ({sheet})")
+                ax.set_xlabel(_tpl2['x'])
+                ax.set_ylabel(_tpl2['y'])
+                ax.set_title(_tpl2['title'])
                 ax.grid(True, alpha=0.25)
                 self._apply_plot_xy_limits(ax, px0, px1, py0, py1)
                 self._overlay_experimental_points_mpl_2d(ax, _trist_exp_points(a_col, b_col))
@@ -16916,10 +19010,11 @@ class ThermoQGUI:
                 elif sheet not in ("TriST_boundaries", "T0_lines"):
                     p = ax.scatter(x, y, t2, c=dg2, cmap='RdBu', s=8, alpha=0.85)
                     fig.colorbar(p, ax=ax, shrink=0.6, label='dG (J/mol)')
-                ax.set_xlabel(format_chemistry_axis_label(a_col))
-                ax.set_ylabel(format_chemistry_axis_label(b_col))
-                ax.set_zlabel('T (K)')
-                ax.set_title(f"TriST ({sheet})")
+                _tpl3d = _trist_lbl(f"TriST ({sheet})")
+                ax.set_xlabel(_tpl3d['x'])
+                ax.set_ylabel(_tpl3d['y'])
+                ax.set_zlabel(_tpl3d['z'])
+                ax.set_title(_tpl3d['title'])
                 ax.set_xlim(px0, px1)
                 ax.set_ylim(py0, py1)
                 try:
@@ -17155,6 +19250,7 @@ class ThermoQGUI:
                 trist_rb_vp.config(text=self.tr('batch_viz_plotly', 'Plotly 3D'))
                 self._refresh_plot_output_lang(trist_out_widgets)
                 self._refresh_plot_coord_lang(trist_viz_coord_widgets)
+                self._refresh_plot_labels_lang(trist_labels_ui)
                 self._refresh_plot_exp_lang(trist_exp_widgets)
                 trist_view_frame.config(text=self.tr('batch_view_3d', '3D Static View (Rotation Angles)'))
                 trist_lbl_elev.config(text=self.tr('batch_elev', 'Elevation (deg):'))
@@ -17335,6 +19431,10 @@ class ThermoQGUI:
         k_coord_ui = self._build_plot_coord_range_ui(main_frame, reset_command=_k_reset_coord)
         k_coord_ui['frame'].pack(fill=tk.X, pady=5)
         k_coord_widgets = k_coord_ui['widgets']
+
+        k_labels_ui = self._build_plot_labels_ui(main_frame, show_z=True)
+        k_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        k_labels_widgets = k_labels_ui['widgets']
 
         k_exp_ui = self._build_plot_experimental_points_ui(main_frame, win)
         k_exp_ui['frame'].pack(fill=tk.X, pady=5)
@@ -17578,6 +19678,14 @@ class ThermoQGUI:
                 dx_plot = dx.values * scale_factor
                 dy_plot = dy.values * scale_factor
 
+                def _k_lbl(default_title=''):
+                    return k_labels_ui['resolve'](
+                        default_title=default_title,
+                        default_x=format_w_element_label(ex),
+                        default_y=format_w_element_label(ey),
+                        default_z='|k - 1|',
+                    )
+
                 # 1) 2D quiver views (U / V / resultant), similar to original implementation
                 fig1, ax1 = plt.subplots(figsize=(7, 6), dpi=140)
                 ax1.quiver(
@@ -17591,9 +19699,10 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:blue",
                 )
-                ax1.set_xlabel(format_w_element_label(ex))
-                ax1.set_ylabel(format_w_element_label(ey))
-                ax1.set_title(f"U arrows: k({ex}) = w({ex}@{solid_phase})/w({ex}@LIQUID)")
+                _kl1 = _k_lbl(f"U arrows: k({ex}) = w({ex}@{solid_phase})/w({ex}@LIQUID)")
+                ax1.set_xlabel(_kl1['x'])
+                ax1.set_ylabel(_kl1['y'])
+                ax1.set_title(_kl1['title'])
                 ax1.grid(False)
                 self._apply_plot_xy_limits(ax1, px0, px1, py0, py1, aspect_square=True)
                 fig1.tight_layout()
@@ -17614,9 +19723,10 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:orange",
                 )
-                ax2.set_xlabel(format_w_element_label(ex))
-                ax2.set_ylabel(format_w_element_label(ey))
-                ax2.set_title(f"V arrows: k({ey}) = w({ey}@{solid_phase})/w({ey}@LIQUID)")
+                _kl2 = _k_lbl(f"V arrows: k({ey}) = w({ey}@{solid_phase})/w({ey}@LIQUID)")
+                ax2.set_xlabel(_kl2['x'])
+                ax2.set_ylabel(_kl2['y'])
+                ax2.set_title(_kl2['title'])
                 ax2.grid(False)
                 self._apply_plot_xy_limits(ax2, px0, px1, py0, py1, aspect_square=True)
                 fig2.tight_layout()
@@ -17637,9 +19747,10 @@ class ThermoQGUI:
                     width=0.003,
                     color="tab:green",
                 )
-                ax3.set_xlabel(format_w_element_label(ex))
-                ax3.set_ylabel(format_w_element_label(ey))
-                ax3.set_title("Resultant Z: deviation of partition coefficients (k-1)")
+                _kl3 = _k_lbl("Resultant Z: deviation of partition coefficients (k-1)")
+                ax3.set_xlabel(_kl3['x'])
+                ax3.set_ylabel(_kl3['y'])
+                ax3.set_title(_kl3['title'])
                 ax3.grid(False)
                 self._apply_plot_xy_limits(ax3, px0, px1, py0, py1, aspect_square=True)
                 fig3.tight_layout()
@@ -17654,9 +19765,10 @@ class ThermoQGUI:
                     tcf = ax_hm.tricontourf(wx.values, wy.values, k_dev_mag, levels=30, cmap="viridis")
                     cbar = fig_hm.colorbar(tcf, ax=ax_hm)
                     cbar.set_label("|k - 1|")
-                    ax_hm.set_xlabel(format_w_element_label(ex))
-                    ax_hm.set_ylabel(format_w_element_label(ey))
-                    ax_hm.set_title("2D Heatmap of |k-1| magnitude")
+                    _klhm = _k_lbl("2D Heatmap of |k-1| magnitude")
+                    ax_hm.set_xlabel(_klhm['x'])
+                    ax_hm.set_ylabel(_klhm['y'])
+                    ax_hm.set_title(_klhm['title'])
                     self._apply_plot_xy_limits(ax_hm, px0, px1, py0, py1)
                     exp_pts = k_exp_ui['get_points'](ex, ey, z_hint=None)
                     self._overlay_experimental_points_mpl_2d(ax_hm, exp_pts)
@@ -18973,6 +21085,10 @@ class ThermoQGUI:
         iso_k_coord_ui['frame'].pack(fill=tk.X, pady=5)
         iso_k_coord_widgets = iso_k_coord_ui['widgets']
 
+        iso_labels_ui = self._build_plot_labels_ui(tab_isocomp, show_z=True)
+        iso_labels_ui['frame'].pack(fill=tk.X, pady=5)
+        iso_labels_widgets = iso_labels_ui['widgets']
+
         # Output settings (directory + image format)
         iso_output_frame = ttk.LabelFrame(
             tab_isocomp,
@@ -19507,6 +21623,14 @@ class ThermoQGUI:
                 else:
                     save_kwargs["format"] = "png"
 
+                def _iso_lbl(default_title='', default_z='T (K)'):
+                    return iso_labels_ui['resolve'](
+                        default_title=default_title,
+                        default_x=format_w_element_label(ex),
+                        default_y=format_w_element_label(ey),
+                        default_z=default_z,
+                    )
+
                 # Smooth curves in T (parameterization)
                 tt_dense = None
                 fxo_a = fxo[::-1]
@@ -19557,9 +21681,10 @@ class ThermoQGUI:
                     )
 
                 ax2d.scatter([o_wx], [o_wy], color="red", s=40, marker="o", label="O (overall)")
-                ax2d.set_xlabel(format_w_element_label(ex))
-                ax2d.set_ylabel(format_w_element_label(ey))
-                ax2d.set_title(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
+                _ipl2 = _iso_lbl(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
+                ax2d.set_xlabel(_ipl2['x'])
+                ax2d.set_ylabel(_ipl2['y'])
+                ax2d.set_title(_ipl2['title'])
                 ax2d.grid(False)
                 ax2d.set_aspect("equal", adjustable="box")
                 ax2d.legend(loc="best")
@@ -19592,10 +21717,11 @@ class ThermoQGUI:
                         ls="--",
                     )
 
-                ax3d.set_xlabel(format_w_element_label(ex))
-                ax3d.set_ylabel(format_w_element_label(ey))
-                ax3d.set_zlabel("T (K)")
-                ax3d.set_title(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
+                _ipl3 = _iso_lbl(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
+                ax3d.set_xlabel(_ipl3['x'])
+                ax3d.set_ylabel(_ipl3['y'])
+                ax3d.set_zlabel(_ipl3['z'])
+                ax3d.set_title(_ipl3['title'])
                 fig3d.tight_layout()
 
                 out3d = os.path.join(base_path, f"{prefix3}_iso_3Dstatic.{ext}")
@@ -20477,6 +22603,14 @@ class ThermoQGUI:
                 else:
                     save_kwargs["format"] = "png"
 
+                def _iso_lbl(default_title='', default_z='T (K)'):
+                    return iso_labels_ui['resolve'](
+                        default_title=default_title,
+                        default_x=format_w_element_label(ex),
+                        default_y=format_w_element_label(ey),
+                        default_z=default_z,
+                    )
+
                 # Smooth curves in T for nicer appearance
                 t_dense = temps_asc
                 fxo_s, fyo_s, sxo_s, syo_s = fxo[::-1], fyo[::-1], sxo[::-1], syo[::-1]
@@ -20508,10 +22642,11 @@ class ThermoQGUI:
                 # Node markers
                 ax2d.scatter(fxo, fyo, color="tab:blue", s=18)
                 ax2d.scatter(sxo, syo, color="tab:orange", s=18)
-                ax2d.set_xlabel(format_w_element_label(ex))
-                ax2d.set_ylabel(format_w_element_label(ey))
+                _ipl2b = _iso_lbl(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
+                ax2d.set_xlabel(_ipl2b['x'])
+                ax2d.set_ylabel(_ipl2b['y'])
                 self._apply_plot_xy_limits(ax2d, px0, px1, py0, py1, aspect_square=True)
-                ax2d.set_title(self.tr('iso_2d_title', '2D Projection (isocomposition)'))
+                ax2d.set_title(_ipl2b['title'])
                 ax2d.grid(False)
                 ax2d.set_aspect("equal", adjustable="box")
                 ax2d.legend(loc="best")
@@ -20594,12 +22729,13 @@ class ThermoQGUI:
                     ti = temps_desc[i]
                     ax3d.plot([fxo[i], o_wx], [fyo[i], o_wy], [ti, ti], color="gray", lw=1.2, linestyle="--", alpha=0.45)
                     ax3d.plot([sxo[i], o_wx], [syo[i], o_wy], [ti, ti], color="gray", lw=1.2, linestyle="--", alpha=0.45)
-                ax3d.set_xlabel(format_w_element_label(ex))
-                ax3d.set_ylabel(format_w_element_label(ey))
-                ax3d.set_zlabel("T (K)")
+                _ipl3b = _iso_lbl(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
+                ax3d.set_xlabel(_ipl3b['x'])
+                ax3d.set_ylabel(_ipl3b['y'])
+                ax3d.set_zlabel(_ipl3b['z'])
                 ax3d.set_xlim(px0, px1)
                 ax3d.set_ylim(py0, py1)
-                ax3d.set_title(self.tr('iso_3d_title', '3D Isocomposition (T as Z)'))
+                ax3d.set_title(_ipl3b['title'])
                 fig3d.tight_layout()
                 out3d = os.path.join(base_path, f"{prefix3}_iso_3Dstatic.{ext}")
                 fig3d.savefig(out3d, **save_kwargs)
@@ -20912,6 +23048,7 @@ class ThermoQGUI:
             k_cb_gif.config(text=self.tr('plot_k_vis_gif', '3D Rotation GIF'))
             k_cb_pl.config(text=self.tr('plot_k_vis_plotly', 'Plotly 3D'))
             self._refresh_plot_coord_lang(k_coord_widgets)
+            self._refresh_plot_labels_lang(k_labels_ui)
             self._refresh_plot_exp_lang(k_exp_widgets)
             output_settings_frame.config(text=self.tr('stp_output_settings', 'Output Settings'))
             k_lbl_outdir.config(text=self.tr('stp_output_directory', 'Output directory:'))
@@ -21012,6 +23149,7 @@ class ThermoQGUI:
             )
             self._refresh_plot_coord_lang(iso_comp_coord_widgets)
             self._refresh_plot_coord_lang(iso_k_coord_widgets)
+            self._refresh_plot_labels_lang(iso_labels_ui)
             iso_output_frame.config(text=self.tr('stp_output', 'Output'))
             iso_lbl_fn_prefix.config(text=self.tr('stp_filename_prefix', 'Filename prefix:'))
             iso_output_settings_frame.config(text=self.tr('stp_output_settings', 'Output Settings'))
