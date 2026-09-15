@@ -1,0 +1,47 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build exe and installer
+        run: powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThermoQ-Windows-Setup
+          path: dist/ThermoQ-1.0.0-Windows-Setup.exe
+          if-no-files-found: error
+
+      - name: Upload portable folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThermoQ-Windows-portable
+          path: dist/ThermoQ
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ThermoQ-1.0.0-Windows-Setup.exe
+          generate_release_notes: true

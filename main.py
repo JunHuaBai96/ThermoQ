@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 import os
+import sys
 import time
 import re
 import warnings
@@ -12,6 +13,63 @@ import webbrowser
 import platform
 from decimal import Decimal
 from periodic_table import PERIODIC_TABLE
+
+APP_NAME = 'ThermoQ'
+APP_VERSION = '1.0.0'
+
+
+def resource_path(*parts):
+    """Resolve bundled data files for source runs and PyInstaller frozen builds."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(base, *parts))
+
+
+def _ensure_writable_cwd():
+    """Start-menu shortcuts often start in a non-writable folder; keep plot exports usable."""
+    if not getattr(sys, 'frozen', False):
+        return
+    dest = os.path.join(os.path.expanduser('~'), 'Documents', APP_NAME)
+    try:
+        os.makedirs(dest, exist_ok=True)
+        os.chdir(dest)
+    except OSError:
+        pass
+
+# ---------------------------------------------------------------------------
+# Application theme (ANSYS Discovery / COMSOL / Fusion 360 inspired)
+# Cool workspace gray, white cards, steel-blue accent, dark slate chrome.
+# ---------------------------------------------------------------------------
+THEME = {
+    'bg': '#E8ECF1',           # app workspace
+    'surface': '#FFFFFF',      # cards / panels
+    'surface_alt': '#F4F6F9',  # nested panels
+    'border': '#C5CDD8',
+    'border_dark': '#9AA6B5',
+    'text': '#1B2430',
+    'text_muted': '#5B6777',
+    'accent': '#0078A8',       # primary actions (Fusion/ANSYS blue)
+    'accent_hover': '#0096C7',
+    'accent_pressed': '#005F86',
+    'accent_soft': '#D6EEF7',
+    'chrome': '#2B3440',       # menu / header bar
+    'chrome_hover': '#3A4554',
+    'chrome_text': '#F0F4F8',
+    'success': '#2D8A5C',
+    'danger': '#C44B4B',
+    'warning': '#B7791F',
+    'input_bg': '#FFFFFF',
+    'select_bg': '#0078A8',
+    'select_fg': '#FFFFFF',
+    'tab_inactive': '#D5DBE4',
+    'font_ui': ('Segoe UI', 10),
+    'font_ui_bold': ('Segoe UI', 10, 'bold'),
+    'font_title': ('Segoe UI', 13, 'bold'),
+    'font_small': ('Segoe UI', 9),
+    'font_mono': ('Consolas', 10),
+}
 
 _PERIODIC_UPPER = {k.upper(): k for k in PERIODIC_TABLE.keys()}
 
@@ -2042,8 +2100,8 @@ class ElementSelector:
         self.main_hint_label = ttk.Label(
             self.frame,
             text="Hint: The first added element will be the main element",
-            foreground="gray",
-            wraplength=400
+            style='Muted.TLabel',
+            wraplength=400,
         )
         self.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
         
@@ -2117,13 +2175,13 @@ class ElementSelector:
                     total_wt, is_complete = self.check_composition_sum()
                     if is_complete:
                         txt = t('el_sum_ok', 'Total composition: {total:.2f} wt% ✓').format(total=total_wt)
-                        color = 'green'
+                        color = THEME['success']
                     else:
                         txt = t(
                             'el_sum_need_100',
                             'Total composition: {total:.2f} wt% (should be 100.00 wt%)',
                         ).format(total=total_wt)
-                        color = 'red'
+                        color = THEME['danger']
                     self.sum_status_label.config(text=txt, foreground=color)
             except tk.TclError:
                 pass
@@ -2196,13 +2254,13 @@ class ElementSelector:
                         status_text = self.tr('el_sum_ok', 'Total composition: {total:.2f} wt% ✓').format(
                             total=total_wt
                         )
-                        status_color = "green"
+                        status_color = THEME['success']
                     else:
                         status_text = self.tr(
                             'el_sum_need_100',
                             'Total composition: {total:.2f} wt% (should be 100.00 wt%)',
                         ).format(total=total_wt)
-                        status_color = "red"
+                        status_color = THEME['danger']
                     
                     # Create status label with wraplength to prevent text cutoff
                     self.sum_status_label = ttk.Label(self.frame, text=status_text, foreground=status_color, wraplength=500)
@@ -2260,13 +2318,13 @@ class ElementSelector:
                     status_text = self.tr('el_sum_ok', 'Total composition: {total:.2f} wt% ✓').format(
                         total=total_wt
                     )
-                    status_color = "green"
+                    status_color = THEME['success']
                 else:
                     status_text = self.tr(
                         'el_sum_need_100',
                         'Total composition: {total:.2f} wt% (should be 100.00 wt%)',
                     ).format(total=total_wt)
-                    status_color = "red"
+                    status_color = THEME['danger']
                 
                 # Create status label with wraplength to prevent text cutoff
                 self.sum_status_label = ttk.Label(self.frame, text=status_text, foreground=status_color, wraplength=500)
@@ -2288,7 +2346,12 @@ class ElementSelector:
                     # No main element left, show hint again
                     if hasattr(self, 'main_hint_label'):
                         self.main_hint_label.destroy()
-                    self.main_hint_label = ttk.Label(self.frame, text="Hint: The first added element will be the main element", foreground="gray", wraplength=400)
+                    self.main_hint_label = ttk.Label(
+                        self.frame,
+                        text="Hint: The first added element will be the main element",
+                        style='Muted.TLabel',
+                        wraplength=400,
+                    )
                     self.main_hint_label.grid(row=2, column=0, sticky='w', padx=3, pady=(0,3))
     
     def update_display(self):
@@ -2314,52 +2377,54 @@ class SplashScreen:
         # Create the splash window
         self.splash_root = tk.Toplevel(root)
         self.splash_root.overrideredirect(True)  # Remove window decorations
-        
+        splash_bg = THEME['chrome']
+        self.splash_root.configure(bg=splash_bg)
+
         try:
             # Load and resize splash image
-            splash_img = Image.open("images/logo.png")
+            splash_img = Image.open(resource_path('images', 'logo.png'))
             # Set splash size
             splash_size = (600, 600)  # Set to 600x600 pixels
             splash_img = splash_img.resize(splash_size, Image.Resampling.LANCZOS)
             self.splash_photo = ImageTk.PhotoImage(splash_img)
-            
+
             # Calculate position for center of screen
             screen_width = self.splash_root.winfo_screenwidth()
             screen_height = self.splash_root.winfo_screenheight()
             x = (screen_width - splash_size[0]) // 2
             y = (screen_height - splash_size[1]) // 2
-            
+
             # Set splash window size and position
             self.splash_root.geometry(f"{splash_size[0]}x{splash_size[1]}+{x}+{y}")
-            
-            # Create and pack splash image label with yellow background
-            splash_label = tk.Label(self.splash_root, image=self.splash_photo, bg='yellow')
+
+            # Professional dark chrome behind logo (CAE-style launch screen)
+            splash_label = tk.Label(self.splash_root, image=self.splash_photo, bg=splash_bg, bd=0)
             splash_label.pack(fill='both', expand=True)
-            
+
             # Lift splash window to top
             self.splash_root.lift()
             self.splash_root.update()
-            
+
         except Exception as e:
             print(f"Error loading splash screen: {e}")
             self.splash_root.destroy()
-    
+
     def destroy(self):
         self.splash_root.destroy()
 
 class ThermoQGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("ThermoQ")
+        self.root.title(f"{APP_NAME} {APP_VERSION}")
         # Set compact default window size
         self.root.geometry("920x680")
         # Set a sensible minimum to prevent cramped UI
         self.root.minsize(820, 560)
         self.root.withdraw()  # Hide main window initially
-        
-        # Set yellow background for main window
-        self.root.configure(bg='yellow')
-        
+
+        # Apply CAE-style theme before building widgets
+        self._apply_app_theme()
+
         # Initialize Pandat data storage
         self.pandat_p_data = None  # P.xls data (Equilibrium/Lever solidification)
         self.pandat_ts_data = None  # Ts.xlsx data (Equilibrium/Lever solidification)
@@ -2375,9 +2440,10 @@ class ThermoQGUI:
         self.last_batch_mode = None  # "Lever" | "Scheil" | "All" — last compute source mode
         self._tool_lang_refresh_callbacks = []  # Callables to refresh tool window labels when Help → Language changes
 
-        # Create menu bar
-        self.menu_bar = tk.Menu(root)
+        # Create menu bar (dark chrome like Fusion / ANSYS)
+        self.menu_bar = tk.Menu(root, tearoff=0)
         self.root.config(menu=self.menu_bar)
+        self._style_menu(self.menu_bar)
 
         # Language resources
         self.language = 'en'
@@ -2435,12 +2501,25 @@ class ThermoQGUI:
                 'help_language': 'Language',
                 'help_english': 'English',
                 'help_chinese': '中文',
+                'help_manual': 'User Manual',
                 'help_example': 'Example',
+                'manual_not_found': 'User manual PDF not found:\n{path}',
+                'manual_open_fail': 'Failed to open user manual:\n{e}',
                 # Shared tool window UI
                 'ui_close': 'Close',
                 'ui_plot': 'Plot',
                 'ui_export': 'Export',
                 'plot_ready': 'Ready to plot',
+                'plot_preview_title': 'Plot Preview',
+                'plot_preview_empty': 'Click Plot to show the figure here.',
+                'plot_preview_path': 'Current file: {path}',
+                'plot_preview_path_none': 'Current file: (none)',
+                'plot_preview_save_as': 'Save As…',
+                'plot_preview_open': 'Open',
+                'plot_preview_plotly_note': 'Interactive HTML plot — use Open to view in the browser.',
+                'plot_preview_unsupported': 'Preview not available for this file type. Use Open or Save As.',
+                'plot_preview_saved_status': 'Preview ready. Saved: {path}',
+                'plot_preview_save_title': 'Save plot as',
                 'plot_vis_label': 'Visualization:',
                 'plot_elev_range': '(0–90)',
                 'plot_azim_range': '(-180–180)',
@@ -3329,11 +3408,24 @@ class ThermoQGUI:
                 'help_language': '界面语言',
                 'help_english': 'English',
                 'help_chinese': '中文',
+                'help_manual': '软件说明书',
                 'help_example': '示例',
+                'manual_not_found': '未找到软件说明书 PDF：\n{path}',
+                'manual_open_fail': '无法打开软件说明书：\n{e}',
                 'ui_close': '关闭',
                 'ui_plot': '绘图',
                 'ui_export': '导出',
                 'plot_ready': '就绪，可绘图',
+                'plot_preview_title': '图预览',
+                'plot_preview_empty': '点击「绘图」后，图像将显示在此处。',
+                'plot_preview_path': '当前文件：{path}',
+                'plot_preview_path_none': '当前文件：（无）',
+                'plot_preview_save_as': '另存为…',
+                'plot_preview_open': '打开',
+                'plot_preview_plotly_note': '交互式 HTML 图 — 请点击「打开」在浏览器中查看。',
+                'plot_preview_unsupported': '此文件类型无法在界面内预览，请使用「打开」或「另存为」。',
+                'plot_preview_saved_status': '预览已就绪。已保存：{path}',
+                'plot_preview_save_title': '另存图像',
                 'plot_vis_label': '可视化：',
                 'plot_elev_range': '（0–90）',
                 'plot_azim_range': '（-180–180）',
@@ -4145,16 +4237,19 @@ class ThermoQGUI:
         
         # Create File menu
         self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self._style_menu(self.file_menu)
         self.menu_bar.add_cascade(label="File", menu=self.file_menu)
         self.file_menu.add_command(label="Exit", command=root.quit)
-        
+
         # Create Import menu
         self.import_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self._style_menu(self.import_menu)
         self.menu_bar.add_cascade(label="Import", menu=self.import_menu)
         self.import_menu.add_command(label="Pandat to ThermoQ", command=self.open_pandat_import)
-        
-        # Create Tools menu
+
+        # Create Plot menu
         self.plot_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self._style_menu(self.plot_menu)
         self.menu_bar.add_cascade(label="Plot", menu=self.plot_menu)
         self.plot_menu.add_command(label="Plot Phase Surfaces", command=self.open_phase_surface_plotter)
         self.plot_menu.add_command(label="Plot Qtrue Values", command=self.open_q_value_plotter)
@@ -4162,8 +4257,9 @@ class ThermoQGUI:
         self.plot_menu.add_command(label="Plot Solid-Liquid Partition Coefficients", command=self.open_partition_vector_plotter)
         self.plot_menu.add_command(label="Plot Miscibility Gap", command=self.open_miscibility_gap_plotter)
         self.plot_menu.add_command(label="Plot T-zero Surface", command=self.open_t_zero_surface_plotter)
-        
+
         self.tools_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self._style_menu(self.tools_menu)
         self.menu_bar.add_cascade(label="Tools", menu=self.tools_menu)
         self.tools_menu.add_command(label="Composition Converter (wt% ↔ at%)", command=self.open_composition_converter)
         self.tools_menu.add_separator()
@@ -4175,53 +4271,78 @@ class ThermoQGUI:
 
         # Create Help menu
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self._style_menu(self.help_menu)
         self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
         self.lang_menu = tk.Menu(self.help_menu, tearoff=0)
+        self._style_menu(self.lang_menu)
         self.help_menu.add_cascade(label="Language", menu=self.lang_menu)
         self.lang_menu.add_command(label="English", command=lambda: self.set_language('en'))
         self.lang_menu.add_command(label="中文", command=lambda: self.set_language('zh'))
         self.help_menu.add_separator()
+        self.help_menu.add_command(label="User Manual", command=self.open_user_manual)
         self.help_menu.add_command(label="Example", command=self.open_example_folder)
-        
+
         # Set window icon
         try:
-            icon_path = "images/Simplified logo.png"
+            icon_path = resource_path('images', 'Simplified logo.png')
             icon_image = Image.open(icon_path)
             icon_photo = ImageTk.PhotoImage(icon_image)
             self.root.iconphoto(True, icon_photo)
             self.icon_photo = icon_photo
         except Exception as e:
             print(f"Error loading window icon: {e}")
-        
+
         # Configure grid weights for better layout
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)
-        
-        # Create main frame with yellow background
-        main_frame = ttk.Frame(root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Configure main frame grid weights
-        main_frame.grid_columnconfigure(1, weight=1)
-        main_frame.grid_rowconfigure(0, weight=1)
-        
-        # Logo section
+
+        # Top chrome header (Fusion / ANSYS style)
+        header = tk.Frame(self.root, bg=THEME['chrome'], height=52)
+        header.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        header.grid_propagate(False)
+        header.grid_columnconfigure(1, weight=1)
+
         try:
-            logo_img = Image.open("images/Simplified logo.png")
-            logo_size = (80, 80)  # Reduced logo size
-            logo_img = logo_img.resize(logo_size, Image.Resampling.LANCZOS)
+            logo_img = Image.open(resource_path('images', 'Simplified logo.png'))
+            logo_img = logo_img.resize((36, 36), Image.Resampling.LANCZOS)
             self.logo_photo = ImageTk.PhotoImage(logo_img)
-            
-            logo_label = ttk.Label(main_frame, image=self.logo_photo)
-            logo_label.grid(row=0, column=0, sticky=(tk.N), padx=(0, 10), pady=5)
+            logo_label = tk.Label(header, image=self.logo_photo, bg=THEME['chrome'], bd=0)
+            logo_label.grid(row=0, column=0, padx=(14, 8), pady=8)
         except Exception as e:
             print(f"Error loading logo: {e}")
-        
-        # Calculate workspace: tab "Single composition" + tab "Composition space (batch)"
-        self.calc_notebook = ttk.Notebook(main_frame)
-        self.calc_notebook.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+            self.logo_photo = None
 
-        tab_single = ttk.Frame(self.calc_notebook, padding=(4, 6))
+        title_col = tk.Frame(header, bg=THEME['chrome'])
+        title_col.grid(row=0, column=1, sticky=tk.W, pady=6)
+        tk.Label(
+            title_col, text="ThermoQ",
+            bg=THEME['chrome'], fg=THEME['chrome_text'],
+            font=('Segoe UI', 14, 'bold'),
+        ).pack(anchor=tk.W)
+        tk.Label(
+            title_col, text="Thermodynamic workflow workspace",
+            bg=THEME['chrome'], fg='#A8B3C2',
+            font=('Segoe UI', 8),
+        ).pack(anchor=tk.W)
+
+        accent_bar = tk.Frame(self.root, bg=THEME['accent'], height=3)
+        accent_bar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        accent_bar.grid_propagate(False)
+
+        # Main content area
+        main_frame = ttk.Frame(self.root, padding="12", style='Workspace.TFrame')
+        main_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.grid_columnconfigure(0, weight=1)
+        main_frame.grid_rowconfigure(0, weight=1)
+
+        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_rowconfigure(1, weight=0)
+        self.root.grid_rowconfigure(0, weight=0)
+
+        # Calculate workspace: tab "Single composition" + tab "Composition space (batch)"
+        self.calc_notebook = ttk.Notebook(main_frame, style='ThermoQ.TNotebook')
+        self.calc_notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        tab_single = ttk.Frame(self.calc_notebook, padding=(8, 10), style='Card.TFrame')
         self.calc_notebook.add(tab_single, text="Single composition")
         tab_single.grid_columnconfigure(0, weight=1)
         tab_single.grid_rowconfigure(0, weight=1)
@@ -4229,14 +4350,18 @@ class ThermoQGUI:
         self.element_selector = ElementSelector(tab_single, self)
         self.element_selector.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        buttons_frame = ttk.Frame(tab_single)
-        buttons_frame.grid(row=1, column=0, pady=10)
-        self.calculate_button = ttk.Button(buttons_frame, text="Calculate", command=self.calculate)
-        self.calculate_button.grid(row=0, column=0, padx=10)
-        self.show_results_button = ttk.Button(buttons_frame, text="Show Results", command=self.show_results)
-        self.show_results_button.grid(row=0, column=1, padx=10)
+        buttons_frame = ttk.Frame(tab_single, style='Card.TFrame')
+        buttons_frame.grid(row=1, column=0, pady=(12, 4))
+        self.calculate_button = ttk.Button(
+            buttons_frame, text="Calculate", command=self.calculate, style='Accent.TButton',
+        )
+        self.calculate_button.grid(row=0, column=0, padx=8)
+        self.show_results_button = ttk.Button(
+            buttons_frame, text="Show Results", command=self.show_results, style='Secondary.TButton',
+        )
+        self.show_results_button.grid(row=0, column=1, padx=8)
 
-        tab_batch = ttk.Frame(self.calc_notebook, padding=6)
+        tab_batch = ttk.Frame(self.calc_notebook, padding=8, style='Card.TFrame')
         self.calc_notebook.add(tab_batch, text="Composition space (batch)")
         self._setup_calculate_batch_tab(tab_batch)
 
@@ -4247,6 +4372,271 @@ class ThermoQGUI:
         # Center window on screen after splash
         self.center_window()
         self.root.deiconify()
+
+    def _apply_app_theme(self):
+        """Global CAE-style look: cool gray workspace, white cards, steel-blue accent."""
+        t = THEME
+        self.root.configure(bg=t['bg'])
+        try:
+            self.root.option_add('*Font', t['font_ui'])
+            self.root.option_add('*Text.background', t['input_bg'])
+            self.root.option_add('*Text.foreground', t['text'])
+            self.root.option_add('*Text.insertBackground', t['text'])
+            self.root.option_add('*Text.selectBackground', t['select_bg'])
+            self.root.option_add('*Text.selectForeground', t['select_fg'])
+            self.root.option_add('*Text.relief', 'flat')
+            self.root.option_add('*Text.highlightthickness', 1)
+            self.root.option_add('*Text.highlightbackground', t['border'])
+            self.root.option_add('*Text.highlightcolor', t['accent'])
+            self.root.option_add('*Listbox.background', t['input_bg'])
+            self.root.option_add('*Listbox.foreground', t['text'])
+            self.root.option_add('*Listbox.selectBackground', t['select_bg'])
+            self.root.option_add('*Listbox.selectForeground', t['select_fg'])
+            self.root.option_add('*Canvas.background', t['bg'])
+            self.root.option_add('*Entry.background', t['input_bg'])
+            self.root.option_add('*Entry.foreground', t['text'])
+            self.root.option_add('*Entry.insertBackground', t['text'])
+        except tk.TclError:
+            pass
+
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use('clam')
+        except tk.TclError:
+            pass
+
+        style.configure('.', font=t['font_ui'], foreground=t['text'], background=t['bg'])
+        style.configure('TFrame', background=t['bg'])
+        style.configure('Workspace.TFrame', background=t['bg'])
+        style.configure('Card.TFrame', background=t['surface'])
+        style.configure('TLabel', background=t['surface'], foreground=t['text'], font=t['font_ui'])
+        style.configure('Muted.TLabel', background=t['surface'], foreground=t['text_muted'], font=t['font_small'])
+        style.configure('Card.TLabel', background=t['surface'], foreground=t['text'])
+        style.configure('Title.TLabel', background=t['surface'], foreground=t['text'], font=t['font_title'])
+        style.configure('Workspace.TLabel', background=t['bg'], foreground=t['text'], font=t['font_ui'])
+
+        style.configure(
+            'TLabelframe',
+            background=t['surface'],
+            foreground=t['text'],
+            bordercolor=t['border'],
+            relief='solid',
+            borderwidth=1,
+        )
+        style.configure(
+            'TLabelframe.Label',
+            background=t['surface'],
+            foreground=t['accent'],
+            font=t['font_ui_bold'],
+        )
+
+        style.configure(
+            'TButton',
+            background=t['surface_alt'],
+            foreground=t['text'],
+            bordercolor=t['border'],
+            lightcolor=t['surface_alt'],
+            darkcolor=t['border'],
+            focuscolor=t['accent_soft'],
+            padding=(12, 6),
+            font=t['font_ui'],
+        )
+        style.map(
+            'TButton',
+            background=[('active', t['accent_soft']), ('pressed', t['border'])],
+            foreground=[('disabled', t['text_muted'])],
+            bordercolor=[('active', t['accent'])],
+        )
+        style.configure(
+            'Accent.TButton',
+            background=t['accent'],
+            foreground='#FFFFFF',
+            bordercolor=t['accent_pressed'],
+            lightcolor=t['accent'],
+            darkcolor=t['accent_pressed'],
+            focuscolor=t['accent_hover'],
+            padding=(14, 7),
+            font=t['font_ui_bold'],
+        )
+        style.map(
+            'Accent.TButton',
+            background=[('active', t['accent_hover']), ('pressed', t['accent_pressed'])],
+            foreground=[('disabled', '#D0D5DD')],
+        )
+        style.configure(
+            'Secondary.TButton',
+            background=t['chrome'],
+            foreground=t['chrome_text'],
+            bordercolor=t['chrome'],
+            lightcolor=t['chrome'],
+            darkcolor=t['chrome'],
+            padding=(14, 7),
+            font=t['font_ui'],
+        )
+        style.map(
+            'Secondary.TButton',
+            background=[('active', t['chrome_hover']), ('pressed', '#1F2733')],
+        )
+
+        style.configure(
+            'ThermoQ.TNotebook',
+            background=t['bg'],
+            borderwidth=0,
+            tabmargins=(4, 6, 4, 0),
+        )
+        style.configure(
+            'ThermoQ.TNotebook.Tab',
+            background=t['tab_inactive'],
+            foreground=t['text'],
+            padding=(16, 8),
+            font=t['font_ui'],
+            borderwidth=0,
+        )
+        style.map(
+            'ThermoQ.TNotebook.Tab',
+            background=[('selected', t['surface']), ('active', t['accent_soft'])],
+            foreground=[('selected', t['accent']), ('active', t['text'])],
+            expand=[('selected', (0, 0, 0, 2))],
+        )
+        style.configure('TNotebook', background=t['bg'], borderwidth=0)
+        style.configure(
+            'TNotebook.Tab',
+            background=t['tab_inactive'],
+            foreground=t['text'],
+            padding=(14, 7),
+            font=t['font_ui'],
+        )
+        style.map(
+            'TNotebook.Tab',
+            background=[('selected', t['surface']), ('active', t['accent_soft'])],
+            foreground=[('selected', t['accent'])],
+        )
+
+        style.configure(
+            'TEntry',
+            fieldbackground=t['input_bg'],
+            foreground=t['text'],
+            bordercolor=t['border'],
+            lightcolor=t['border'],
+            darkcolor=t['border'],
+            insertcolor=t['text'],
+            padding=4,
+        )
+        style.map('TEntry', bordercolor=[('focus', t['accent'])], lightcolor=[('focus', t['accent'])])
+
+        style.configure(
+            'TCombobox',
+            fieldbackground=t['input_bg'],
+            background=t['surface_alt'],
+            foreground=t['text'],
+            bordercolor=t['border'],
+            arrowcolor=t['text'],
+            padding=3,
+        )
+        style.map(
+            'TCombobox',
+            fieldbackground=[('readonly', t['input_bg'])],
+            bordercolor=[('focus', t['accent'])],
+            arrowcolor=[('active', t['accent'])],
+        )
+
+        style.configure(
+            'Treeview',
+            background=t['surface'],
+            fieldbackground=t['surface'],
+            foreground=t['text'],
+            bordercolor=t['border'],
+            rowheight=24,
+            font=t['font_ui'],
+        )
+        style.configure(
+            'Treeview.Heading',
+            background=t['chrome'],
+            foreground=t['chrome_text'],
+            relief='flat',
+            font=t['font_ui_bold'],
+        )
+        style.map(
+            'Treeview',
+            background=[('selected', t['accent'])],
+            foreground=[('selected', '#FFFFFF')],
+        )
+        style.map('Treeview.Heading', background=[('active', t['chrome_hover'])])
+
+        style.configure(
+            'TCheckbutton',
+            background=t['surface'],
+            foreground=t['text'],
+            focuscolor=t['accent_soft'],
+        )
+        style.map('TCheckbutton', background=[('active', t['surface'])])
+        style.configure(
+            'TRadiobutton',
+            background=t['surface'],
+            foreground=t['text'],
+            focuscolor=t['accent_soft'],
+        )
+        style.map('TRadiobutton', background=[('active', t['surface'])])
+        style.configure(
+            'TScrollbar',
+            background=t['surface_alt'],
+            troughcolor=t['bg'],
+            bordercolor=t['border'],
+            arrowcolor=t['text'],
+        )
+        style.configure(
+            'Vertical.TScrollbar',
+            background=t['surface_alt'],
+            troughcolor=t['bg'],
+            arrowcolor=t['text'],
+        )
+        style.configure(
+            'Horizontal.TScrollbar',
+            background=t['surface_alt'],
+            troughcolor=t['bg'],
+            arrowcolor=t['text'],
+        )
+        style.configure('TSeparator', background=t['border'])
+        style.configure(
+            'TProgressbar',
+            background=t['accent'],
+            troughcolor=t['surface_alt'],
+            bordercolor=t['border'],
+            lightcolor=t['accent'],
+            darkcolor=t['accent'],
+        )
+        self._ttk_style = style
+
+    def _style_menu(self, menu):
+        """Dark slate menus similar to Fusion 360 / ANSYS chrome."""
+        t = THEME
+        try:
+            menu.configure(
+                bg=t['chrome'],
+                fg=t['chrome_text'],
+                activebackground=t['accent'],
+                activeforeground='#FFFFFF',
+                selectcolor=t['chrome'],
+                tearoff=0,
+                bd=0,
+                relief='flat',
+                font=t['font_ui'],
+            )
+        except tk.TclError:
+            pass
+
+    def _style_all_menus(self):
+        for m in (
+            getattr(self, 'menu_bar', None),
+            getattr(self, 'file_menu', None),
+            getattr(self, 'import_menu', None),
+            getattr(self, 'plot_menu', None),
+            getattr(self, 'tools_menu', None),
+            getattr(self, 'help_menu', None),
+            getattr(self, 'lang_menu', None),
+        ):
+            if m is not None:
+                self._style_menu(m)
 
     def _refresh_calculate_main_language(self):
         """Update Calculate notebook tab titles and batch-tab static strings (Help → Language)."""
@@ -4272,6 +4662,15 @@ class ThermoQGUI:
                     self.batch_intro_label.config(text=self.tr('batch_intro', ''))
             except tk.TclError:
                 pass
+        for prev in (
+            getattr(self, 'batch_plot_preview', None),
+            getattr(self, 'batch_curve_preview', None),
+        ):
+            if prev and callable(prev.get('refresh_lang')):
+                try:
+                    prev['refresh_lang']()
+                except Exception:
+                    pass
         # Visualization radiobuttons share tr keys
         vmeta = getattr(self, '_batch_viz_lang', None)
         if vmeta:
@@ -4680,6 +5079,7 @@ class ThermoQGUI:
         self.batch_plot_btn = ttk.Button(plot_fr, text=self.tr('batch_plot_btn', 'Generate plot'), command=self.run_batch_plot_for_space)
         self.batch_plot_btn.pack(pady=10)
         self._batch_lang_widgets.append((self.batch_plot_btn, 'batch_plot_btn'))
+        self.batch_plot_preview = self._build_plot_preview_panel(plot_fr, height=220, max_width=680)
 
         curve_fr = ttk.LabelFrame(scrollable_frame, text=self.tr('batch_curve_group', 'Plot curves (composition)'), padding=8)
         curve_fr.pack(fill=tk.X, pady=6)
@@ -4799,6 +5199,7 @@ class ThermoQGUI:
         )
         self.batch_curve_plot_btn.pack(pady=10)
         self._batch_lang_widgets.append((self.batch_curve_plot_btn, 'batch_curve_plot_btn'))
+        self.batch_curve_preview = self._build_plot_preview_panel(curve_fr, height=220, max_width=680)
 
         export_fr = ttk.Frame(scrollable_frame)
         export_fr.pack(fill=tk.X, pady=(0, 10))
@@ -5716,6 +6117,281 @@ class ThermoQGUI:
             fig.savefig(out_path, **save_kwargs)
         return out_path
 
+    def _build_plot_preview_panel(self, parent, *, height=240, max_width=720):
+        """In-window plot preview with Save As / Open. Keeps existing disk export paths."""
+        panel = {'path': None, '_photo': None, 'max_width': max_width, 'height': height}
+
+        frame = ttk.LabelFrame(
+            parent,
+            text=self.tr('plot_preview_title', 'Plot Preview'),
+            padding=6,
+        )
+        frame.pack(fill=tk.BOTH, expand=True, pady=(6, 4))
+
+        canvas_host = ttk.Frame(frame)
+        canvas_host.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(
+            canvas_host,
+            height=height,
+            background=THEME.get('surface', '#ffffff'),
+            highlightthickness=1,
+            highlightbackground=THEME.get('border', '#c5ced8'),
+        )
+        canvas.pack(fill=tk.BOTH, expand=True)
+        empty_id = canvas.create_text(
+            12, height // 2,
+            anchor='w',
+            fill=THEME.get('text_muted', '#5a6a7a'),
+            text=self.tr('plot_preview_empty', 'Click Plot to show the figure here.'),
+            width=max(200, max_width - 24),
+        )
+
+        path_label = ttk.Label(
+            frame,
+            text=self.tr('plot_preview_path_none', 'Current file: (none)'),
+            wraplength=max_width,
+            justify='left',
+        )
+        path_label.pack(anchor='w', pady=(4, 2))
+
+        btn_row = ttk.Frame(frame)
+        btn_row.pack(fill=tk.X, pady=(2, 0))
+
+        def _set_path_label(path=None):
+            if path:
+                path_label.config(
+                    text=self.tr('plot_preview_path', 'Current file: {path}').format(path=path)
+                )
+            else:
+                path_label.config(text=self.tr('plot_preview_path_none', 'Current file: (none)'))
+
+        def _clear_canvas_image():
+            canvas.delete('preview_img')
+            try:
+                canvas.itemconfigure(empty_id, state='normal')
+            except Exception:
+                pass
+            panel['_photo'] = None
+
+        def clear():
+            panel['path'] = None
+            _clear_canvas_image()
+            try:
+                canvas.itemconfigure(
+                    empty_id,
+                    text=self.tr('plot_preview_empty', 'Click Plot to show the figure here.'),
+                )
+            except Exception:
+                pass
+            _set_path_label(None)
+
+        def _show_pil_image(img):
+            _clear_canvas_image()
+            try:
+                canvas.itemconfigure(empty_id, state='hidden')
+            except Exception:
+                pass
+            try:
+                canvas.update_idletasks()
+                cw = max(120, int(canvas.winfo_width() or max_width))
+                ch = max(80, int(canvas.winfo_height() or height))
+            except Exception:
+                cw, ch = max_width, height
+            iw, ih = img.size
+            scale = min(cw / max(iw, 1), ch / max(ih, 1), 1.0)
+            nw = max(1, int(iw * scale))
+            nh = max(1, int(ih * scale))
+            if (nw, nh) != (iw, ih):
+                try:
+                    resample = Image.Resampling.LANCZOS
+                except Exception:
+                    resample = Image.LANCZOS
+                img = img.resize((nw, nh), resample)
+            photo = ImageTk.PhotoImage(img)
+            panel['_photo'] = photo
+            canvas.create_image(cw // 2, ch // 2, image=photo, anchor='center', tags='preview_img')
+
+        def _show_message(msg):
+            _clear_canvas_image()
+            try:
+                canvas.itemconfigure(empty_id, state='normal', text=msg)
+            except Exception:
+                pass
+
+        def show_path(path):
+            if not path:
+                clear()
+                return
+            abs_path = os.path.abspath(path)
+            panel['path'] = abs_path
+            _set_path_label(abs_path)
+            ext = os.path.splitext(abs_path)[1].lower()
+            if ext in ('.html', '.htm'):
+                _show_message(self.tr(
+                    'plot_preview_plotly_note',
+                    'Interactive HTML plot — use Open to view in the browser.',
+                ))
+                return
+            if not os.path.isfile(abs_path):
+                _show_message(self.tr(
+                    'plot_preview_unsupported',
+                    'Preview not available for this file type. Use Open or Save As.',
+                ))
+                return
+            try:
+                img = Image.open(abs_path)
+                img.load()
+                if getattr(img, 'n_frames', 1) > 1:
+                    img.seek(0)
+                if img.mode not in ('RGB', 'RGBA', 'L'):
+                    img = img.convert('RGBA' if 'A' in img.getbands() else 'RGB')
+                _show_pil_image(img)
+            except Exception:
+                # Keep an already-rendered matplotlib bitmap (e.g. PDF/SVG export).
+                if panel.get('_photo') is None:
+                    _show_message(self.tr(
+                        'plot_preview_unsupported',
+                        'Preview not available for this file type. Use Open or Save As.',
+                    ))
+
+        def set_path(path):
+            """Record export path for Save As / Open without reloading the canvas."""
+            if not path:
+                panel['path'] = None
+                _set_path_label(None)
+                return
+            abs_path = os.path.abspath(path)
+            panel['path'] = abs_path
+            _set_path_label(abs_path)
+
+        def show_figure(fig):
+            """Rasterize a matplotlib Figure into the preview (does not close fig)."""
+            if fig is None:
+                return
+            import io
+            buf = io.BytesIO()
+            try:
+                fig.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+                buf.seek(0)
+                img = Image.open(buf)
+                img.load()
+                _show_pil_image(img.convert('RGBA'))
+            except Exception:
+                pass
+
+        def _do_open():
+            path = panel.get('path')
+            if not path or not os.path.isfile(path):
+                return
+            self.open_file_and_offer_save_as(path, parent.winfo_toplevel())
+
+        def _do_save_as():
+            path = panel.get('path')
+            if not path or not os.path.isfile(path):
+                messagebox.showwarning(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('plot_preview_empty', 'Click Plot to show the figure here.'),
+                    parent=parent.winfo_toplevel(),
+                )
+                return
+            self.save_file_as(path, parent.winfo_toplevel())
+
+        btn_save = ttk.Button(
+            btn_row,
+            text=self.tr('plot_preview_save_as', 'Save As…'),
+            command=_do_save_as,
+        )
+        btn_save.pack(side=tk.LEFT, padx=(0, 6))
+        btn_open = ttk.Button(
+            btn_row,
+            text=self.tr('plot_preview_open', 'Open'),
+            command=_do_open,
+        )
+        btn_open.pack(side=tk.LEFT)
+
+        def refresh_lang():
+            try:
+                frame.config(text=self.tr('plot_preview_title', 'Plot Preview'))
+                btn_save.config(text=self.tr('plot_preview_save_as', 'Save As…'))
+                btn_open.config(text=self.tr('plot_preview_open', 'Open'))
+                _set_path_label(panel.get('path'))
+                # Refresh empty/note text only when no image is shown
+                if panel.get('_photo') is None:
+                    path = panel.get('path')
+                    if path and os.path.splitext(path)[1].lower() in ('.html', '.htm'):
+                        canvas.itemconfigure(empty_id, text=self.tr(
+                            'plot_preview_plotly_note',
+                            'Interactive HTML plot — use Open to view in the browser.',
+                        ))
+                    elif path:
+                        canvas.itemconfigure(empty_id, text=self.tr(
+                            'plot_preview_unsupported',
+                            'Preview not available for this file type. Use Open or Save As.',
+                        ))
+                    else:
+                        canvas.itemconfigure(empty_id, text=self.tr(
+                            'plot_preview_empty',
+                            'Click Plot to show the figure here.',
+                        ))
+            except Exception:
+                pass
+
+        panel.update({
+            'frame': frame,
+            'canvas': canvas,
+            'path_label': path_label,
+            'btn_save': btn_save,
+            'btn_open': btn_open,
+            'show_path': show_path,
+            'set_path': set_path,
+            'show_figure': show_figure,
+            'clear': clear,
+            'refresh_lang': refresh_lang,
+        })
+        return panel
+
+    def _offer_plot_result(
+        self,
+        out_path,
+        parent_window,
+        preview_panel=None,
+        status_widget=None,
+        status_text=None,
+        open_after=None,
+        preview_mode='path',
+    ):
+        """Show plot in preview (if any), update status, optionally open externally.
+
+        preview_mode:
+          - 'path': load preview from saved file
+          - 'keep': only update recorded path (bitmap already shown via show_figure)
+        """
+        if not out_path:
+            return None
+        if status_widget is not None:
+            msg = status_text or self.tr(
+                'plot_preview_saved_status', 'Preview ready. Saved: {path}'
+            ).format(path=out_path)
+            try:
+                status_widget.config(text=msg, foreground='green')
+            except Exception:
+                pass
+        if preview_panel is not None:
+            try:
+                if preview_mode == 'keep' and callable(preview_panel.get('set_path')):
+                    preview_panel['set_path'](out_path)
+                else:
+                    preview_panel['show_path'](out_path)
+            except Exception:
+                pass
+            if open_after is None:
+                open_after = False
+        elif open_after is None:
+            open_after = True
+        if open_after:
+            self.open_file_and_offer_save_as(out_path, parent_window)
+        return out_path
+
     def _resolve_plot_coord_limits(
         self, data_x_min, data_x_max, data_y_min, data_y_max, coord_vars,
         set_fields_cb=None, square_default=True,
@@ -6341,13 +7017,25 @@ class ThermoQGUI:
         iso_line_color="#2c3e50", iso_text_color="#1a252f",
         iso_clabel_fmt="%d", iso_level_fmt=".0f",
         show_legend=True, suppress_smooth_warn=False, open_after=True,
-        plot_labels=None,
+        plot_labels=None, preview_panel=None,
     ):
         """Shared 2D/3D/GIF/Plotly surface renderer with optional experimental point overlay."""
         def _plbl(key, default):
             if plot_labels and plot_labels.get(key):
                 return plot_labels[key]
             return default
+
+        def _finish(path, status_en, preview_mode='path'):
+            return self._offer_plot_result(
+                path,
+                parent_window,
+                preview_panel=preview_panel,
+                status_widget=status_widget,
+                status_text=self.tr('plot_preview_saved_status', 'Preview ready. Saved: {path}').format(path=path)
+                if preview_panel is not None else status_en,
+                open_after=False if preview_panel is not None else open_after,
+                preview_mode=preview_mode,
+            )
 
         xl = _plbl('x', format_w_element_label(ex))
         yl = _plbl('y', format_w_element_label(ey))
@@ -6431,11 +7119,13 @@ class ThermoQGUI:
             ext, _ = self._plot_image_ext_and_save_kwargs(image_format)
             out_path = f"{base}_Heatmap.{ext}"
             self._save_figure_image(fig_hm, out_path, image_format)
+            if preview_panel is not None:
+                try:
+                    preview_panel['show_figure'](fig_hm)
+                except Exception:
+                    pass
             plt.close(fig_hm)
-            status_widget.config(text=f"Heatmap saved: {out_path}", foreground="green")
-            if open_after:
-                self.open_file_and_offer_save_as(out_path, parent_window)
-            return out_path
+            return _finish(out_path, f"Heatmap saved: {out_path}", preview_mode='keep' if preview_panel else 'path')
 
         if viz == "3D Static":
             if not MATPLOTLIB_AVAILABLE:
@@ -6471,11 +7161,13 @@ class ThermoQGUI:
             ext, _ = self._plot_image_ext_and_save_kwargs(image_format)
             out_path = f"{base}_3d.{ext}"
             self._save_figure_image(fig, out_path, image_format)
+            if preview_panel is not None:
+                try:
+                    preview_panel['show_figure'](fig)
+                except Exception:
+                    pass
             plt.close()
-            status_widget.config(text=f"3D plot saved: {out_path}", foreground="green")
-            if open_after:
-                self.open_file_and_offer_save_as(out_path, parent_window)
-            return out_path
+            return _finish(out_path, f"3D plot saved: {out_path}", preview_mode='keep' if preview_panel else 'path')
 
         if viz == "3D Rotation GIF":
             if not MATPLOTLIB_AVAILABLE:
@@ -6525,10 +7217,7 @@ class ThermoQGUI:
             out_path = f"{base}_3d_rotation.gif"
             ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
             plt.close()
-            status_widget.config(text=f"GIF saved: {out_path}", foreground="green")
-            if open_after:
-                self.open_file_and_offer_save_as(out_path, parent_window)
-            return out_path
+            return _finish(out_path, f"GIF saved: {out_path}")
 
         if PLOTLY_AVAILABLE:
             traces = []
@@ -6562,10 +7251,7 @@ class ThermoQGUI:
             )
             out_path = f"{base}_3d_interactive.html"
             fig_plotly.write_html(out_path)
-            status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-            if open_after:
-                self.open_file_and_offer_save_as(out_path, parent_window)
-            return out_path
+            return _finish(out_path, f"Interactive 3D plot saved: {out_path}")
 
         out_path = f"{base}_3d_interactive.html"
         with open(out_path, 'w', encoding='utf-8') as f:
@@ -6592,10 +7278,7 @@ class ThermoQGUI:
             f.write('Plotly.newPlot("plot", data, layout);\n')
             f.write('</script>\n')
             f.write('</body></html>')
-        status_widget.config(text=f"Interactive 3D plot saved: {out_path}", foreground="green")
-        if open_after:
-            self.open_file_and_offer_save_as(out_path, parent_window)
-        return out_path
+        return _finish(out_path, f"Interactive 3D plot saved: {out_path}")
 
     @staticmethod
     def _liquidus_crop_surface_grid(xi_grid, yi_grid, zi_grid, x0, x1, y0, y1):
@@ -6933,6 +7616,7 @@ class ThermoQGUI:
                 suppress_smooth_warn=suppress_smooth_warn,
                 open_after=open_after,
                 plot_labels=plot_labels,
+                preview_panel=getattr(self, 'batch_plot_preview', None),
             )
             if out_path is None:
                 if viz == "Plotly 3D" and not PLOTLY_AVAILABLE:
@@ -6940,7 +7624,7 @@ class ThermoQGUI:
                 if viz != "Plotly 3D" and not MATPLOTLIB_AVAILABLE:
                     return None, 'no_mpl'
                 return None, 'render_failed'
-            if open_after:
+            if open_after and getattr(self, 'batch_plot_preview', None) is None:
                 self.batch_compute_status_label.config(
                     text=self.tr('batch_saved', 'Saved: {path}').format(path=out_path),
                     foreground="green",
@@ -7130,13 +7814,22 @@ class ThermoQGUI:
         fig.tight_layout()
         out_path = f"{base}.{ext}"
         self._save_figure_image(fig, out_path, fmt)
+        preview = getattr(self, 'batch_curve_preview', None)
+        if preview is not None:
+            try:
+                preview['show_figure'](fig)
+            except Exception:
+                pass
         plt.close(fig)
-        if open_after:
-            self.batch_compute_status_label.config(
-                text=self.tr('batch_curve_saved', 'Curve plot saved: {path}').format(path=out_path),
-                foreground="green",
-            )
-            self.open_file_and_offer_save_as(out_path, self.root)
+        self._offer_plot_result(
+            out_path,
+            self.root,
+            preview_panel=preview,
+            status_widget=self.batch_compute_status_label,
+            status_text=self.tr('batch_curve_saved', 'Curve plot saved: {path}').format(path=out_path),
+            open_after=False if preview is not None else open_after,
+            preview_mode='keep' if preview is not None else 'path',
+        )
         return out_path, None
 
     def _batch_plot_export_multi_curve_file(
@@ -7249,13 +7942,24 @@ class ThermoQGUI:
         fig.tight_layout()
         out_path = f"{base}.{ext}"
         self._save_figure_image(fig, out_path, fmt)
+        preview = getattr(self, 'batch_curve_preview', None)
+        if preview is not None:
+            try:
+                preview['show_figure'](fig)
+            except Exception:
+                pass
         plt.close(fig)
-        if open_after:
-            self.batch_compute_status_label.config(
-                text=self.tr('batch_curve_multi_saved', 'Multi-quantity curve plot saved: {path}').format(path=out_path),
-                foreground="green",
-            )
-            self.open_file_and_offer_save_as(out_path, self.root)
+        self._offer_plot_result(
+            out_path,
+            self.root,
+            preview_panel=preview,
+            status_widget=self.batch_compute_status_label,
+            status_text=self.tr(
+                'batch_curve_multi_saved', 'Multi-quantity curve plot saved: {path}'
+            ).format(path=out_path),
+            open_after=False if preview is not None else open_after,
+            preview_mode='keep' if preview is not None else 'path',
+        )
         return out_path, None
 
     def _batch_curve_plot_fixed_params(self):
@@ -7639,7 +8343,9 @@ class ThermoQGUI:
             self.lang_menu.add_command(label=t['help_chinese'], command=lambda: self.set_language('zh'))
             self.help_menu.add_cascade(label=t['help_language'], menu=self.lang_menu)
             self.help_menu.add_separator()
+            self.help_menu.add_command(label=t['help_manual'], command=self.open_user_manual)
             self.help_menu.add_command(label=t['help_example'], command=self.open_example_folder)
+            self._style_all_menus()
 
             # Main window buttons
             self.calculate_button.config(text=t['btn_calculate'])
@@ -7805,6 +8511,10 @@ class ThermoQGUI:
     def _present_tool_window(win, master):
         """Show a tool Toplevel above the main window without raising the main window."""
         try:
+            win.configure(bg=THEME['bg'])
+        except tk.TclError:
+            pass
+        try:
             win.transient(master)
         except tk.TclError:
             pass
@@ -7848,7 +8558,12 @@ class ThermoQGUI:
             pack_kw['pady'] = pady
         container.pack(**pack_kw)
 
-        canvas = tk.Canvas(container, highlightthickness=0)
+        canvas = tk.Canvas(
+            container,
+            highlightthickness=0,
+            bg=THEME['bg'],
+            bd=0,
+        )
         vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
         hsb = ttk.Scrollbar(container, orient=tk.HORIZONTAL, command=canvas.xview)
         canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -7921,9 +8636,40 @@ class ThermoQGUI:
 
         return inner, canvas, _unbind_wheel
 
+    def _app_root_dir(self):
+        """Project root (source) or PyInstaller bundle root (frozen)."""
+        return resource_path()
+
+    def open_user_manual(self):
+        """Open the user-manual PDF matching the current UI language (Help → Language)."""
+        try:
+            fname = (
+                'ThermoQ_User_Manual_ZH.pdf'
+                if getattr(self, 'language', 'en') == 'zh'
+                else 'ThermoQ_User_Manual_EN.pdf'
+            )
+            path = os.path.join(self._app_root_dir(), 'docs', fname)
+            if not os.path.isfile(path):
+                messagebox.showerror(
+                    self.tr('dlg_error', 'Error'),
+                    self.tr('manual_not_found', 'User manual PDF not found:\n{path}').format(path=path),
+                )
+                return
+            if platform.system() == 'Windows':
+                os.startfile(path)
+            elif platform.system() == 'Darwin':
+                subprocess.Popen(['open', path])
+            else:
+                subprocess.Popen(['xdg-open', path])
+        except Exception as e:
+            messagebox.showerror(
+                self.tr('dlg_error', 'Error'),
+                self.tr('manual_open_fail', 'Failed to open user manual:\n{e}').format(e=str(e)),
+            )
+
     def open_example_folder(self):
         try:
-            path = r"c:\Users\17868\OneDrive\文档\GitHub\ThermoQ\Example"
+            path = os.path.join(self._app_root_dir(), 'Example')
             if not os.path.exists(path):
                 messagebox.showerror(
                     self.tr('dlg_error', 'Error'),
@@ -9008,6 +9754,7 @@ class ThermoQGUI:
                 default_y=format_w_element_label(ey),
                 default_z=label_z,
             )
+            preview = phase_preview_pandat if status_widget is pandat_status_label else phase_preview_tc
             self._plot_xyz_surface_render(
                 x, y, z, ex, ey, base, label_z, viz_var.get(),
                 smoothness_var.get(), image_format_var.get(),
@@ -9018,6 +9765,7 @@ class ThermoQGUI:
                 iso_interval=iso_interval_var.get(),
                 show_legend=False,
                 plot_labels=pl,
+                preview_panel=preview,
             )
 
         elements_frame = ttk.Frame(controls)
@@ -9410,6 +10158,27 @@ class ThermoQGUI:
             viz = viz_var.get()
             exp_pts = exp_ui['get_points'](ex, ey, z_hint='T')
             levels = _phase_iso_levels(z_l, z_s)
+            preview = phase_preview_pandat if status_widget is pandat_status_label else phase_preview_tc
+
+            def _finish_overlay(out_path, fig=None):
+                mode = 'path'
+                if fig is not None and preview is not None:
+                    try:
+                        preview['show_figure'](fig)
+                        mode = 'keep'
+                    except Exception:
+                        pass
+                self._offer_plot_result(
+                    out_path,
+                    plot_window,
+                    preview_panel=preview,
+                    status_widget=status_widget,
+                    status_text=self.tr(
+                        "plot_phase_overlay_saved", "Overlay plot saved: {path}"
+                    ).format(path=out_path),
+                    open_after=False if preview is not None else True,
+                    preview_mode=mode,
+                )
 
             status_widget.config(text=self.tr("plot_status_smooth", "Creating smooth surface..."), foreground="orange")
             plot_window.update()
@@ -9483,12 +10252,8 @@ class ThermoQGUI:
                 ext, save_kwargs = self._plot_image_ext_and_save_kwargs(image_format_var.get())
                 out_path = f"{base}_Overlay_2d.{ext}"
                 fig.savefig(out_path, **save_kwargs)
+                _finish_overlay(out_path, fig=fig)
                 plt.close(fig)
-                status_widget.config(
-                    text=self.tr("plot_phase_overlay_saved", "Overlay plot saved: {path}").format(path=out_path),
-                    foreground="green",
-                )
-                self.open_file_and_offer_save_as(out_path, plot_window)
                 return
 
             if viz in ("3D Static", "3D Rotation GIF"):
@@ -9542,17 +10307,14 @@ class ThermoQGUI:
                     ani = animation.FuncAnimation(fig, _rotate, frames=range(0, 360, rotation_step), interval=interval_ms)
                     out_path = f"{base}_Overlay_3d_rotation.gif"
                     ani.save(out_path, writer="pillow", fps=fps_val, dpi=100)
+                    _finish_overlay(out_path)
                     plt.close(fig)
                 else:
                     ext, save_kwargs = _phase_img_save_kwargs()
                     out_path = f"{base}_Overlay_3d.{ext}"
                     plt.savefig(out_path, **save_kwargs)
+                    _finish_overlay(out_path, fig=fig)
                     plt.close(fig)
-                status_widget.config(
-                    text=self.tr("plot_phase_overlay_saved", "Overlay plot saved: {path}").format(path=out_path),
-                    foreground="green",
-                )
-                self.open_file_and_offer_save_as(out_path, plot_window)
                 return
 
             # Plotly 3D
@@ -9604,11 +10366,7 @@ class ThermoQGUI:
                 )
                 out_path = f"{base}_Overlay_3d_interactive.html"
                 fig_plotly.write_html(out_path)
-                status_widget.config(
-                    text=self.tr("plot_phase_overlay_saved", "Overlay plot saved: {path}").format(path=out_path),
-                    foreground="green",
-                )
-                self.open_file_and_offer_save_as(out_path, plot_window)
+                _finish_overlay(out_path)
             else:
                 messagebox.showerror(
                     self.tr("plot_dep_title", "Dependency Missing"),
@@ -9621,12 +10379,14 @@ class ThermoQGUI:
             foreground="blue",
         )
         pandat_status_label.pack(pady=5)
+        phase_preview_pandat = self._build_plot_preview_panel(tab_pandat, height=210, max_width=720)
         tc_status_label = ttk.Label(
             tab_tc,
             text=self.tr('plot_phase_ready_tc', 'Ready to plot (Thermo-calc)'),
             foreground="blue",
         )
         tc_status_label.pack(pady=5)
+        phase_preview_tc = self._build_plot_preview_panel(tab_tc, height=210, max_width=720)
 
         pandat_note = ttk.Label(
             tab_pandat,
@@ -10029,6 +10789,11 @@ class ThermoQGUI:
             btn_ps_close_pd.config(text=self.tr('ui_close', 'Close'))
             btn_ps_close_tc.config(text=self.tr('ui_close', 'Close'))
             pandat_note.config(text=self.tr('plot_phase_note_pandat', ''))
+            try:
+                phase_preview_pandat['refresh_lang']()
+                phase_preview_tc['refresh_lang']()
+            except Exception:
+                pass
             cur_pd = pandat_status_label.cget('text')
             if 'Ready' in cur_pd or '就绪' in cur_pd or 'Pandat' in cur_pd:
                 pandat_status_label.config(text=self.tr('plot_phase_ready_pandat', ''))
@@ -10236,38 +11001,66 @@ class ThermoQGUI:
             _do_open()
 
     def save_file_as(self, source_path, parent_window):
-        """Save file to a different location"""
+        """Save file to a different location / format (custom path from plot preview)."""
         try:
-            # Determine file type and extension
-            ext = os.path.splitext(source_path)[1]
-            file_types = {
-                '.png': [('PNG Image', '*.png'), ('All Files', '*.*')],
-                '.gif': [('GIF Image', '*.gif'), ('All Files', '*.*')],
-                '.html': [('HTML File', '*.html'), ('All Files', '*.*')],
-            }
-            
-            file_type = file_types.get(ext.lower(), [('All Files', '*.*')])
+            import shutil
+            ext = os.path.splitext(source_path)[1].lower()
+            image_exts = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.tif', '.webp'}
+            all_image_types = [
+                ('PNG', '*.png'),
+                ('JPEG', '*.jpg;*.jpeg'),
+                ('GIF', '*.gif'),
+                ('BMP', '*.bmp'),
+                ('TIFF', '*.tiff;*.tif'),
+                ('WebP', '*.webp'),
+                ('PDF', '*.pdf'),
+                ('SVG', '*.svg'),
+                ('EPS', '*.eps'),
+                ('All Files', '*.*'),
+            ]
+            if ext in image_exts or ext in ('.pdf', '.svg', '.eps'):
+                file_type = all_image_types
+            elif ext in ('.html', '.htm'):
+                file_type = [('HTML File', '*.html'), ('All Files', '*.*')]
+            else:
+                file_type = [('All Files', '*.*')]
+
             default_name = os.path.basename(source_path)
-            
-            # Ask user for save location
             save_path = filedialog.asksaveasfilename(
                 parent=parent_window,
-                title="Save As",
-                defaultextension=ext,
+                title=self.tr('plot_preview_save_title', 'Save plot as'),
+                defaultextension=ext or '.png',
                 filetypes=file_type,
-                initialfile=default_name
+                initialfile=default_name,
             )
-            
-            if save_path:
-                # Copy file to new location
-                import shutil
+            if not save_path:
+                return
+
+            src_ext = ext
+            dst_ext = os.path.splitext(save_path)[1].lower()
+            if dst_ext and src_ext != dst_ext and src_ext in image_exts and dst_ext in image_exts | {'.pdf'}:
+                try:
+                    img = Image.open(source_path)
+                    if getattr(img, 'n_frames', 1) > 1:
+                        img.seek(0)
+                    if dst_ext in ('.jpg', '.jpeg', '.bmp', '.pdf') and img.mode in ('RGBA', 'LA', 'P'):
+                        img = img.convert('RGB')
+                    fmt_map = {
+                        '.png': 'PNG', '.jpg': 'JPEG', '.jpeg': 'JPEG', '.gif': 'GIF',
+                        '.bmp': 'BMP', '.tiff': 'TIFF', '.tif': 'TIFF', '.webp': 'WEBP',
+                        '.pdf': 'PDF',
+                    }
+                    img.save(save_path, format=fmt_map.get(dst_ext, 'PNG'))
+                except Exception:
+                    shutil.copy2(source_path, save_path)
+            else:
                 shutil.copy2(source_path, save_path)
-                messagebox.showinfo(
-                    self.tr('dlg_success', 'Success'),
-                    self.tr('file_save_ok', 'File saved to:\n{path}').format(path=save_path),
-                    parent=parent_window,
-                )
-                
+
+            messagebox.showinfo(
+                self.tr('dlg_success', 'Success'),
+                self.tr('file_save_ok', 'File saved to:\n{path}').format(path=save_path),
+                parent=parent_window,
+            )
         except Exception as e:
             messagebox.showerror(
                 self.tr('dlg_error', 'Error'),
@@ -10522,6 +11315,7 @@ class ThermoQGUI:
             foreground="blue",
         )
         status_label.pack(pady=5)
+        q_preview = self._build_plot_preview_panel(main_frame, height=210, max_width=720)
 
         def get_df():
             ds = dataset_var.get()
@@ -10626,6 +11420,7 @@ class ThermoQGUI:
                     iso_clabel_fmt="%g", iso_level_fmt=".3g",
                     show_legend=False,
                     plot_labels=q_pl,
+                    preview_panel=q_preview,
                 )
 
             except Exception as e:
@@ -10679,6 +11474,10 @@ class ThermoQGUI:
             lbl_q_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_q_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(q_coord_widgets)
+            try:
+                q_preview['refresh_lang']()
+            except Exception:
+                pass
             self._refresh_plot_labels_lang(q_labels_ui)
             self._refresh_plot_exp_lang(q_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
@@ -11045,6 +11844,25 @@ class ThermoQGUI:
 
         status_label = ttk.Label(main_frame, text=self.tr('plot_lmg_ready', 'Ready to plot'), foreground="blue")
         status_label.pack(pady=5)
+        lmg_preview = self._build_plot_preview_panel(main_frame, height=210, max_width=720)
+
+        def _lmg_finish(out_path, fig=None):
+            mode = 'path'
+            if fig is not None and lmg_preview is not None:
+                try:
+                    lmg_preview['show_figure'](fig)
+                    mode = 'keep'
+                except Exception:
+                    pass
+            self._offer_plot_result(
+                out_path,
+                plot_window,
+                preview_panel=lmg_preview,
+                status_widget=status_label,
+                status_text=self.tr('plot_preview_saved_status', 'Preview ready. Saved: {path}').format(path=out_path),
+                open_after=False,
+                preview_mode=mode,
+            )
 
         def _output_base(suffix):
             prefix = output_var.get().strip() or "miscibility_gap"
@@ -11101,12 +11919,8 @@ class ThermoQGUI:
                 ext, skw = _mpl_save_kwargs()
                 out_path = f"{_output_base(base_suffix)}_2d.{ext}"
                 fig.savefig(out_path, **skw)
+                _lmg_finish(out_path, fig=fig)
                 plt.close(fig)
-                status_label.config(
-                    text=self.tr('plot_lmg_saved_2d', '2D plot saved: {path}').format(path=out_path),
-                    foreground="green",
-                )
-                self.open_file_and_offer_save_as(out_path, plot_window)
                 return
 
             fig = plt.figure(figsize=(12, 10))
@@ -11133,9 +11947,8 @@ class ThermoQGUI:
                 ext, skw = _mpl_save_kwargs()
                 out_path = f"{_output_base(base_suffix)}_3d.{ext}"
                 fig.savefig(out_path, **skw)
+                _lmg_finish(out_path, fig=fig)
                 plt.close(fig)
-                status_label.config(text=f"3D plot saved: {out_path}", foreground="green")
-                self.open_file_and_offer_save_as(out_path, plot_window)
             elif viz == "3D Rotation GIF":
                 def _rotate(angle):
                     ax.view_init(azim=angle)
@@ -11159,8 +11972,7 @@ class ThermoQGUI:
                 out_path = f"{_output_base(base_suffix)}_3d_rotation.gif"
                 ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
                 plt.close(fig)
-                status_label.config(text=f"GIF saved: {out_path}", foreground="green")
-                self.open_file_and_offer_save_as(out_path, plot_window)
+                _lmg_finish(out_path)
             else:
                 plt.close(fig)
                 if PLOTLY_AVAILABLE:
@@ -11188,8 +12000,7 @@ class ThermoQGUI:
                     )
                     out_path = f"{_output_base(base_suffix)}_3d_interactive.html"
                     fig_p.write_html(out_path)
-                    status_label.config(text=f"Interactive 3D saved: {out_path}", foreground="green")
-                    self.open_file_and_offer_save_as(out_path, plot_window)
+                    _lmg_finish(out_path)
                 else:
                     messagebox.showerror(
                         self.tr('plot_dep_title', 'Dependency Missing'),
@@ -11326,15 +12137,13 @@ class ThermoQGUI:
                     out_path = f"{_output_base(base_suffix)}_surfaces_rotation.gif"
                     ani.save(out_path, writer='pillow', fps=fps_val, dpi=100)
                     plt.close(fig)
-                    status_label.config(text=f"GIF saved: {out_path}", foreground='green')
-                    self.open_file_and_offer_save_as(out_path, plot_window)
+                    _lmg_finish(out_path)
                 else:
                     ext, skw = _mpl_save_kwargs()
                     out_path = f"{_output_base(base_suffix)}_surfaces_3d.{ext}"
                     fig.savefig(out_path, **skw)
+                    _lmg_finish(out_path, fig=fig)
                     plt.close(fig)
-                    status_label.config(text=f"3D plot saved: {out_path}", foreground='green')
-                    self.open_file_and_offer_save_as(out_path, plot_window)
             else:
                 if PLOTLY_AVAILABLE:
                     traces = []
@@ -11388,8 +12197,7 @@ class ThermoQGUI:
                         fig_p.update_layout(title=lmg_stack_pl['title'])
                     out_path = f"{_output_base(base_suffix)}_surfaces_interactive.html"
                     fig_p.write_html(out_path)
-                    status_label.config(text=f"Interactive 3D saved: {out_path}", foreground='green')
-                    self.open_file_and_offer_save_as(out_path, plot_window)
+                    _lmg_finish(out_path)
                 else:
                     messagebox.showerror(
                         self.tr('plot_dep_title', 'Dependency Missing'),
@@ -11507,6 +12315,10 @@ class ThermoQGUI:
             lbl_lmg_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_lmg_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(lmg_coord_widgets)
+            try:
+                lmg_preview['refresh_lang']()
+            except Exception:
+                pass
             self._refresh_plot_labels_lang(lmg_labels_ui)
             self._refresh_plot_exp_lang(lmg_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
@@ -11808,6 +12620,7 @@ class ThermoQGUI:
 
         status_label = ttk.Label(main_frame, text=self.tr('tzero_ready', 'Ready to plot'), foreground="blue")
         status_label.pack(pady=5)
+        tz_preview = self._build_plot_preview_panel(main_frame, height=210, max_width=720)
 
         def _find_t0_column(df):
             for col in df.columns:
@@ -11889,6 +12702,7 @@ class ThermoQGUI:
                     plot_limits=plot_limits, exp_points=exp_pts,
                     iso_interval=iso_interval_var.get(),
                     plot_labels=tz_pl,
+                    preview_panel=tz_preview,
                 )
 
             except Exception as e:
@@ -11943,6 +12757,10 @@ class ThermoQGUI:
             lbl_tz_az.config(text=self.tr('batch_azim', 'Azimuth (deg):'))
             lbl_tz_azr.config(text=self.tr('plot_azim_range', '(-180–180)'))
             self._refresh_plot_coord_lang(tz_coord_widgets)
+            try:
+                tz_preview['refresh_lang']()
+            except Exception:
+                pass
             self._refresh_plot_labels_lang(tz_labels_ui)
             self._refresh_plot_exp_lang(tz_exp_widgets)
             output_settings_frame.config(text=self.tr('plot_phase_output_settings', 'Output Settings'))
@@ -15267,7 +16085,14 @@ class ThermoQGUI:
             if not out_path:
                 return
             try:
-                self.open_file_and_offer_save_as(out_path, window)
+                self._offer_plot_result(
+                    out_path,
+                    window,
+                    preview_panel=trist_preview,
+                    status_widget=None,
+                    status_text=self.tr('extp_trist_viz_saved', 'TriST plot saved: {path}').format(path=out_path),
+                    open_after=False,
+                )
             except Exception:
                 pass
             messagebox.showinfo(
@@ -15294,6 +16119,8 @@ class ThermoQGUI:
                 _load_viz_wcols_from_xlsx()
             except Exception:
                 pass
+
+        trist_preview = self._build_plot_preview_panel(parent, height=220, max_width=720)
 
         viz_btn_row = None
         if button_bar is None:
@@ -15342,10 +16169,15 @@ class ThermoQGUI:
             'lbl_gint': trist_lbl_gint,
             'lbl_gfps': trist_lbl_gfps,
             'btn_viz': btn_trist_viz,
+            'preview': trist_preview,
         })
 
         def refresh_lang():
             try:
+                try:
+                    trist_preview['refresh_lang']()
+                except Exception:
+                    pass
                 viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
                 widgets['lbl_viz_src'].config(text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
                 widgets['lbl_viz_sheet'].config(text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
@@ -19078,7 +19910,14 @@ class ThermoQGUI:
             if not out_path:
                 return
             try:
-                self.open_file_and_offer_save_as(out_path, extractor_window)
+                self._offer_plot_result(
+                    out_path,
+                    extractor_window,
+                    preview_panel=extp_trist_preview,
+                    status_widget=None,
+                    status_text=self.tr('extp_trist_viz_saved', 'TriST plot saved: {path}').format(path=out_path),
+                    open_after=False,
+                )
             except Exception:
                 pass
             messagebox.showinfo(
@@ -19093,6 +19932,8 @@ class ThermoQGUI:
         except Exception:
             pass
         _load_viz_wcols_from_xlsx()
+
+        extp_trist_preview = self._build_plot_preview_panel(tab_trist, height=220, max_width=720)
 
         trist_btns = ttk.Frame(tab_trist)
         trist_btns.pack(pady=10, anchor=tk.CENTER)
@@ -19261,6 +20102,10 @@ class ThermoQGUI:
                 trist_lbl_gspd.config(text=self.tr('batch_gif_speed', 'Rotation Speed (degrees/frame):'))
                 trist_lbl_gint.config(text=self.tr('batch_gif_interval', 'Frame Interval (ms):'))
                 trist_lbl_gfps.config(text=self.tr('batch_gif_fps', 'FPS:'))
+                try:
+                    extp_trist_preview['refresh_lang']()
+                except Exception:
+                    pass
                 btn_extp_trist_viz.config(text=self.tr('extp_trist_viz_btn', 'Plot'))
                 btn_extp_trist_close.config(text=self.tr('extp_close', 'Close'))
             except Exception:
@@ -19709,7 +20554,7 @@ class ThermoQGUI:
                 out1 = os.path.join(base_path, f"{prefix}_{ex}_U.{ext}")
                 fig1.savefig(out1, **save_kwargs)
                 plt.close(fig1)
-                self.open_file_and_offer_save_as(out1, win)
+                _k_finish(out1)
 
                 fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
                 ax2.quiver(
@@ -19733,7 +20578,7 @@ class ThermoQGUI:
                 out2 = os.path.join(base_path, f"{prefix}_{ey}_V.{ext}")
                 fig2.savefig(out2, **save_kwargs)
                 plt.close(fig2)
-                self.open_file_and_offer_save_as(out2, win)
+                _k_finish(out2)
 
                 fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
                 ax3.quiver(
@@ -19757,7 +20602,7 @@ class ThermoQGUI:
                 out3 = os.path.join(base_path, f"{prefix}_Z.{ext}")
                 fig3.savefig(out3, **save_kwargs)
                 plt.close(fig3)
-                self.open_file_and_offer_save_as(out3, win)
+                _k_finish(out3)
 
                 # 2) 2D heatmap of |k-1| magnitude (optional)
                 if plot_heatmap_var.get():
@@ -19776,7 +20621,7 @@ class ThermoQGUI:
                     out_hm = os.path.join(base_path, f"{prefix}_k_heatmap.{ext}")
                     fig_hm.savefig(out_hm, **save_kwargs)
                     plt.close(fig_hm)
-                    self.open_file_and_offer_save_as(out_hm, win)
+                    _k_finish(out_hm)
 
                 # 3) 3D static trisurface of |k-1| (optional)
                 if plot_3d_static_var.get():
@@ -19806,7 +20651,7 @@ class ThermoQGUI:
                     out_3d = os.path.join(base_path, f"{prefix}_k_3d.{ext}")
                     fig_3d.savefig(out_3d, **save_kwargs)
                     plt.close(fig_3d)
-                    self.open_file_and_offer_save_as(out_3d, win)
+                    _k_finish(out_3d)
 
                 # 4) 3D rotation GIF (matplotlib, optional)
                 if plot_3d_gif_var.get():
@@ -19853,7 +20698,7 @@ class ThermoQGUI:
                     out_gif = os.path.join(base_path, f"{prefix}_k_3d_rotation.gif")
                     ani.save(out_gif, writer="pillow", fps=gif_fps, dpi=100)
                     plt.close(fig_gif)
-                    self.open_file_and_offer_save_as(out_gif, win)
+                    _k_finish(out_gif)
 
                 # 5) Plotly 3D scatter of |k-1| (optional)
                 if plot_plotly_var.get():
@@ -19896,7 +20741,7 @@ class ThermoQGUI:
                                 "Install plotly to see interactive 3D plots.</p></body></html>"
                             )
                     if out_html:
-                        self.open_file_and_offer_save_as(out_html, win)
+                        _k_finish(out_html)
 
                 status_label.config(
                     text=self.tr(
@@ -19912,6 +20757,21 @@ class ThermoQGUI:
                         e=str(e)
                     ),
                 )
+
+        k_preview = self._build_plot_preview_panel(main_frame, height=210, max_width=720)
+
+        def _k_finish(out_path, fig=None):
+            mode = 'path'
+            if fig is not None:
+                try:
+                    k_preview['show_figure'](fig)
+                    mode = 'keep'
+                except Exception:
+                    pass
+            self._offer_plot_result(
+                out_path, win, preview_panel=k_preview, status_widget=status_label,
+                open_after=False, preview_mode=mode,
+            )
 
         k_btn_plot_tab1 = ttk.Button(
             main_frame, text=self.tr('btn_plot_vectors', 'Plot Vectors'), command=plot_k_vectors
@@ -20541,7 +21401,7 @@ class ThermoQGUI:
                 out1 = os.path.join(base_path, f"{prefix2}_{ex}_U_T{t_target:.4g}.{ext}")
                 fig1.savefig(out1, **save_kwargs)
                 plt.close(fig1)
-                self.open_file_and_offer_save_as(out1, win)
+                _k_finish_tab2(out1)
 
                 # V
                 fig2, ax2 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -20565,7 +21425,7 @@ class ThermoQGUI:
                 out2 = os.path.join(base_path, f"{prefix2}_{ey}_V_T{t_target:.4g}.{ext}")
                 fig2.savefig(out2, **save_kwargs)
                 plt.close(fig2)
-                self.open_file_and_offer_save_as(out2, win)
+                _k_finish_tab2(out2)
 
                 # Z
                 fig3, ax3 = plt.subplots(figsize=(7, 6), dpi=140)
@@ -20589,7 +21449,7 @@ class ThermoQGUI:
                 out3 = os.path.join(base_path, f"{prefix2}_Z_T{t_target:.4g}.{ext}")
                 fig3.savefig(out3, **save_kwargs)
                 plt.close(fig3)
-                self.open_file_and_offer_save_as(out3, win)
+                _k_finish_tab2(out3)
 
                 win._partition_k_tab2_last_t = t_target
                 tab2_status_label.config(
@@ -20603,6 +21463,21 @@ class ThermoQGUI:
                     self.tr('dlg_error', 'Error'),
                     self.tr('plot_k_fail', 'Failed to plot partition coefficient vectors:\n{e}').format(e=str(e)),
                 )
+
+        k_preview_tab2 = self._build_plot_preview_panel(tab_same_temp, height=200, max_width=720)
+
+        def _k_finish_tab2(out_path, fig=None):
+            mode = 'path'
+            if fig is not None:
+                try:
+                    k_preview_tab2['show_figure'](fig)
+                    mode = 'keep'
+                except Exception:
+                    pass
+            self._offer_plot_result(
+                out_path, win, preview_panel=k_preview_tab2, status_widget=tab2_status_label,
+                open_after=False, preview_mode=mode,
+            )
 
         tab2_btn_plot = ttk.Button(
             tab_same_temp,
@@ -21693,7 +22568,7 @@ class ThermoQGUI:
                 out2d = os.path.join(base_path, f"{prefix3}_iso_2Dproj.{ext}")
                 fig2d.savefig(out2d, **save_kwargs)
                 plt.close(fig2d)
-                self.open_file_and_offer_save_as(out2d, win)
+                _k_finish_iso(out2d)
 
                 # 3D static plot (T as Z axis)
                 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
@@ -21727,7 +22602,7 @@ class ThermoQGUI:
                 out3d = os.path.join(base_path, f"{prefix3}_iso_3Dstatic.{ext}")
                 fig3d.savefig(out3d, **save_kwargs)
                 plt.close(fig3d)
-                self.open_file_and_offer_save_as(out3d, win)
+                _k_finish_iso(out3d)
 
                 # Plotly 3D interactive (animation by temperature)
                 out_html_iso = os.path.join(base_path, f"{prefix3}_iso_3Dinteractive.html")
@@ -21907,7 +22782,7 @@ class ThermoQGUI:
                         )
 
                         fig_pl.write_html(out_html_iso)
-                        self.open_file_and_offer_save_as(out_html_iso, win)
+                        _k_finish_iso(out_html_iso)
                     except Exception:
                         pass
                 else:
@@ -21917,7 +22792,7 @@ class ThermoQGUI:
                             "<p>Plotly is not available. Install plotly to view interactive 3D plots.</p>"
                             "</body></html>"
                         )
-                    self.open_file_and_offer_save_as(out_html_iso, win)
+                    _k_finish_iso(out_html_iso)
 
                 # 3D dynamic GIF (high -> low)
                 fig_anim = plt.figure(figsize=(8, 7), dpi=120)
@@ -21984,7 +22859,7 @@ class ThermoQGUI:
                 out_gif = os.path.join(base_path, f"{prefix3}_iso_3Ddynamic.gif")
                 ani.save(out_gif, writer="pillow", fps=10, dpi=100)
                 plt.close(fig_anim)
-                self.open_file_and_offer_save_as(out_gif, win)
+                _k_finish_iso(out_gif)
 
                 iso_status_label.config(text=self.tr('iso_done', 'Done. Generated 2D projection and 3D plots for isocomposition.'), foreground="green")
             except Exception as e:
@@ -22654,7 +23529,7 @@ class ThermoQGUI:
                 out2d = os.path.join(base_path, f"{prefix3}_iso_2Dproj.{ext}")
                 fig2d.savefig(out2d, **save_kwargs)
                 plt.close(fig2d)
-                self.open_file_and_offer_save_as(out2d, win)
+                _k_finish_iso(out2d)
 
                 # k vs T curves
                 if iso_plot_k_curve_var.get():
@@ -22718,7 +23593,7 @@ class ThermoQGUI:
                         out_k = os.path.join(base_path, f"{prefix3}_iso_k_vs_T.{ext}")
                         fig_k.savefig(out_k, **save_kwargs)
                         plt.close(fig_k)
-                        self.open_file_and_offer_save_as(out_k, win)
+                        _k_finish_iso(out_k)
 
                 # 3D static plot
                 fig3d = plt.figure(figsize=(8, 7), dpi=140)
@@ -22740,7 +23615,7 @@ class ThermoQGUI:
                 out3d = os.path.join(base_path, f"{prefix3}_iso_3Dstatic.{ext}")
                 fig3d.savefig(out3d, **save_kwargs)
                 plt.close(fig3d)
-                self.open_file_and_offer_save_as(out3d, win)
+                _k_finish_iso(out3d)
 
                 # 3D dynamic GIF (high -> low)
                 fig_anim = plt.figure(figsize=(8, 7), dpi=120)
@@ -22798,7 +23673,7 @@ class ThermoQGUI:
                 out_gif = os.path.join(base_path, f"{prefix3}_iso_3Ddynamic.gif")
                 ani.save(out_gif, writer="pillow", fps=10, dpi=100)
                 plt.close(fig_anim)
-                self.open_file_and_offer_save_as(out_gif, win)
+                _k_finish_iso(out_gif)
 
                 # Plotly interactive animation (high -> low)
                 out_html_iso = os.path.join(base_path, f"{prefix3}_iso_3Dinteractive.html")
@@ -22983,7 +23858,7 @@ class ThermoQGUI:
                             ],
                         )
                         fig_pl.write_html(out_html_iso)
-                        self.open_file_and_offer_save_as(out_html_iso, win)
+                        _k_finish_iso(out_html_iso)
                     except Exception:
                         pass
                 else:
@@ -22993,7 +23868,7 @@ class ThermoQGUI:
                             "<p>Plotly is not available. Install plotly to view interactive 3D plots.</p>"
                             "</body></html>"
                         )
-                    self.open_file_and_offer_save_as(out_html_iso, win)
+                    _k_finish_iso(out_html_iso)
 
                 iso_status_label.config(
                     text=self.tr('iso_done', 'Done. Generated 2D projection and 3D plots for isocomposition.'),
@@ -23004,6 +23879,21 @@ class ThermoQGUI:
                     self.tr('dlg_error', 'Error'),
                     self.tr('plot_k_fail', 'Failed to plot partition coefficient vectors:\n{e}').format(e=str(e)),
                 )
+
+        k_preview_iso = self._build_plot_preview_panel(tab_isocomp, height=200, max_width=720)
+
+        def _k_finish_iso(out_path, fig=None):
+            mode = 'path'
+            if fig is not None:
+                try:
+                    k_preview_iso['show_figure'](fig)
+                    mode = 'keep'
+                except Exception:
+                    pass
+            self._offer_plot_result(
+                out_path, win, preview_panel=k_preview_iso, status_widget=iso_status_label,
+                open_after=False, preview_mode=mode,
+            )
 
         iso_btn_plot = ttk.Button(
             tab_isocomp,
@@ -23056,6 +23946,12 @@ class ThermoQGUI:
             k_lbl_gif_fps.config(text=self.tr('plot_k_gif_fps', 'GIF FPS:'))
             k_lbl_rot_step.config(text=self.tr('plot_k_rot_step', 'Rotation step (deg):'))
             k_lbl_img_fmt.config(text=self.tr('plot_k_img_fmt_2d3d', 'Image Format (2D/3D static):'))
+            try:
+                k_preview['refresh_lang']()
+                k_preview_tab2['refresh_lang']()
+                k_preview_iso['refresh_lang']()
+            except Exception:
+                pass
             k_btn_plot_tab1.config(text=self.tr('btn_plot_vectors', 'Plot Vectors'))
             # Status lines (refresh translated text if still in a known state)
             try:
@@ -24268,6 +25164,10 @@ class ThermoQGUI:
                 fig1.tight_layout()
                 out1 = os.path.join(base_path, f"{prefix}_{ex}_horizontal.{ext}")
                 fig1.savefig(out1, **save_kwargs)
+                try:
+                    _lv_finish(out1)
+                except Exception:
+                    pass
                 plt.close(fig1)
                 
                 # Figure 2: V arrows (vertical)
@@ -24466,6 +25366,10 @@ class ThermoQGUI:
                             fig_hm.savefig(out4, dpi=300, bbox_inches="tight", pad_inches=0.02)
                             plt.close(fig_hm)
                             status_label.config(text=f"Heatmap saved: {out4}", foreground="green")
+                            try:
+                                _lv_finish(out4)
+                            except Exception:
+                                pass
                             
                         elif viz == "3D Static":
                             if not MATPLOTLIB_AVAILABLE:
@@ -24526,6 +25430,10 @@ class ThermoQGUI:
                             plt.savefig(out4, **save_kwargs)
                             plt.close()
                             status_label.config(text=f"3D plot saved: {out4}", foreground="green")
+                            try:
+                                _lv_finish(out4)
+                            except Exception:
+                                pass
                             
                         elif viz == "3D Rotation GIF":
                             if not MATPLOTLIB_AVAILABLE:
@@ -24598,6 +25506,10 @@ class ThermoQGUI:
                             ani.save(out4, writer='pillow', fps=fps_val, dpi=100)
                             plt.close()
                             status_label.config(text=f"GIF saved: {out4}", foreground="green")
+                            try:
+                                _lv_finish(out4)
+                            except Exception:
+                                pass
                             
                         else:  # Plotly 3D
                             if PLOTLY_AVAILABLE:
@@ -24709,6 +25621,10 @@ class ThermoQGUI:
                                 out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
                                 fig_plotly.write_html(out4)
                                 status_label.config(text=f"Interactive 3D plot saved: {out4}", foreground="green")
+                            try:
+                                _lv_finish(out4)
+                            except Exception:
+                                pass
                             else:
                                 # Fallback HTML without plotly
                                 out4 = os.path.join(base_path, f"{prefix}_Z_on_liquidus_3d_interactive.html")
@@ -24817,6 +25733,10 @@ class ThermoQGUI:
                         text=f"Success! Saved:\n{os.path.basename(out1)}\n{os.path.basename(out2)}\n{os.path.basename(out3)}",
                         foreground="green"
                     )
+                    try:
+                        _lv_finish(out3)
+                    except Exception:
+                        pass
                     messagebox.showinfo(
                         self.tr('dlg_success', 'Success'),
                         self.tr(
@@ -24832,6 +25752,21 @@ class ThermoQGUI:
                     self.tr('plot_liq_gen_fail', 'Failed to generate vector plots:\n{e}').format(e=str(e)),
                 )
         
+        lv_preview = self._build_plot_preview_panel(main_frame, height=210, max_width=720)
+
+        def _lv_finish(out_path, fig=None):
+            mode = 'path'
+            if fig is not None:
+                try:
+                    lv_preview['show_figure'](fig)
+                    mode = 'keep'
+                except Exception:
+                    pass
+            self._offer_plot_result(
+                out_path, vector_window, preview_panel=lv_preview, status_widget=status_label,
+                open_after=False, preview_mode=mode,
+            )
+
         # Buttons
         buttons_frame = ttk.Frame(main_frame)
         buttons_frame.pack(pady=20)
@@ -24899,6 +25834,10 @@ class ThermoQGUI:
             btn_lv_out.config(text=self.tr('pandat_browse', 'Browse'))
             lbl_lv_pfx.config(text=self.tr('batch_prefix', 'Output Prefix:'))
             lbl_lv_ifmt.config(text=self.tr('batch_image_fmt', 'Image Format (2D/3D Static):'))
+            try:
+                lv_preview['refresh_lang']()
+            except Exception:
+                pass
             btn_lv_plot.config(text=self.tr('btn_plot_vectors', 'Plot Vectors'))
             btn_lv_close.config(text=self.tr('ui_close', 'Close'))
             on_dataset_changed()
@@ -24907,6 +25846,7 @@ class ThermoQGUI:
         _refresh_liqvec_lang()
 
 def main():
+    _ensure_writable_cwd()
     # Create the root window first
     root = tk.Tk()
     root.withdraw()  # Hide it initially

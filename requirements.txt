@@ -1,16 +1,16 @@
-# ThermoQ — Python dependencies (updated Sep 2026)
+# ThermoQ — Python dependencies
 # GUI uses stdlib tkinter (no pip package). On Linux: sudo apt install python3-tk
-# Recommended: Python 3.8+
+# Recommended: Python 3.10–3.12 (3.8+ usually works). App version: 1.0.0
 
 # --- Core (required) ---
 numpy>=1.21.0
 pandas>=2.0.0
 openpyxl>=3.1.0       # Read/write .xlsx (Pandat/Thermo-Calc import & extract)
 xlrd==1.2.0           # Read legacy .xls (xlrd>=2.0 dropped .xls support)
-Pillow>=9.0.0         # GUI icons; BMP/GIF export via PIL when Matplotlib cannot write directly
+Pillow>=9.0.0         # Splash/icons; in-GUI plot preview; BMP/GIF save when Matplotlib cannot write them
 
-# --- Plotting (recommended; required for Plot menu & Calculate batch plots) ---
-matplotlib>=3.5.0     # 2D/3D static, GIFs, k–T curves, liquidus vectors, TriST workbook build, …
+# --- Plotting (recommended; required for Plot menu, batch plots, in-window preview) ---
+matplotlib>=3.5.0     # 2D/3D static, GIFs, vectors, TriST workbook build, embedded preview rasterization
 plotly>=5.0.0         # Interactive 3D HTML (TriST visualize, phase surfaces, isocomposition, …)
 
 # --- TriST extraction & smooth surfaces (strongly recommended) ---
@@ -21,3 +21,10 @@ scikit-learn>=1.0.0   # Gaussian-process smooth surfaces (phase / miscibility ga
 # --- Plot export & optional 3D (recommended) ---
 kaleido               # Plotly static image export (write_image)
 scikit-image>=0.19.0  # Optional: smooth TriST f=0 dome in Matplotlib 3D (marching cubes)
+
+# --- Docs (optional; only to regenerate Help manuals) ---
+# reportlab>=4.0.0    # python scripts/generate_user_manual_pdfs.py → docs/*.pdf
+
+# --- Windows packaging (optional; developers only) ---
+# See packaging/README.md and packaging/requirements-build.txt
+# pyinstaller>=6.0
