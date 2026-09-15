@@ -8,7 +8,9 @@
 
 ## English
 
-ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Calc data ingestion, batch computations, and rich visualization). Current release: **V1.0.0**.
+ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Calc data ingestion, batch computations, and rich visualization).
+
+**Current release: [ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — download `ThermoQ-1.0.0-Windows-Setup.exe` (no Python required).
 
 ### Highlights
 
@@ -19,7 +21,7 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
 - **In-window plot preview**: after **Plot**, figures appear in the UI; keep exporting to disk, then use **Save As…** / **Open** for a custom path and format (PNG/JPEG/PDF/…; HTML opens in the browser).
 - **Pandat import**: load `P.xlsx`, `Ts.xlsx` (required) and `P-S.xlsx`, `Ts-S.xlsx` (optional).
 - **Results viewer**: save results as **Excel / CSV / TXT / DAT**.
-- **Windows installer**: users without Python can install from [Releases](https://github.com/JunHuaBai96/ThermoQ/releases) (`ThermoQ-1.0.0-Windows-Setup.exe`). Packaging notes: `packaging/README.md`.
+- **Windows installer (published)**: official GitHub Release **ThermoQ 1.0.0 Windows Setup** provides `ThermoQ-1.0.0-Windows-Setup.exe`. Packaging notes for rebuilds: `packaging/README.md`.
 
 ### Main workflows
 
@@ -106,9 +108,20 @@ Shared behavior (where Plot is available): generate → **preview in the window*
 
 ### Installation
 
-**Windows (no Python required):** download `ThermoQ-1.0.0-Windows-Setup.exe` from [Releases](https://github.com/JunHuaBai96/ThermoQ/releases), install, then launch from the Start Menu or Desktop shortcut. Build locally with `packaging/build_windows.ps1` (PyInstaller onedir + optional Inno Setup). Details: `packaging/README.md`.
+#### Windows end users (recommended)
 
-- **Python (developers)**: 3.10–3.12 recommended (3.8+ may work).
+1. Open the GitHub Release **[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**.
+2. Download **`ThermoQ-1.0.0-Windows-Setup.exe`**.
+3. Run the installer (administrator elevation may be required for Program Files).
+4. Launch **ThermoQ** from the Start Menu or Desktop shortcut.
+
+No separate Python install is needed. Plot output defaults to a writable folder under the user Documents directory (`Documents\ThermoQ`).
+
+All releases: [https://github.com/JunHuaBai96/ThermoQ/releases](https://github.com/JunHuaBai96/ThermoQ/releases)
+
+#### Developers (run from source)
+
+- **Python**: 3.10–3.12 recommended (3.8+ may work).
 - **GUI**: uses built-in `tkinter` (Windows/macOS installers usually include it; on Linux install `python3-tk`).
 - Install dependencies:
 
@@ -119,7 +132,8 @@ pip install -r requirements.txt
 **Packages** (see `requirements.txt` for roles):
 - **Required core**: `numpy`, `pandas`, `openpyxl`, `xlrd==1.2.0`, `Pillow`
 - **Plotting / TriST**: `matplotlib`, `plotly`, `scipy` (required for TriST workbook build), `scikit-learn`
-- **Optional**: `kaleido` (Plotly static images), `scikit-image` (TriST f=0 dome), `reportlab` (regenerate manuals), `pyinstaller` (Windows packaging only)
+- **Optional**: `kaleido` (Plotly static images), `scikit-image` (TriST f=0 dome), `reportlab` (regenerate manuals)
+- **Rebuild Windows installer** (optional): `pyinstaller` + Inno Setup 6 — see `packaging/README.md` and `packaging/build_windows.ps1`
 
 Sample data under `test/` (developer / validation; not shipped in the Windows installer):
 - `Extract Thermo-calc Results-Gibbs/` — Al-Cu-Li COST Gibbs `.exp` for TriST extract
@@ -130,7 +144,7 @@ Sample data under `test/` (developer / validation; not shipped in the Windows in
 Bundled with the app / installer: `Example/`, `docs/ThermoQ_User_Manual_EN.pdf`, `docs/ThermoQ_User_Manual_ZH.pdf`, `images/`.  
 Regenerate manuals: `python scripts/generate_user_manual_pdfs.py` (needs `reportlab` and a system CJK font on Windows).
 
-### Run
+### Run (from source)
 
 ```bash
 pip install -r requirements.txt
@@ -141,7 +155,9 @@ python main.py
 
 ## 中文
 
-ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat / Thermo-Calc 数据导入、批量计算与可视化）。当前版本：**V1.0.0**。
+ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat / Thermo-Calc 数据导入、批量计算与可视化）。
+
+**当前发布：[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — 下载 `ThermoQ-1.0.0-Windows-Setup.exe`（无需安装 Python）。
 
 ### 亮点功能
 
@@ -152,7 +168,7 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 - **界面内图预览**：点击 **绘图 / Plot** 后在窗口内显示图像；仍写入默认导出文件，可用 **另存为…** / **打开** 自定义路径与格式（PNG/JPEG/PDF 等；HTML 用浏览器打开）。
 - **Pandat 导入**：支持 `P.xlsx`、`Ts.xlsx`（必需）和 `P-S.xlsx`、`Ts-S.xlsx`（可选）。
 - **结果窗口**：支持保存 **Excel / CSV / TXT / DAT**。
-- **Windows 安装包**：无 Python 环境可从 [Releases](https://github.com/JunHuaBai96/ThermoQ/releases) 下载 `ThermoQ-1.0.0-Windows-Setup.exe` 安装。打包说明见 `packaging/README.md`。
+- **Windows 安装包（已发布）**：GitHub Release **ThermoQ 1.0.0 Windows Setup** 提供 `ThermoQ-1.0.0-Windows-Setup.exe`。本地重打包见 `packaging/README.md`。
 
 ### 主要工作流
 
@@ -235,13 +251,25 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 
 ### 安装与运行
 
-**Windows 免 Python：** 从 [Releases](https://github.com/JunHuaBai96/ThermoQ/releases) 下载 `ThermoQ-1.0.0-Windows-Setup.exe` 安装（开始菜单 / 桌面快捷方式）。本地打包：`packaging/build_windows.ps1`（PyInstaller 目录模式 + 可选 Inno Setup）。说明见 `packaging/README.md`。
+#### Windows 普通用户（推荐）
+
+1. 打开 GitHub Release **[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**。
+2. 下载 **`ThermoQ-1.0.0-Windows-Setup.exe`**。
+3. 运行安装程序（安装到 Program Files 时可能需要管理员权限）。
+4. 从开始菜单或桌面快捷方式启动 **ThermoQ**。
+
+无需单独安装 Python。出图默认写入用户文档下的可写目录（`文档\ThermoQ`）。
+
+全部发布页：[https://github.com/JunHuaBai96/ThermoQ/releases](https://github.com/JunHuaBai96/ThermoQ/releases)
+
+#### 开发者（从源码运行）
 
 - 推荐 **Python 3.10–3.12**（GUI 依赖标准库 `tkinter`；Linux 需 `python3-tk`）。
 - 依赖见 `requirements.txt`：
   - **核心**：`numpy`、`pandas`、`openpyxl`、`xlrd==1.2.0`、`Pillow`（图标与图预览）
   - **绘图 / TriST**：`matplotlib`、`plotly`、`scipy`（TriST 工作簿必需）、`scikit-learn`
-  - **可选**：`kaleido`、`scikit-image`、`reportlab`（重生成说明书）、`pyinstaller`（仅 Windows 打包）
+  - **可选**：`kaleido`、`scikit-image`、`reportlab`（重生成说明书）
+  - **重打 Windows 安装包（可选）**：`pyinstaller` + Inno Setup 6 — 见 `packaging/README.md`、`packaging/build_windows.ps1`
 - 开发/校验用示例数据在 `test/`（**不**打入 Windows 安装包）：
   - `Extract Thermo-calc Results-Gibbs/` — Al-Cu-Li COST Gibbs `.exp`（TriST）
   - `Extract Thermo-calc Results-Melting Range/` — 熔程 `.exp`

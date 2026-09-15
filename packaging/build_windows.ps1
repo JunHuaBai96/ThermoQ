@@ -24,7 +24,14 @@ Assert-Command python
 Write-Host "==> Installing Python build dependencies"
 python -m pip install --upgrade pip
 python -m pip install -r "$Root\requirements.txt"
-python -m pip install pyinstaller
+python -m pip install -r "$PackagingDir\requirements-build.txt"
+
+# If both PyQt5 and PySide6 are present, PyInstaller aborts.  Force exclude PySide6/PyQt6 so only PyQt5 side effects are skipped.
+# (No Qt is actually needed because the GUI is Tkinter.)
+$Env:PYINSTALLER_QT_API = "PyQt5"
+
+# Avoid pulling huge unrelated ML frameworks if they are installed in the build environment.
+$Env:PYTORCH_JIT = "0"
 
 if (-not $SkipIco) {
     Write-Host "==> Generating images\thermoq.ico"
@@ -46,21 +53,56 @@ if ($SkipInstaller) {
 }
 
 $Iscc = $null
-foreach ($cand in @(
-        ${env:LocalAppData} + '\Programs\Inno Setup 6\ISCC.exe',
-        ${env:ProgramFiles} + '\Inno Setup 6\ISCC.exe',
-        ${env:ProgramFiles(x86)} + '\Inno Setup 6\ISCC.exe'
-    )) {
-    if ($cand -and (Test-Path $cand)) { $Iscc = $cand; break }
+$pf = [Environment]::GetFolderPath('ProgramFiles')
+$pf86 = [Environment]::GetFolderPath('ProgramFilesX86')
+$localPrograms = Join-Path $env:LOCALAPPDATA 'Programs'
+$searchDirs = @(
+    (Join-Path $pf86 'Inno Setup 6'),
+    (Join-Path $pf 'Inno Setup 6'),
+    (Join-Path $localPrograms 'Inno Setup 6')
+) | Where-Object { $_ -and (Test-Path $_) }
+
+foreach ($dir in $searchDirs) {
+    $cand = Join-Path $dir 'ISCC.exe'
+    if (Test-Path -LiteralPath $cand) {
+        $Iscc = $cand
+        break
+    }
 }
+
+# Fallback: registry uninstall entry (works when env ProgramFiles(x86) is empty)
 if (-not $Iscc) {
-    $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+    $regRoots = @(
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    foreach ($root in $regRoots) {
+        $hit = Get-ItemProperty $root -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like 'Inno Setup*' -and $_.InstallLocation } |
+            Select-Object -First 1
+        if ($hit) {
+            $cand = Join-Path $hit.InstallLocation.TrimEnd('\') 'ISCC.exe'
+            if (Test-Path -LiteralPath $cand) {
+                $Iscc = $cand
+                break
+            }
+        }
+    }
+}
+
+if (-not $Iscc) {
+    $cmd = Get-Command iscc, ISCC.exe -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($cmd) { $Iscc = $cmd.Source }
 }
 
 if (-not $Iscc) {
-    Write-Warning "Inno Setup 6 not found. Install from https://jrsoftware.org/isinfo.php then re-run, or compile packaging\thermoq.iss manually."
-    Write-Host "Portable folder is ready: dist\ThermoQ\"
+    Write-Warning @"
+Inno Setup compiler (ISCC.exe) not found.
+Install from https://jrsoftware.org/isinfo.php (include command-line compiler),
+or open packaging\thermoq.iss in Inno Setup Compiler and click Build → Compile.
+Portable app folder is ready: dist\ThermoQ\
+"@
     exit 0
 }
 

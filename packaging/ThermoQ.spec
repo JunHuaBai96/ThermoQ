@@ -66,16 +66,21 @@ for pkg in (
             pass
 
 excludes = [
-    'pytest',
-    'IPython',
-    'notebook',
-    'jupyter',
-    'sphinx',
-    'tkinter.test',
-    'matplotlib.tests',
-    'numpy.tests',
-    'scipy.tests',
-    'sklearn.tests',
+    # Qt bindings: the app is Tkinter; PyQt5/PySide6 must not be collected simultaneously.
+    'PyQt5', 'PyQt5-sip', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets',
+    'PySide6', 'PySide2', 'PyQt6',
+    'qtpy', 'PyQtWebEngine',
+    # Heavy ML / AI frameworks pulled in by unrelated site-packages; not used by ThermoQ.
+    'torch', 'torchvision', 'torchaudio',
+    'tensorflow', 'tensorflow_estimator',
+    'keras', 'jax', 'flax', 'onnx', 'tensorboard',
+    'psutil',
+    # Dev / docs / test tooling
+    'pytest', 'IPython', 'notebook', 'jupyter', 'jupyterlab',
+    'sphinx', 'numpydoc', 'nbconvert', 'nbformat',
+    'tkinter.test', 'matplotlib.tests', 'numpy.tests',
+    'scipy.tests', 'sklearn.tests',
+    'setuptools', 'pkg_resources',
 ]
 
 a = Analysis(
@@ -93,6 +98,9 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# PyInstaller may still pull test data; drop known unneeded files after Analysis.
+a.datas = [d for d in a.datas if not any(x in d[0].lower() for x in ('matplotlib/tests', 'numpy/tests', 'scipy/tests', 'sklearn/tests', 'torch/testing'))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

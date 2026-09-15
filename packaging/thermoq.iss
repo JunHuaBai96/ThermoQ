@@ -2,7 +2,7 @@
 #define MyAppName "ThermoQ"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "ThermoQ"
-#define MyAppURL "https://github.com"
+#define MyAppURL "https://github.com/JunHuaBai96/ThermoQ"
 #define MyAppExeName "ThermoQ.exe"
 
 [Setup]
@@ -22,6 +22,8 @@ SetupIconFile=..\images\thermoq.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+; Install to Program Files (requires elevation). Do not touch {userdocs} here —
+; ThermoQ creates Documents\ThermoQ itself on first launch (writable plot output).
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -39,15 +41,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\dist\ThermoQ\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{userdocs}\{#MyAppName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; WorkingDir: "{userdocs}\{#MyAppName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; WorkingDir: "{app}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[Dirs]
-Name: "{userdocs}\{#MyAppName}"; Flags: uninsneveruninstall
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
