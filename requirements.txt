@@ -1,10 +1,10 @@
 # ThermoQ — Python dependencies (for running / developing from source)
 # GUI uses stdlib tkinter (no pip package). On Linux: sudo apt install python3-tk
 #
-# App version: 1.0.0
-# Windows end users: download ThermoQ-1.0.0-Windows-Setup.exe from
+# App version: 1.0.1
+# Windows end users: download ThermoQ-1.0.1-Windows-Setup.exe from
 #   https://github.com/JunHuaBai96/ThermoQ/releases/latest
-#   (Release title: "ThermoQ 1.0.0 Windows Setup") — no pip install needed.
+#   (Release title: "ThermoQ 1.0.1 Windows Setup") — no pip install needed.
 #
 # Recommended Python: 3.10–3.12 (3.8+ usually works)
 
@@ -30,6 +30,9 @@ scikit-image>=0.19.0  # Optional: smooth TriST f=0 dome in Matplotlib 3D (marchi
 
 # --- Docs (optional; only to regenerate Help manuals) ---
 # reportlab>=4.0.0    # python scripts/generate_user_manual_pdfs.py → docs/*.pdf
+
+# App modules (shipped with the repo / Windows installer; not pip packages):
+#   main.py, periodic_table.py, tc_batch_datafile.py
 
 # --- Windows packaging (optional; rebuild installer only) ---
 # End users should use the GitHub Release installer, not these packages.

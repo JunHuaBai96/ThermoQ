@@ -115,4 +115,4 @@ Write-Host "==> Compiling installer with $Iscc"
 & $Iscc $Iss
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
-Write-Host "==> Installer: dist\ThermoQ-1.0.0-Windows-Setup.exe"
+Write-Host "==> Installer: dist\ThermoQ-1.0.1-Windows-Setup.exe"

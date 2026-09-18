@@ -10,7 +10,7 @@
 
 ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Calc data ingestion, batch computations, and rich visualization).
 
-**Current release: [ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — download `ThermoQ-1.0.0-Windows-Setup.exe` (no Python required).
+**Current release: [ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — download `ThermoQ-1.0.1-Windows-Setup.exe` (no Python required).
 
 ### Highlights
 
@@ -21,7 +21,7 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
 - **In-window plot preview**: after **Plot**, figures appear in the UI; keep exporting to disk, then use **Save As…** / **Open** for a custom path and format (PNG/JPEG/PDF/…; HTML opens in the browser).
 - **Pandat import**: load `P.xlsx`, `Ts.xlsx` (required) and `P-S.xlsx`, `Ts-S.xlsx` (optional).
 - **Results viewer**: save results as **Excel / CSV / TXT / DAT**.
-- **Windows installer (published)**: official GitHub Release **ThermoQ 1.0.0 Windows Setup** provides `ThermoQ-1.0.0-Windows-Setup.exe`. Packaging notes for rebuilds: `packaging/README.md`.
+- **Windows installer (published)**: official GitHub Release **ThermoQ 1.0.1 Windows Setup** provides `ThermoQ-1.0.1-Windows-Setup.exe`. Packaging notes for rebuilds: `packaging/README.md`.
 
 ### Main workflows
 
@@ -72,6 +72,13 @@ Shared behavior (where Plot is available): generate → **preview in the window*
   - Composition × temperature Cartesian product when both are configured.
   - **Duplicate skip**: loop blocks whose *T* and/or composition match Template0 `s-c` baseline are omitted from the merged `.tcm`.
   - Optional constraints: sum ≤ 1, exclude all-zero compositions.
+- **Generate Thermo-Calc Batch Data File** (`.xlsx` / `.csv`)
+  - Property Model Calculator batch **Data File** for Thermo-Calc (English headers: `Id`, element symbols, `Composition unit`, `Temperature` / `Temperature unit`; optional `Param …` / `Exp …`).
+  - **General Models** selector: Coarsening, CET, Crack Susceptibility, Driving Force, Equilibrium, Freeze-in, Interfacial Energy, Liquidus/Solidus, Phase Transition, Scheil, Spinodal, T-Zero, Yield Strength, plus **Custom/Diffusion** (Temperature column layout).
+  - Temperature grid maps to the model’s Param (e.g. `Param Evaluation temperature`, `Param Annealing temperature`, `Param Start temperature`) per Thermo-Calc temperature-option rules; phase dropdowns stay on the TC GUI.
+  - One **Balance (`Bal`)** element + swept composition grid; optional **one file per temperature**.
+  - Units: `mole_pct` / `mole_frac` / `mass_pct` / `mass_frac` and `K` / `C` / `F`.
+  - Constraints: drop over-limit Σ(non-Bal); exclude all-zero non-Bal rows.
 - **Generate Pandat Batch File** (`.pbfx`)
   - **T-zero tab**: batch-generate `.pbfx` files from a template with element placeholders like `%LI%`.
   - **Gibbs tab**: supports both element placeholders `%X%` and a temperature placeholder `%T%`.
@@ -110,8 +117,8 @@ Shared behavior (where Plot is available): generate → **preview in the window*
 
 #### Windows end users (recommended)
 
-1. Open the GitHub Release **[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**.
-2. Download **`ThermoQ-1.0.0-Windows-Setup.exe`**.
+1. Open the GitHub Release **[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**.
+2. Download **`ThermoQ-1.0.1-Windows-Setup.exe`**.
 3. Run the installer (administrator elevation may be required for Program Files).
 4. Launch **ThermoQ** from the Start Menu or Desktop shortcut.
 
@@ -141,7 +148,7 @@ Sample data under `test/` (developer / validation; not shipped in the Windows in
 - `Generate Thermo-calc Batch File-Melting Range/` & `Generate Thermo-calc Batch File-Gibbs/` — `.tcm` batch templates
 - Pandat extract / batch examples (Al-Cu-Li, miscibility gap, …)
 
-Bundled with the app / installer: `Example/`, `docs/ThermoQ_User_Manual_EN.pdf`, `docs/ThermoQ_User_Manual_ZH.pdf`, `images/`.  
+Bundled with the app / installer: `Example/` (includes `Generate Thermo-Calc Batch Data File/` sample xlsx), `docs/ThermoQ_User_Manual_EN.pdf`, `docs/ThermoQ_User_Manual_ZH.pdf`, `images/`.  
 Regenerate manuals: `python scripts/generate_user_manual_pdfs.py` (needs `reportlab` and a system CJK font on Windows).
 
 ### Run (from source)
@@ -157,7 +164,7 @@ python main.py
 
 ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat / Thermo-Calc 数据导入、批量计算与可视化）。
 
-**当前发布：[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — 下载 `ThermoQ-1.0.0-Windows-Setup.exe`（无需安装 Python）。
+**当前发布：[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — 下载 `ThermoQ-1.0.1-Windows-Setup.exe`（无需安装 Python）。
 
 ### 亮点功能
 
@@ -168,7 +175,7 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 - **界面内图预览**：点击 **绘图 / Plot** 后在窗口内显示图像；仍写入默认导出文件，可用 **另存为…** / **打开** 自定义路径与格式（PNG/JPEG/PDF 等；HTML 用浏览器打开）。
 - **Pandat 导入**：支持 `P.xlsx`、`Ts.xlsx`（必需）和 `P-S.xlsx`、`Ts-S.xlsx`（可选）。
 - **结果窗口**：支持保存 **Excel / CSV / TXT / DAT**。
-- **Windows 安装包（已发布）**：GitHub Release **ThermoQ 1.0.0 Windows Setup** 提供 `ThermoQ-1.0.0-Windows-Setup.exe`。本地重打包见 `packaging/README.md`。
+- **Windows 安装包（已发布）**：GitHub Release **ThermoQ 1.0.1 Windows Setup** 提供 `ThermoQ-1.0.1-Windows-Setup.exe`。本地重打包见 `packaging/README.md`。
 
 ### 主要工作流
 
@@ -219,6 +226,13 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - 成分与温度同时配置时做笛卡尔积组合。
   - **重复跳过**：与 Template0 中 `s-c` 基准温度/成分相同的循环块不写入最终 `.tcm`。
   - 可选约束：成分和 ≤ 1、排除全零成分。
+- **Generate Thermo-Calc Batch Data File（.xlsx / .csv）**
+  - 为 Thermo-Calc Property Model Calculator 批处理生成 **Data File**（英文表头：`Id`、元素符号、`Composition unit`、`Temperature` / `Temperature unit`；可选 `Param …` / `Exp …`）。
+  - **General Models** 选择：粗化、CET、裂纹敏感性、驱动力、平衡、冻结温度、界面能、液/固相线、相变点、Scheil、调幅、T0、屈服强度，以及**自定义/扩散**（Temperature 列格式）。
+  - 温度网格按模型写入对应 Param（如 `Param Evaluation temperature`、`Param Annealing temperature`、`Param Start temperature`）；相名下拉仍在 TC 界面设置。
+  - 一个 **Balance（Bal）** 组元 + 扫描网格；可选**每个温度单独文件**。
+  - 单位：`mole_pct` / `mole_frac` / `mass_pct` / `mass_frac` 与 `K` / `C` / `F`。
+  - 约束：丢弃超限 Σ(非 Bal)；排除非 Bal 全零行。
 - **Generate Pandat Batch File（.pbfx）**
   - **T-zero 页**：从含 `%LI%` 等占位符的模板批量生成 `.pbfx`。
   - **Gibbs 页**：支持元素占位符 `%X%` 与温度占位符 `%T%`。
@@ -253,8 +267,8 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 
 #### Windows 普通用户（推荐）
 
-1. 打开 GitHub Release **[ThermoQ 1.0.0 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**。
-2. 下载 **`ThermoQ-1.0.0-Windows-Setup.exe`**。
+1. 打开 GitHub Release **[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**。
+2. 下载 **`ThermoQ-1.0.1-Windows-Setup.exe`**。
 3. 运行安装程序（安装到 Program Files 时可能需要管理员权限）。
 4. 从开始菜单或桌面快捷方式启动 **ThermoQ**。
 
@@ -275,7 +289,7 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - `Extract Thermo-calc Results-Melting Range/` — 熔程 `.exp`
   - `Generate Thermo-calc Batch File-Melting Range/`、`Generate Thermo-calc Batch File-Gibbs/` — `.tcm` 模板
   - Pandat 提取 / 批处理示例等
-- 安装包随附：`Example/`、中英文说明书 PDF、`images/`。  
+- 安装包随附：`Example/`（含 `Generate Thermo-Calc Batch Data File/` 示例 xlsx）、中英文说明书 PDF、`images/`。  
   重生成说明书：`python scripts/generate_user_manual_pdfs.py`（需 `reportlab` 与系统中文字体）。
 
 ```bash

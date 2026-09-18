@@ -30,7 +30,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ThermoQ-Windows-Setup
-          path: dist/ThermoQ-1.0.0-Windows-Setup.exe
+          path: dist/ThermoQ-*-Windows-Setup.exe
           if-no-files-found: error
 
       - name: Upload portable folder
@@ -43,5 +43,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ThermoQ-1.0.0-Windows-Setup.exe
+          files: dist/ThermoQ-*-Windows-Setup.exe
           generate_release_notes: true

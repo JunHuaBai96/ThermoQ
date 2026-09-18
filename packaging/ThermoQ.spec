@@ -21,6 +21,7 @@ datas = [
 binaries = []
 hiddenimports = [
     'periodic_table',
+    'tc_batch_datafile',
     'tkinter',
     'tkinter.ttk',
     'tkinter.filedialog',

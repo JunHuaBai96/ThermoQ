@@ -1,6 +1,6 @@
 ; Inno Setup 6 script — compile after PyInstaller onedir output exists in dist\ThermoQ
 #define MyAppName "ThermoQ"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "ThermoQ"
 #define MyAppURL "https://github.com/JunHuaBai96/ThermoQ"
 #define MyAppExeName "ThermoQ.exe"

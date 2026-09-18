@@ -1,4 +1,4 @@
-# Packaging ThermoQ for Windows (V1.0)
+# Packaging ThermoQ for Windows (V1.0.1)
 
 This folder produces a **windowed** `ThermoQ.exe` (no console) and an optional **Inno Setup** installer so users without Python can install from GitHub Releases.
 
@@ -8,6 +8,7 @@ This folder produces a **windowed** `ThermoQ.exe` (no console) and an optional *
 |------|------|
 | `main.py` | GUI entry |
 | `periodic_table.py` | Element table |
+| `tc_batch_datafile.py` | Thermo-Calc Batch Data File generator (General Models) |
 | `images/` | Splash, window icon, header logo |
 | `docs/ThermoQ_User_Manual_*.pdf` | Help → User Manual |
 | `Example/` | Help → Example (~76 MB) |
@@ -20,7 +21,7 @@ This folder produces a **windowed** `ThermoQ.exe` (no console) and an optional *
 - Windows 10/11 **64-bit**
 - Python 3.10–3.12 (64-bit) with `pip`
 - Disk: ~3 GB free during build (sklearn/scipy/matplotlib/plotly)
-- Optional: [Inno Setup 6](https://jrsoftware.org/isinfo.php) for `ThermoQ-1.0.0-Windows-Setup.exe`
+- Optional: [Inno Setup 6](https://jrsoftware.org/isinfo.php) for `ThermoQ-1.0.1-Windows-Setup.exe`
 
 ## One-command build
 
@@ -33,7 +34,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 Outputs:
 
 - Portable app: `dist\ThermoQ\ThermoQ.exe`
-- Installer (if ISCC is installed): `dist\ThermoQ-1.0.0-Windows-Setup.exe`
+- Installer (if ISCC is installed): `dist\ThermoQ-1.0.1-Windows-Setup.exe`
 
 PyInstaller only (no installer):
 
@@ -60,11 +61,11 @@ A single-file exe would extract sklearn/scipy/matplotlib on every start (slow, a
 - Working directory is set to `%USERPROFILE%\Documents\ThermoQ` so Plot/Save defaults are writable (Start Menu shortcuts otherwise start in System32).
 - Default plot files therefore land under **Documents\ThermoQ**, not Program Files.
 
-## GitHub Release (Windows V1.0)
+## GitHub Release (Windows V1.0.1)
 
-1. Tag: `v1.0.0`
-2. Attach `ThermoQ-1.0.0-Windows-Setup.exe` (preferred) and optionally zip `dist\ThermoQ`.
-3. Or push a `v1.0.0` tag and let `.github/workflows/windows-release.yml` build and upload the installer.
+1. Tag: `v1.0.1`
+2. Attach `ThermoQ-1.0.1-Windows-Setup.exe` (preferred) and optionally zip `dist\ThermoQ`.
+3. Or push a `v1.0.1` tag and let `.github/workflows/windows-release.yml` build and upload the installer.
 
 Typical installed size is **several hundred MB** because of NumPy / SciPy / scikit-learn / Matplotlib / Plotly. That is expected.
 

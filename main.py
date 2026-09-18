@@ -15,7 +15,7 @@ from decimal import Decimal
 from periodic_table import PERIODIC_TABLE
 
 APP_NAME = 'ThermoQ'
-APP_VERSION = '1.0.0'
+APP_VERSION = '1.0.1'
 
 
 def resource_path(*parts):
@@ -219,6 +219,26 @@ def _composition_range_float64(lo, hi, step):
         if i > 10_000_000:
             break
     return np.array(out, dtype=np.float64)
+
+
+def _tc_datafile_fmt_number(value, decimals):
+    """Compatibility wrapper — prefer tc_batch_datafile._fmt_number."""
+    from tc_batch_datafile import _fmt_number
+
+    return _fmt_number(value, decimals)
+
+
+def _tc_datafile_build_frames(*args, **kwargs):
+    """Compatibility wrapper — prefer tc_batch_datafile.build_frames."""
+    from tc_batch_datafile import build_frames
+
+    # Map legacy kwargs
+    if 'write_param_t' in kwargs:
+        write_param_t = kwargs.pop('write_param_t')
+        kwargs.setdefault('write_temperature_col', True)
+        if write_param_t:
+            kwargs.setdefault('sweep_temp_param_names', ['Evaluation temperature'])
+    return build_frames(*args, **kwargs)
 
 
 def _lmg_normalize_axis_label(text):
@@ -2495,6 +2515,7 @@ class ThermoQGUI:
                 'plot_lmg_axis_z_temp': 'Temperature (K)',
                 'tools_converter': 'Composition Converter (wt% ↔ at%)',
                 'tools_generate': 'Generate Thermo-calc Batch File',
+                'tools_tc_datafile': 'Generate Thermo-Calc Batch Data File',
                 'tools_extract_exp': 'Extract Thermo-calc Results',
                 'tools_generate_pandat': 'Generate Pandat Batch File',
                 'tools_extract_pandat': 'Extract Pandat Results',
@@ -2707,6 +2728,102 @@ class ThermoQGUI:
                 'tbatch_ready': 'Ready to generate',
                 'tbatch_generate': 'Generate Batch File',
                 'tbatch_fd_out': 'Save batch file',
+                'tcdata_win_title': 'Thermo-Calc Batch Data File Generator',
+                'tcdata_heading': 'Thermo-Calc Batch Data File Generator',
+                'tcdata_intro': (
+                    'Build Excel/CSV data files for Thermo-Calc Property Model Calculator batch runs.\n'
+                    'Headers follow Thermo-Calc English rules (Id, element symbols, Composition unit, '
+                    'Temperature / Temperature unit). One Balance (Bal) element + swept composition grid, '
+                    'matching typical diffusion / DC batch layouts (e.g. Ti–Al–Mn–1173K.xlsx).'
+                ),
+                'tcdata_intro_models': (
+                    'Build Excel/CSV Data Files for Thermo-Calc Property Model Calculator → Batch Calculation.\n'
+                    'Select a General Model (or Custom/Diffusion), set one Balance (Bal) element + composition grid.\n'
+                    'Numeric parameters are written as Param <name> columns (English, case-sensitive as on the GUI). '
+                    'Phase / dropdown choices remain on the Thermo-Calc Configuration window.'
+                ),
+                'tcdata_model_frame': 'General Model',
+                'tcdata_temp_none': 'None (composition only)',
+                'tcdata_temp_hint_custom': 'Temperature grid → Temperature column (+ Temperature unit).',
+                'tcdata_temp_hint_none': (
+                    'No temperature sweep Param (composition-only batch is typical). '
+                    'Optional temperature grid is ignored unless you add Param columns manually.'
+                ),
+                'tcdata_temp_hint_param': (
+                    'Temperature grid → {names} (Temperature unit column always written).'
+                ),
+                'tcdata_elem_cfg': 'Element Configuration',
+                'tcdata_tbl_element': 'Element',
+                'tcdata_tbl_role': 'Role',
+                'tcdata_tbl_min': 'Min',
+                'tcdata_tbl_max': 'Max',
+                'tcdata_tbl_step': 'Step',
+                'tcdata_role_bal': 'Balance (Bal)',
+                'tcdata_role_sweep': 'Sweep',
+                'tcdata_lbl_element': 'Element:',
+                'tcdata_lbl_min': 'Min:',
+                'tcdata_lbl_max': 'Max:',
+                'tcdata_lbl_step': 'Step:',
+                'tcdata_as_balance': 'Add as Balance (Bal)',
+                'tcdata_add': 'Add Element',
+                'tcdata_remove': 'Remove Selected',
+                'tcdata_set_bal': 'Set Selected as Balance',
+                'tcdata_units': 'Units',
+                'tcdata_comp_unit': 'Composition unit:',
+                'tcdata_temp_unit': 'Temperature unit:',
+                'tcdata_temp_cfg': 'Temperature',
+                'tcdata_temp_mode': 'Mode:',
+                'tcdata_temp_single': 'Single value',
+                'tcdata_temp_range': 'Range (min / max / step)',
+                'tcdata_temp_list': 'List (comma-separated)',
+                'tcdata_temp_value': 'T:',
+                'tcdata_temp_min': 'T min:',
+                'tcdata_temp_max': 'T max:',
+                'tcdata_temp_step': 'T step:',
+                'tcdata_temp_list_lbl': 'T list:',
+                'tcdata_one_file_per_t': 'One file per temperature (e.g. …-1173K.xlsx)',
+                'tcdata_uppercase_el': 'Uppercase element symbols in header (e.g. TI, AL)',
+                'tcdata_write_param_t': 'Also write “Param Evaluation temperature” column',
+                'tcdata_params': 'Optional Param / Exp Columns',
+                'tcdata_param_hint': (
+                    'Optional extras: Param <name> (numeric) or Exp <keyword>. '
+                    'Parameter names must match the Property Model GUI exactly (English, case-sensitive).'
+                ),
+                'tcdata_param_kind': 'Kind:',
+                'tcdata_param_kind_param': 'Param',
+                'tcdata_param_kind_exp': 'Exp',
+                'tcdata_param_name': 'Name:',
+                'tcdata_param_value': 'Value:',
+                'tcdata_param_add': 'Add Column',
+                'tcdata_param_remove': 'Remove Selected',
+                'tcdata_tbl_header': 'Header',
+                'tcdata_tbl_value': 'Value',
+                'tcdata_constraints': 'Constraints',
+                'tcdata_sum_limit': 'Drop rows where Σ(non-Bal) exceeds unit total (100 for % / 1 for frac)',
+                'tcdata_exclude_zeros': 'Exclude all-zero non-Bal compositions',
+                'tcdata_output': 'Output',
+                'tcdata_out_dir': 'Output folder:',
+                'tcdata_out_fmt': 'Format:',
+                'tcdata_fmt_xlsx': 'Excel (.xlsx)',
+                'tcdata_fmt_csv': 'CSV (.csv)',
+                'tcdata_fmt_both': 'Both',
+                'tcdata_name_pattern': 'Name pattern:',
+                'tcdata_name_hint': '{sys} = element list; {T} = temperature; {Tu} = temperature unit',
+                'tcdata_preview': 'Preview',
+                'tcdata_preview_btn': 'Count Rows',
+                'tcdata_ready': 'Ready to generate',
+                'tcdata_generate': 'Generate Data File(s)',
+                'tcdata_fd_out': 'Select output folder',
+                'tcdata_need_bal': 'Please add exactly one Balance (Bal) element.',
+                'tcdata_need_sweep': 'Please add at least one swept (non-Bal) element.',
+                'tcdata_need_temp': 'Please enter a valid temperature configuration.',
+                'tcdata_need_outdir': 'Please select a valid output folder.',
+                'tcdata_no_rows': 'No valid composition rows after applying constraints.',
+                'tcdata_generating': 'Generating…',
+                'tcdata_done': 'Done: {nfile} file(s), {nrows} row(s) total.\n{paths}',
+                'tcdata_preview_msg': '{ncomp} composition(s) × {nt} temperature(s) → {nrows} row(s); {nfile} file(s).',
+                'tcdata_err_element': 'Invalid element or numeric range.',
+                'tcdata_err_dup': 'Element already in the list: {el}',
                 'extp_win_title': 'Extract Pandat Results',
                 'extp_heading': 'Extract Pandat Results',
                 'extp_intro': 'Extract data from CSV/DAT files to generate P.xlsx, Ts.xlsx, P-S.xlsx, and Ts-S.xlsx',
@@ -3402,6 +3519,7 @@ class ThermoQGUI:
                 'plot_lmg_axis_z_temp': '温度 (K)',
                 'tools_converter': '成分换算（wt% ↔ at%）',
                 'tools_generate': '生成Thermo-calc批处理文件',
+                'tools_tc_datafile': '生成 Thermo-Calc 批处理 Data File',
                 'tools_extract_exp': '提取Thermo-calc结果',
                 'tools_generate_pandat': '生成Pandat批处理文件',
                 'tools_extract_pandat': '提取Pandat结果',
@@ -3609,6 +3727,100 @@ class ThermoQGUI:
                 'tbatch_ready': '就绪，可生成',
                 'tbatch_generate': '生成批处理文件',
                 'tbatch_fd_out': '保存批处理文件',
+                'tcdata_win_title': 'Thermo-Calc 批处理 Data File 生成器',
+                'tcdata_heading': 'Thermo-Calc 批处理 Data File 生成器',
+                'tcdata_intro': (
+                    '为 Thermo-Calc Property Model Calculator 批处理生成 Excel/CSV Data File。\n'
+                    '表头遵循 Thermo-Calc 英文规范（Id、元素符号、Composition unit、Temperature / Temperature unit）。\n'
+                    '需指定一个 Balance（Bal）组元，其余组元按网格扫描，格式与扩散系数等 DC_batch 案例一致（如 Ti–Al–Mn–1173K.xlsx）。'
+                ),
+                'tcdata_intro_models': (
+                    '为 Thermo-Calc Property Model Calculator → 批计算 生成 Excel/CSV Data File。\n'
+                    '先选择 General Model（或自定义/扩散），再设置一个 Balance（Bal）组元与成分网格。\n'
+                    '数值参数写入 Param <名称> 列（英文、与 GUI 一致且区分大小写）；'
+                    '相名/下拉选项仍在 Thermo-Calc 配置窗口中设置。'
+                ),
+                'tcdata_model_frame': 'General Model（通用模型）',
+                'tcdata_temp_none': '无（仅成分）',
+                'tcdata_temp_hint_custom': '温度网格 → Temperature 列（及 Temperature unit）。',
+                'tcdata_temp_hint_none': (
+                    '无温度扫描 Param（通常仅扫成分）。若未手动添加 Param 列，可选温度网格将被忽略。'
+                ),
+                'tcdata_temp_hint_param': (
+                    '温度网格 → {names}（始终写入 Temperature unit 列）。'
+                ),
+                'tcdata_elem_cfg': '组元配置',
+                'tcdata_tbl_element': '元素',
+                'tcdata_tbl_role': '角色',
+                'tcdata_tbl_min': '最小',
+                'tcdata_tbl_max': '最大',
+                'tcdata_tbl_step': '步长',
+                'tcdata_role_bal': '平衡组元 (Bal)',
+                'tcdata_role_sweep': '扫描',
+                'tcdata_lbl_element': '元素：',
+                'tcdata_lbl_min': '最小：',
+                'tcdata_lbl_max': '最大：',
+                'tcdata_lbl_step': '步长：',
+                'tcdata_as_balance': '添加为平衡组元 (Bal)',
+                'tcdata_add': '添加元素',
+                'tcdata_remove': '删除所选',
+                'tcdata_set_bal': '将所选设为平衡组元',
+                'tcdata_units': '单位',
+                'tcdata_comp_unit': '成分单位：',
+                'tcdata_temp_unit': '温度单位：',
+                'tcdata_temp_cfg': '温度',
+                'tcdata_temp_mode': '模式：',
+                'tcdata_temp_single': '单一温度',
+                'tcdata_temp_range': '范围（最小 / 最大 / 步长）',
+                'tcdata_temp_list': '列表（逗号分隔）',
+                'tcdata_temp_value': 'T：',
+                'tcdata_temp_min': 'T 最小：',
+                'tcdata_temp_max': 'T 最大：',
+                'tcdata_temp_step': 'T 步长：',
+                'tcdata_temp_list_lbl': 'T 列表：',
+                'tcdata_one_file_per_t': '每个温度单独一个文件（如 …-1173K.xlsx）',
+                'tcdata_uppercase_el': '表头元素符号大写（如 TI、AL）',
+                'tcdata_write_param_t': '同时写入 “Param Evaluation temperature” 列',
+                'tcdata_params': '可选 Param / Exp 列',
+                'tcdata_param_hint': (
+                    '可选扩展列：Param <名称>（数值）或 Exp <关键字>。'
+                    'Param 名称须与 Property Model 界面完全一致（英文、区分大小写）。'
+                ),
+                'tcdata_param_kind': '类型：',
+                'tcdata_param_kind_param': 'Param',
+                'tcdata_param_kind_exp': 'Exp',
+                'tcdata_param_name': '名称：',
+                'tcdata_param_value': '数值：',
+                'tcdata_param_add': '添加列',
+                'tcdata_param_remove': '删除所选',
+                'tcdata_tbl_header': '表头',
+                'tcdata_tbl_value': '数值',
+                'tcdata_constraints': '约束',
+                'tcdata_sum_limit': '丢弃非平衡组元之和超过单位总量的行（% 为 100，分数为 1）',
+                'tcdata_exclude_zeros': '排除非平衡组元全为零的组合',
+                'tcdata_output': '输出',
+                'tcdata_out_dir': '输出文件夹：',
+                'tcdata_out_fmt': '格式：',
+                'tcdata_fmt_xlsx': 'Excel (.xlsx)',
+                'tcdata_fmt_csv': 'CSV (.csv)',
+                'tcdata_fmt_both': '两者都要',
+                'tcdata_name_pattern': '文件名模式：',
+                'tcdata_name_hint': '{sys} = 元素列表；{T} = 温度；{Tu} = 温度单位',
+                'tcdata_preview': '预览',
+                'tcdata_preview_btn': '统计行数',
+                'tcdata_ready': '就绪，可生成',
+                'tcdata_generate': '生成 Data File',
+                'tcdata_fd_out': '选择输出文件夹',
+                'tcdata_need_bal': '请恰好添加一个平衡组元 (Bal)。',
+                'tcdata_need_sweep': '请至少添加一个扫描（非 Bal）组元。',
+                'tcdata_need_temp': '请输入有效的温度配置。',
+                'tcdata_need_outdir': '请选择有效的输出文件夹。',
+                'tcdata_no_rows': '应用约束后没有有效成分行。',
+                'tcdata_generating': '正在生成…',
+                'tcdata_done': '完成：{nfile} 个文件，共 {nrows} 行。\n{paths}',
+                'tcdata_preview_msg': '{ncomp} 种成分 × {nt} 个温度 → {nrows} 行；将生成 {nfile} 个文件。',
+                'tcdata_err_element': '元素或数值范围无效。',
+                'tcdata_err_dup': '元素已在列表中：{el}',
                 'extp_win_title': '提取 Pandat 结果',
                 'extp_heading': '提取 Pandat 结果',
                 'extp_intro': '从 CSV/DAT 提取并生成 P.xlsx、Ts.xlsx、P-S.xlsx、Ts-S.xlsx',
@@ -4264,6 +4476,7 @@ class ThermoQGUI:
         self.tools_menu.add_command(label="Composition Converter (wt% ↔ at%)", command=self.open_composition_converter)
         self.tools_menu.add_separator()
         self.tools_menu.add_command(label="Generate Thermo-calc Batch File", command=self.open_therocalc_generator)
+        self.tools_menu.add_command(label="Generate Thermo-Calc Batch Data File", command=self.open_tc_datafile_generator)
         self.tools_menu.add_command(label="Extract Thermo-calc Results", command=self.open_exp_data_processor)
         self.tools_menu.add_separator()
         self.tools_menu.add_command(label="Generate Pandat Batch File", command=self.open_pandat_batch_generator)
@@ -8318,6 +8531,7 @@ class ThermoQGUI:
             self.tools_menu.add_command(label=t['tools_converter'], command=self.open_composition_converter)
             self.tools_menu.add_separator()
             self.tools_menu.add_command(label=t['tools_generate'], command=self.open_therocalc_generator)
+            self.tools_menu.add_command(label=t['tools_tc_datafile'], command=self.open_tc_datafile_generator)
             self.tools_menu.add_command(label=t['tools_extract_exp'], command=self.open_exp_data_processor)
             self.tools_menu.add_separator()
             self.tools_menu.add_command(label=t['tools_generate_pandat'], command=self.open_pandat_batch_generator)
@@ -16223,6 +16437,11 @@ class ThermoQGUI:
             'widgets': widgets,
         }
 
+
+    def open_tc_datafile_generator(self):
+        """Open Thermo-Calc Property Model batch Data File generator (General Models)."""
+        from tc_batch_datafile import open_tc_datafile_generator as _open
+        return _open(self)
 
     def open_exp_data_processor(self):
         """Open Thermo-calc results extractor tool (Melting range + T-zero)."""

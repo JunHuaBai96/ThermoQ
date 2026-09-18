@@ -300,12 +300,14 @@ def content_en(s, preview):
         P("ThermoQ", s["cover_kicker"]),
         P("User Manual", s["cover"]),
         HRule(PAGE_W, stroke=1.0, space_before=4, space_after=12),
+        P("Version 1.0.1", s["cover_sub"]),
         P("A worked example on Al–Cu–Li (COST)", s["cover_sub"]),
         P("Using the calculation files shipped in test/", s["cover_sub"]),
         Spacer(1, 1.6 * cm),
         P(
             "Switch the interface with Help → Language. Help → User Manual opens this PDF "
-            "in the language currently selected.",
+            "in the language currently selected. Windows users may install ThermoQ-1.0.1-Windows-Setup.exe "
+            "from GitHub Releases (no Python required).",
             s["cover_sub"],
         ),
         PageBreak(),
@@ -319,19 +321,37 @@ def content_en(s, preview):
         ),
         P(
             "Menus: File, Import, Plot, Tools, Help. Calculate sits on the main window "
-            "(single composition and composition-space batch). Language labels refresh after Help → Language.",
+            "(single composition and composition-space batch). After Plot, figures preview in the window "
+            "(Save As… / Open). Language labels refresh after Help → Language.",
             b,
         ),
         table(
             [
                 ["Menu", "Purpose"],
                 ["Import → Pandat to ThermoQ", "Load P.xlsx, Ts.xlsx (required); P-S.xlsx, Ts-S.xlsx (optional)."],
+                ["Tools → Composition Converter", "Convert wt% ↔ at% compositions."],
                 ["Tools → Generate Thermo-calc Batch File", "Build a .tcm from Template0 + loop body (%Element%, %T%)."],
+                ["Tools → Generate Thermo-Calc Batch Data File", "Excel/CSV Data File for Property Model Calculator batch (General Models + Custom/Diffusion)."],
                 ["Tools → Extract Thermo-calc Results", "Melting Range, Miscibility Gap, T-zero, TriST Zone."],
                 ["Tools → Generate / Extract Pandat", ".pbfx batch (T-zero, Gibbs) and P/Ts, T0.xlsx, TriST."],
-                ["Plot", "Phase surfaces, Qtrue, liquidus vectors, k, T-zero, miscibility gap."],
+                ["Plot", "Phase surfaces, Qtrue, liquidus vectors, k, T-zero, miscibility gap; in-window preview."],
+                ["Help → Language", "Switch UI English / 中文 (menus and open tool windows refresh)."],
+                ["Help → User Manual / Example", "Open this PDF (by language) or the bundled Example/ folder."],
             ],
             s,
+        ),
+        Spacer(1, 6),
+        P("1.1  Tools → Generate Thermo-Calc Batch Data File", s["h2"]),
+        P(
+            "Creates Property Model Calculator batch Data Files (.xlsx / .csv) with English headers "
+            "(Id, element symbols, Composition unit, Temperature unit; optional Param … / Exp …). "
+            "Choose a General Model (Coarsening, CET, Crack Susceptibility, Driving Force, Equilibrium, "
+            "Freeze-in, Interfacial Energy, Liquidus/Solidus, Phase Transition, Scheil, Spinodal, T-Zero, "
+            "Yield Strength) or Custom/Diffusion (Temperature column, as in Ti–Al–Mn–1173K.xlsx). "
+            "One Balance (Bal) element plus a composition grid; the temperature grid maps to the model’s "
+            "Param (e.g. Evaluation / Annealing / Start temperature). Phase dropdowns stay on the Thermo-Calc GUI. "
+            "Sample: Example/Generate Thermo-Calc Batch Data File/.",
+            b,
         ),
         Spacer(1, 8),
         P("2.  Installation", s["h1"]),
@@ -493,7 +513,8 @@ def content_en(s, preview):
         Spacer(1, 8),
         P(
             "The same layout is repeated for Al–Cu–Si, Al–Mg–Li, Al–Mg–Si and Ti–Fe–Cu, "
-            "with COST, TCAL9, He2009, Peisheng2011 or Bo2013 in the folder name. Help → Example opens the smaller Example/ tree.",
+            "with COST, TCAL9, He2009, Peisheng2011 or Bo2013 in the folder name. Help → Example opens the smaller Example/ tree "
+            "(includes Generate Thermo-Calc Batch Data File/Ti-Al-Mn-1173K.xlsx).",
             b,
         ),
         P("10.  Notes", s["h1"]),
@@ -523,10 +544,15 @@ def content_zh(s, preview):
         P("ThermoQ", s["cover_kicker"]),
         P("软件说明书", s["cover"]),
         HRule(PAGE_W, stroke=1.0, space_before=4, space_after=12),
+        P("版本 1.0.1", s["cover_sub"]),
         P("Al–Cu–Li（COST）完整算例", s["cover_sub"]),
         P("插图均由 test/ 中的计算文件直接绘制", s["cover_sub"]),
         Spacer(1, 1.6 * cm),
-        P("界面语言：Help → 界面语言。Help → 软件说明书 打开与当前语言对应的 PDF。", s["cover_sub"]),
+        P(
+            "界面语言：Help → 界面语言。Help → 软件说明书 打开与当前语言对应的 PDF。"
+            "Windows 用户可从 GitHub Releases 安装 ThermoQ-1.0.1-Windows-Setup.exe（无需 Python）。",
+            s["cover_sub"],
+        ),
         PageBreak(),
         P("1.  说明范围", s["h1"]),
         HRule(PAGE_W, stroke=0.5, color=RULE_LT, space_before=0, space_after=8),
@@ -535,19 +561,34 @@ def content_zh(s, preview):
             "到提取 Excel，再到绘图。图中曲线与等值线均由 test/ 目录下的 .exp、CSV 计算得到，与软件提取结果一致。"
         ),
         P(
-            "菜单为 File、Import、Plot、Tools、Help。Calculate 在主窗口（单点与成分空间批量）。切换语言后菜单与工具窗口文案会刷新。",
+            "菜单为 File、Import、Plot、Tools、Help。Calculate 在主窗口（单点与成分空间批量）。"
+            "绘图后可在窗口内预览（另存为… / 打开）。切换语言后菜单与工具窗口文案会刷新。",
             b,
         ),
         table(
             [
                 ["菜单", "作用"],
                 ["Import → Pandat到ThermoQ", "导入 P.xlsx、Ts.xlsx（必需）及可选 P-S / Ts-S。"],
+                ["Tools → 成分换算", "wt% ↔ at% 成分换算。"],
                 ["Tools → 生成 Thermo-calc 批处理", "Template0 + 循环体（%元素%、%T%）生成 .tcm。"],
+                ["Tools → 生成 Thermo-Calc 批处理 Data File", "Property Model 批处理 Excel/CSV（General Models + 自定义/扩散）。"],
                 ["Tools → 提取 Thermo-calc 结果", "熔程、混溶隙、T-zero、TriST 区域。"],
                 ["Tools → 生成 / 提取 Pandat", ".pbfx（T-zero、Gibbs）及 P/Ts、T0.xlsx、TriST。"],
-                ["Plot", "相面、Qtrue、液相面向量、分配系数、T-zero、混溶隙。"],
+                ["Plot", "相面、Qtrue、液相面向量、分配系数、T-zero、混溶隙；界面内预览。"],
+                ["Help → Language", "切换英文 / 中文（菜单与已打开工具窗口刷新）。"],
+                ["Help → 软件说明书 / 示例", "打开本 PDF（随语言）或随附 Example/ 文件夹。"],
             ],
             s,
+        ),
+        Spacer(1, 6),
+        P("1.1  Tools → 生成 Thermo-Calc 批处理 Data File", s["h2"]),
+        para(
+            "为 Property Model Calculator 批计算生成 Data File（.xlsx / .csv），英文表头"
+            "（Id、元素符号、Composition unit、Temperature unit；可选 Param … / Exp …）。"
+            "可选 General Model（粗化、CET、裂纹敏感性、驱动力、平衡、冻结温度、界面能、液/固相线、"
+            "相变点、Scheil、调幅、T0、屈服强度）或自定义/扩散（Temperature 列，如 Ti–Al–Mn–1173K.xlsx）。"
+            "一个 Balance（Bal）组元加成分网格；温度网格写入对应 Param（如 Evaluation / Annealing / Start temperature）。"
+            "相名下拉仍在 Thermo-Calc 界面设置。示例见 Example/Generate Thermo-Calc Batch Data File/。"
         ),
         Spacer(1, 8),
         P("2.  安装", s["h1"]),
@@ -703,7 +744,7 @@ def content_zh(s, preview):
         Spacer(1, 8),
         para(
             "Al–Cu–Si、Al–Mg–Li、Al–Mg–Si、Ti–Fe–Cu 的目录结构相同，文件夹名中的 COST、TCAL9、He2009、Peisheng2011、Bo2013 表示所用数据库。"
-            "Help → 示例 打开精简的 Example/。"
+            "Help → 示例 打开精简的 Example/（含 Generate Thermo-Calc Batch Data File/Ti-Al-Mn-1173K.xlsx）。"
         ),
         P("10.  注意", s["h1"]),
         HRule(PAGE_W, stroke=0.5, color=RULE_LT, space_before=0, space_after=8),
