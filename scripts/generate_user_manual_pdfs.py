@@ -109,21 +109,61 @@ def styles_en():
 
 
 def styles_zh():
+    # CJK: left-align + wordWrap='CJK'. TA_JUSTIFY stretches Latin spaces and
+    # produces huge gaps in mixed Chinese/English paragraphs (ReportLab).
     body = "YaHei"
     return {
         "lang": "zh",
-        "cover_kicker": ParagraphStyle("k", fontName="YaHei", fontSize=9.5, leading=14, alignment=TA_CENTER, textColor=MUTED, spaceAfter=10),
-        "cover": ParagraphStyle("c", fontName="YaHei-Bold", fontSize=24, leading=32, alignment=TA_CENTER, textColor=INK, spaceAfter=8),
-        "cover_sub": ParagraphStyle("cs", fontName="YaHei", fontSize=11, leading=16, alignment=TA_CENTER, textColor=MUTED, spaceAfter=4),
-        "h1": ParagraphStyle("h1", fontName="YaHei-Bold", fontSize=13, leading=20, textColor=INK, spaceBefore=14, spaceAfter=7),
-        "h2": ParagraphStyle("h2", fontName="YaHei-Bold", fontSize=11, leading=17, textColor=INK, spaceBefore=10, spaceAfter=5),
-        "body": ParagraphStyle("b", fontName=body, fontSize=10, leading=17, alignment=TA_JUSTIFY, firstLineIndent=22, textColor=INK, spaceAfter=6),
-        "body0": ParagraphStyle("b0", fontName=body, fontSize=10, leading=17, alignment=TA_JUSTIFY, firstLineIndent=0, textColor=INK, spaceAfter=6),
-        "bullet": ParagraphStyle("bu", fontName=body, fontSize=10, leading=16.5, leftIndent=16, firstLineIndent=-12, textColor=INK, spaceAfter=3),
-        "step": ParagraphStyle("st", fontName=body, fontSize=10, leading=16.5, leftIndent=20, firstLineIndent=-16, textColor=INK, spaceAfter=4),
-        "cap": ParagraphStyle("cp", fontName="YaHei", fontSize=8.5, leading=13, alignment=TA_CENTER, textColor=MUTED, spaceBefore=3, spaceAfter=10),
-        "th": ParagraphStyle("th", fontName="YaHei-Bold", fontSize=8, leading=12, textColor=colors.white),
-        "td": ParagraphStyle("td", fontName=body, fontSize=8, leading=12, textColor=INK),
+        "cover_kicker": ParagraphStyle(
+            "k", fontName="YaHei", fontSize=9.5, leading=14, alignment=TA_CENTER,
+            textColor=MUTED, spaceAfter=10, wordWrap="CJK",
+        ),
+        "cover": ParagraphStyle(
+            "c", fontName="YaHei-Bold", fontSize=24, leading=32, alignment=TA_CENTER,
+            textColor=INK, spaceAfter=8, wordWrap="CJK",
+        ),
+        "cover_sub": ParagraphStyle(
+            "cs", fontName="YaHei", fontSize=11, leading=16, alignment=TA_CENTER,
+            textColor=MUTED, spaceAfter=4, wordWrap="CJK",
+        ),
+        "h1": ParagraphStyle(
+            "h1", fontName="YaHei-Bold", fontSize=13, leading=20, textColor=INK,
+            spaceBefore=14, spaceAfter=7, wordWrap="CJK",
+        ),
+        "h2": ParagraphStyle(
+            "h2", fontName="YaHei-Bold", fontSize=11, leading=17, textColor=INK,
+            spaceBefore=10, spaceAfter=5, wordWrap="CJK",
+        ),
+        "body": ParagraphStyle(
+            "b", fontName=body, fontSize=10, leading=17, alignment=TA_LEFT,
+            firstLineIndent=22, textColor=INK, spaceAfter=6, wordWrap="CJK",
+        ),
+        "body0": ParagraphStyle(
+            "b0", fontName=body, fontSize=10, leading=17, alignment=TA_LEFT,
+            firstLineIndent=0, textColor=INK, spaceAfter=6, wordWrap="CJK",
+        ),
+        "bullet": ParagraphStyle(
+            "bu", fontName=body, fontSize=10, leading=16.5, leftIndent=16,
+            firstLineIndent=-12, textColor=INK, spaceAfter=3, wordWrap="CJK",
+            alignment=TA_LEFT,
+        ),
+        "step": ParagraphStyle(
+            "st", fontName=body, fontSize=10, leading=16.5, leftIndent=20,
+            firstLineIndent=-16, textColor=INK, spaceAfter=4, wordWrap="CJK",
+            alignment=TA_LEFT,
+        ),
+        "cap": ParagraphStyle(
+            "cp", fontName="YaHei", fontSize=8.5, leading=13, alignment=TA_CENTER,
+            textColor=MUTED, spaceBefore=3, spaceAfter=10, wordWrap="CJK",
+        ),
+        "th": ParagraphStyle(
+            "th", fontName="YaHei-Bold", fontSize=8, leading=12, textColor=colors.white,
+            wordWrap="CJK",
+        ),
+        "td": ParagraphStyle(
+            "td", fontName=body, fontSize=8, leading=12, textColor=INK,
+            wordWrap="CJK", alignment=TA_LEFT,
+        ),
         "code": ParagraphStyle("cd", fontName="CourierNR", fontSize=8, leading=10.6, textColor=INK),
     }
 
@@ -201,14 +241,17 @@ def code_block(text, s):
     return t
 
 
-def footer(canvas, doc, label):
+def footer(canvas, doc, label, font_name="TimesNR"):
+    """Draw page footer. Use a registered CJK font (YaHei) for Chinese labels —
+    built-in Times-Roman cannot encode 软件说明书 and shows missing glyphs."""
     canvas.saveState()
     canvas.setStrokeColor(RULE_LT)
     canvas.setLineWidth(0.4)
     canvas.line(2.1 * cm, 1.45 * cm, A4[0] - 2.1 * cm, 1.45 * cm)
     canvas.setFillColor(MUTED)
-    canvas.setFont("Times-Roman", 8)
+    canvas.setFont(font_name, 8)
     canvas.drawString(2.1 * cm, 1.15 * cm, label)
+    # Page number in Latin digits — same font is fine for YaHei / TimesNR.
     canvas.drawRightString(A4[0] - 2.1 * cm, 1.15 * cm, str(doc.page))
     canvas.restoreState()
 
@@ -329,7 +372,7 @@ def content_en(s, preview):
             [
                 ["Menu", "Purpose"],
                 ["Import → Pandat to ThermoQ", "Load P.xlsx, Ts.xlsx (required); P-S.xlsx, Ts-S.xlsx (optional)."],
-                ["Tools → Composition Converter", "Convert wt% ↔ at% compositions."],
+                ["Tools → Composition Converter", "Convert wt% &lt;-&gt; at% compositions."],
                 ["Tools → Generate Thermo-calc Batch File", "Build a .tcm from Template0 + loop body (%Element%, %T%)."],
                 ["Tools → Generate Thermo-Calc Batch Data File", "Excel/CSV Data File for Property Model Calculator batch (General Models + Custom/Diffusion)."],
                 ["Tools → Extract Thermo-calc Results", "Melting Range, Miscibility Gap, T-zero, TriST Zone (Gibbs; T0 check)."],
@@ -589,7 +632,7 @@ def content_zh(s, preview):
             [
                 ["菜单", "作用"],
                 ["Import → Pandat到ThermoQ", "导入 P.xlsx、Ts.xlsx（必需）及可选 P-S / Ts-S。"],
-                ["Tools → 成分换算", "wt% ↔ at% 成分换算。"],
+                ["Tools → 成分换算", "wt% &lt;-&gt; at% 成分换算。"],
                 ["Tools → 生成 Thermo-calc 批处理", "Template0 + 循环体（%元素%、%T%）生成 .tcm。"],
                 ["Tools → 生成 Thermo-Calc 批处理 Data File", "Property Model 批处理 Excel/CSV（General Models + 自定义/扩散）。"],
                 ["Tools → 提取 Thermo-calc 结果", "熔程、混溶隙、T-zero、TriST 区域（Gibbs；T0 检查）。"],
@@ -797,7 +840,7 @@ def content_zh(s, preview):
     return story
 
 
-def build_pdf(path, story, label):
+def build_pdf(path, story, label, footer_font="TimesNR"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(path),
@@ -811,8 +854,8 @@ def build_pdf(path, story, label):
     )
     doc.build(
         story,
-        onFirstPage=lambda c, d: footer(c, d, label),
-        onLaterPages=lambda c, d: footer(c, d, label),
+        onFirstPage=lambda c, d: footer(c, d, label, footer_font),
+        onLaterPages=lambda c, d: footer(c, d, label, footer_font),
     )
     print("Wrote", path)
 
@@ -824,8 +867,18 @@ def main():
     build_manual_figures.main()
     register_fonts()
     preview = _mr_preview_rows()
-    build_pdf(OUT_DIR / "ThermoQ_User_Manual_EN.pdf", content_en(styles_en(), preview), "ThermoQ  ·  User Manual")
-    build_pdf(OUT_DIR / "ThermoQ_User_Manual_ZH.pdf", content_zh(styles_zh(), preview), "ThermoQ  ·  软件说明书")
+    build_pdf(
+        OUT_DIR / "ThermoQ_User_Manual_EN.pdf",
+        content_en(styles_en(), preview),
+        "ThermoQ  ·  User Manual",
+        footer_font="TimesNR",
+    )
+    build_pdf(
+        OUT_DIR / "ThermoQ_User_Manual_ZH.pdf",
+        content_zh(styles_zh(), preview),
+        "ThermoQ  ·  软件说明书",
+        footer_font="YaHei",
+    )
 
 
 if __name__ == "__main__":
