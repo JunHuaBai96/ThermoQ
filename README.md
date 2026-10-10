@@ -10,7 +10,7 @@
 
 ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Calc data ingestion, batch computations, and rich visualization).
 
-**Current release: [ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — download `ThermoQ-1.0.1-Windows-Setup.exe` (no Python required).
+**Current release: [ThermoQ 1.0.2 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — download `ThermoQ-1.0.2-Windows-Setup.exe` (no Python required).
 
 ### Highlights
 
@@ -21,7 +21,7 @@ ThermoQ is a desktop application for thermodynamic workflows (Pandat / Thermo-Ca
 - **In-window plot preview**: after **Plot**, figures appear in the UI; keep exporting to disk, then use **Save As…** / **Open** for a custom path and format (PNG/JPEG/PDF/…; HTML opens in the browser).
 - **Pandat import**: load `P.xlsx`, `Ts.xlsx` (required) and `P-S.xlsx`, `Ts-S.xlsx` (optional).
 - **Results viewer**: save results as **Excel / CSV / TXT / DAT**.
-- **Windows installer (published)**: official GitHub Release **ThermoQ 1.0.1 Windows Setup** provides `ThermoQ-1.0.1-Windows-Setup.exe`. Packaging notes for rebuilds: `packaging/README.md`.
+- **Windows installer (published)**: official GitHub Release **ThermoQ 1.0.2 Windows Setup** provides `ThermoQ-1.0.2-Windows-Setup.exe`. Packaging notes for rebuilds: `packaging/README.md`.
 
 ### Main workflows
 
@@ -97,18 +97,20 @@ Shared behavior (where Plot is available): generate → **preview in the window*
   - **T-zero**: extract `T0 (K)` vs composition and export `t_zero.xlsx`.
   - **TriST Zone** (Thermo-Calc Gibbs):
     - Recursively read `*_Gibbs.exp` (default filter `.*_Gibbs.exp$`); parse `$ PLOTTED COLUMNS ARE : W(*) and GMR(PHASE)` sections.
-    - Pair LIQUID and a solid phase at the same *T* and composition; export TriST workbook (`T0_tie_1D`, `T0_lines`, `TriST_boundaries`, `TriST_mask`) and optional `_trist_cube.npz`.
-    - **Settings**: user-selected 2D composition plane (X/Y `w(*)`); grid size *N* for cubic interpolation; axes auto-detected from folder sample.
-    - **Visualize TriST**: Plotly / 2D / 3D / GIF (shared panel with Pandat TriST); in-window preview; optional **Plot Labels**.
+    - Pair LIQUID and solid at the same *T* and composition; TriST region = `{ΔG ≤ 0}` with `ΔG = Gs − Gl`.
+    - **Solid**: default lowest `Gs` at each `(T, C*)`, or prefer FCC / BCC / HCP.
+    - Export TriST workbook (`T0_lines` primary check standard, `T0_tie_1D` aux, `TriST_boundaries`, `TriST_mask` with `below_T0_dG_le_0`, `TriST_meta`) and optional `_trist_cube.npz`.
+    - **Settings**: 2D plane prefers `x(*)` when available; grid size *N*; axes auto-detected from folder sample.
+    - **Visualize TriST**: Plotly / 2D / 3D / GIF; default **Overlay T0_lines**; Status / `TriST_meta` report Hausdorff and mask⊂T0 checks.
   - **Template1 (optional, all four tabs)**: after processing, generate abnormal-point **`.tcm`** files from Status error records using a Template1 reference (`%Element%`, `%T%` placeholders).
 - **Extract Pandat Results**
   - **P/Ts (Lever/Scheil)**: read Pandat All table folders (`.csv` / `.dat`) and generate `P.xlsx`, `Ts.xlsx`, `P-S.xlsx`, `Ts-S.xlsx`; supports **Import to ThermoQ** for one-click import after extraction.
   - **T-zero**: read `All table_T0` and export `T0.xlsx` with normalized `w(Element)` columns.
   - **TriST Zone** (Pandat Gibbs):
-    - Read `All table_Gibbs` and pair LIQUID + solid Gibbs energies at the same \(T\) and composition.
-    - Export a TriST workbook: `T0_tie_1D`, `T0_lines`, `TriST_boundaries`, `TriST_mask`.
-    - Optionally saves a companion `_trist_cube.npz` for smooth \(f(C_0)=0\) boundary rendering.
-    - **Visualize TriST**: Plotly / 2D / 3D / GIF with in-window preview; user-selected `w(*)` plane (X/Y), \(z=T\).
+    - Read `All table_Gibbs` and pair LIQUID + solid Gibbs energies at the same \(T\) and composition (`ΔG = Gs − Gl`; region `{ΔG ≤ 0}`).
+    - Same solid preference, `T0_lines` check standard, `TriST_meta`, and `below_T0_dG_le_0` as the Thermo-Calc tab.
+    - Optionally saves `_trist_cube.npz` for smooth `ΔG = 0` boundary rendering.
+    - **Visualize TriST**: Plotly / 2D / 3D / GIF with in-window preview; user-selected `x(*)` / `w(*)` plane (X/Y), \(z=T\); default overlay `T0_lines`.
       - `TriST_boundaries`: discrete lines (**Boundary lines every (K)**) and optional smooth surface.
       - `TriST_mask`: point cloud and/or Mesh3d (per temperature).
       - Export: interactive HTML and static images (format selectable; static Plotly images need `kaleido`).
@@ -117,8 +119,8 @@ Shared behavior (where Plot is available): generate → **preview in the window*
 
 #### Windows end users (recommended)
 
-1. Open the GitHub Release **[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**.
-2. Download **`ThermoQ-1.0.1-Windows-Setup.exe`**.
+1. Open the GitHub Release **[ThermoQ 1.0.2 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**.
+2. Download **`ThermoQ-1.0.2-Windows-Setup.exe`**.
 3. Run the installer (administrator elevation may be required for Program Files).
 4. Launch **ThermoQ** from the Start Menu or Desktop shortcut.
 
@@ -164,7 +166,7 @@ python main.py
 
 ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat / Thermo-Calc 数据导入、批量计算与可视化）。
 
-**当前发布：[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — 下载 `ThermoQ-1.0.1-Windows-Setup.exe`（无需安装 Python）。
+**当前发布：[ThermoQ 1.0.2 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)** — 下载 `ThermoQ-1.0.2-Windows-Setup.exe`（无需安装 Python）。
 
 ### 亮点功能
 
@@ -175,7 +177,7 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 - **界面内图预览**：点击 **绘图 / Plot** 后在窗口内显示图像；仍写入默认导出文件，可用 **另存为…** / **打开** 自定义路径与格式（PNG/JPEG/PDF 等；HTML 用浏览器打开）。
 - **Pandat 导入**：支持 `P.xlsx`、`Ts.xlsx`（必需）和 `P-S.xlsx`、`Ts-S.xlsx`（可选）。
 - **结果窗口**：支持保存 **Excel / CSV / TXT / DAT**。
-- **Windows 安装包（已发布）**：GitHub Release **ThermoQ 1.0.1 Windows Setup** 提供 `ThermoQ-1.0.1-Windows-Setup.exe`。本地重打包见 `packaging/README.md`。
+- **Windows 安装包（已发布）**：GitHub Release **ThermoQ 1.0.2 Windows Setup** 提供 `ThermoQ-1.0.2-Windows-Setup.exe`。本地重打包见 `packaging/README.md`。
 
 ### 主要工作流
 
@@ -247,18 +249,20 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
   - **T-zero**：提取 `T0 (K)` 与成分，导出 `t_zero.xlsx`。
   - **TriST 区域（Thermo-Calc Gibbs）**：
     - 递归读取 `*_Gibbs.exp`（默认 `.*_Gibbs.exp$`）；解析 `$ PLOTTED COLUMNS ARE : W(*) and GMR(相名)` 数据段。
-    - 在相同 *T* 与成分下配对 LIQUID 与固相；导出 TriST 工作簿（`T0_tie_1D`、`T0_lines`、`TriST_boundaries`、`TriST_mask`）及可选 `_trist_cube.npz`。
-    - **设置**：用户指定 2D 成分平面（X/Y `w(*)`）；插值网格 *N*；浏览文件夹后自动识别可用轴。
-    - **Visualize TriST**：Plotly / 2D / 3D / GIF（与 Pandat TriST 共用面板）；界面内预览；可选**图名与坐标轴**。
+    - 在相同 *T* 与成分下配对 LIQUID 与固相；TriST 区域 = `{ΔG≤0}`，`ΔG=Gs−Gl`。
+    - **固相**：默认各 `(T,C*)` 取最低 `Gs`，或优先 FCC/BCC/HCP。
+    - 导出工作簿（`T0_lines` 为检查标准，`T0_tie_1D` 为辅助，`TriST_boundaries`，`TriST_mask` 含 `below_T0_dG_le_0`，`TriST_meta`）及可选 `_trist_cube.npz`。
+    - **设置**：坐标优先 `x(*)`；插值网格 *N*；浏览文件夹后自动识别可用轴。
+    - **Visualize TriST**：Plotly / 2D / 3D / GIF；默认**叠加 T0_lines**；Status / `TriST_meta` 输出 Hausdorff 与 mask⊂T0 检查。
   - **Template1（可选，四个标签页共用逻辑）**：处理完成后，根据 Status 中的错误记录与 Template1 参考文件（`%元素%`、`%T%`）生成异常点 **`.tcm`**。
 - **Extract Pandat Results**
   - **P/Ts (Lever/Scheil)**：读取 Pandat All table 文件夹（支持 `.csv/.dat`）生成 `P.xlsx`、`Ts.xlsx`、`P-S.xlsx`、`Ts-S.xlsx`；并支持 **Import to ThermoQ** 一键导入。
   - **T-zero**：读取 `All table_T0` 导出 `T0.xlsx`（`w(Element)` 列会规范化合并）。
   - **TriST Zone（Pandat Gibbs）**：
-    - 读取 `All table_Gibbs`，在相同 \(T\) 与相同成分下配对 LIQUID 与固相 Gibbs 能。
-    - 导出 TriST 工作簿：`T0_tie_1D`、`T0_lines`、`TriST_boundaries`、`TriST_mask`。
-    - 可选：在同目录生成 `_trist_cube.npz`，用于 \(f(C_0)=0\) 的光滑边界面渲染。
-    - **Visualize TriST**：Plotly / 2D / 3D / GIF，界面内预览；通过 `w(*)` 列选择成分平面（X/Y），\(z=T\)。
+    - 读取 `All table_Gibbs`，在相同 \(T\) 与成分下配对 LIQUID 与固相（`ΔG=Gs−Gl`；区域 `{ΔG≤0}`）。
+    - 固相偏好、`T0_lines` 检查标准、`TriST_meta`、`below_T0_dG_le_0` 与 Thermo-Calc 页一致。
+    - 可选生成 `_trist_cube.npz`，用于 `ΔG=0` 光滑边界面。
+    - **Visualize TriST**：Plotly / 2D / 3D / GIF，界面内预览；`x(*)`/`w(*)` 平面（X/Y），\(z=T\)；默认叠加 `T0_lines`。
       - `TriST_boundaries`：离散温度折线（**Boundary lines every (K)**）与可选光滑曲面。
       - `TriST_mask`：点云与/或每温度 Mesh3d。
       - 导出：交互 HTML 与静态图片（静态 Plotly 图需 `kaleido`）。
@@ -267,8 +271,8 @@ ThermoQ 是一个用于热力学计算工作流的桌面应用（支持 Pandat /
 
 #### Windows 普通用户（推荐）
 
-1. 打开 GitHub Release **[ThermoQ 1.0.1 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**。
-2. 下载 **`ThermoQ-1.0.1-Windows-Setup.exe`**。
+1. 打开 GitHub Release **[ThermoQ 1.0.2 Windows Setup](https://github.com/JunHuaBai96/ThermoQ/releases/latest)**。
+2. 下载 **`ThermoQ-1.0.2-Windows-Setup.exe`**。
 3. 运行安装程序（安装到 Program Files 时可能需要管理员权限）。
 4. 从开始菜单或桌面快捷方式启动 **ThermoQ**。
 

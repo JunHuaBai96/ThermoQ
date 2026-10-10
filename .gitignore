@@ -3,8 +3,10 @@ __pycache__/
 *$py.class
 *.egg-info/
 .venv/
+.venv_trist_test/
 venv/
 env/
+test/_trist_compare_tmp/
 dist/
 build/
 packaging/*.pyc

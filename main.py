@@ -15,7 +15,7 @@ from decimal import Decimal
 from periodic_table import PERIODIC_TABLE
 
 APP_NAME = 'ThermoQ'
-APP_VERSION = '1.0.1'
+APP_VERSION = '1.0.2'
 
 
 def resource_path(*parts):
@@ -1100,14 +1100,65 @@ def _exptc_gibbs_extract_from_exp(file_path):
     return scan_el, phase_data
 
 
-def _exptc_gibbs_pick_solid_phase(phase_data):
+def _exptc_gibbs_lookup_g_at_x(pts, x, tol=1e-8):
+    """pts: iterable of (w_scan, G); return G at x or None."""
+    if not pts:
+        return None
+    dmap = dict(pts) if not isinstance(pts, dict) else pts
+    g = dmap.get(x)
+    if g is not None:
+        return float(g)
+    xf = float(x)
+    for xk, gs in dmap.items():
+        if abs(float(xk) - xf) <= tol:
+            return float(gs)
+    return None
+
+
+def _exptc_gibbs_pick_solid_at_x(phase_data, x, preferred_solid=None):
+    """
+    Among solid phases tabulated at composition x, return (G_solid, phase_name)
+    with the lowest molar Gibbs energy. If preferred_solid is FCC/BCC/HCP,
+    restrict to that family first; fall back to all solids if none match.
+    """
+    pref = (preferred_solid or '').strip().upper() or None
+
+    def _collect(require_pref):
+        best_g, best_ph = None, None
+        for ph, pts in phase_data.items():
+            pu = str(ph).upper()
+            if 'LIQUID' in pu:
+                continue
+            if require_pref and pref and pref not in pu:
+                continue
+            g = _exptc_gibbs_lookup_g_at_x(pts, x)
+            if g is None or not np.isfinite(g):
+                continue
+            if best_g is None or g < best_g:
+                best_g, best_ph = float(g), ph
+        return best_g, best_ph
+
+    g, ph = _collect(True)
+    if g is None and pref:
+        g, ph = _collect(False)
+    return g, ph
+
+
+def _exptc_gibbs_pick_solid_phase(phase_data, preferred_solid=None):
+    """Legacy helper: name of a solid phase (prefer preferred family, else any)."""
     solids = {k: v for k, v in phase_data.items() if 'LIQUID' not in str(k).upper()}
     if not solids:
         return None
+    pref = (preferred_solid or '').strip().upper() or None
+    if pref:
+        subset = {k: v for k, v in solids.items() if pref in str(k).upper()}
+        if subset:
+            solids = subset
+    # Prefer phase that appears most often only as a label fallback.
     return max(solids.keys(), key=lambda k: len(solids[k]))
 
 
-def _exptc_gibbs_file_to_merged_df(file_path, file_name):
+def _exptc_gibbs_file_to_merged_df(file_path, file_name, preferred_solid=None):
     fixed_el, fixed_val, t_k = _exptc_gibbs_parse_filename(file_name)
     if fixed_el is None or t_k is None:
         return None, 'bad_filename'
@@ -1117,40 +1168,62 @@ def _exptc_gibbs_file_to_merged_df(file_path, file_name):
     liq_key = next((k for k in phase_data if 'LIQUID' in str(k).upper()), None)
     if liq_key is None:
         return None, 'no_liquid'
-    sol_key = _exptc_gibbs_pick_solid_phase(phase_data)
-    if sol_key is None:
+    if not any('LIQUID' not in str(k).upper() for k in phase_data):
         return None, 'no_solid'
 
     liq_map = dict(phase_data[liq_key])
-    sol_map = dict(phase_data[sol_key])
     rows = []
     for x, g_liq in liq_map.items():
-        g_sol = sol_map.get(x)
-        if g_sol is None:
-            for xk, gs in sol_map.items():
-                if abs(float(xk) - float(x)) <= 1e-8:
-                    g_sol = gs
-                    break
-        if g_sol is None:
+        g_sol, sol_key = _exptc_gibbs_pick_solid_at_x(phase_data, x, preferred_solid=preferred_solid)
+        if g_sol is None or sol_key is None:
             continue
         w_fixed = _exptc_gibbs_snap_mass_fraction(fixed_val)
         w_scan = _exptc_gibbs_snap_mass_fraction(x)
         dg = float(g_sol) - float(g_liq)
-        rows.append(
-            {
-                'File': file_name,
-                'Path': file_path,
-                'T (K)': float(t_k),
-                f'w({fixed_el})': w_fixed,
-                f'w({scan_el})': w_scan,
-                'G_liquid (J/mol)': float(g_liq),
-                'G_solid (J/mol)': float(g_sol),
-                'phase (solid)': sol_key,
-                'phase (liquid)': 'LIQUID',
-                'dG = G_solid - G_liquid (J/mol)': dg,
-                'in_TriST dG le 0': int(dg <= 0),
-            }
-        )
+        row = {
+            'File': file_name,
+            'Path': file_path,
+            'T (K)': float(t_k),
+            f'w({fixed_el})': w_fixed,
+            f'w({scan_el})': w_scan,
+            'G_liquid (J/mol)': float(g_liq),
+            'G_solid (J/mol)': float(g_sol),
+            'phase (solid)': sol_key,
+            'phase (liquid)': 'LIQUID',
+            'dG = G_solid - G_liquid (J/mol)': dg,
+            'below_T0_dG_le_0': int(dg <= 0),
+        }
+        # Ternary solvent complement → mole fractions when molar masses known.
+        # e.g. AlCu-0.050Li_… → solvent Al, w(Al)=1−w(Cu)−w(Li).
+        solvent = None
+        mrun = re.match(r'^([A-Za-z]{2,12})', str(file_name))
+        if mrun:
+            run = _pbfx_canonicalize_element_run(mrun.group(1))
+            if run:
+                i = 0
+                while i < len(run):
+                    matched = None
+                    for sym in _PBFX_ELEM_SYMS_BY_LEN:
+                        if run.startswith(sym, i):
+                            matched = sym
+                            break
+                    if matched is None:
+                        break
+                    if matched not in (fixed_el, scan_el) and matched in PERIODIC_TABLE:
+                        solvent = matched
+                        break
+                    i += len(matched)
+        if solvent is not None and fixed_el in PERIODIC_TABLE and scan_el in PERIODIC_TABLE:
+            w_sol = 1.0 - float(w_fixed) - float(w_scan)
+            if np.isfinite(w_sol) and w_sol >= -1e-9:
+                w_sol = max(0.0, w_sol)
+                xf = _extp_trist_wt_to_mole_fractions(
+                    {fixed_el: w_fixed, scan_el: w_scan, solvent: w_sol}, scale=1.0,
+                )
+                if xf is not None:
+                    for el, xv in xf.items():
+                        row[f'x({el})'] = float(np.asarray(xv).reshape(-1)[0])
+        rows.append(row)
     if not rows:
         return None, 'no_pairs'
     return pd.DataFrame(rows), None
@@ -1191,31 +1264,627 @@ def _exptc_gibbs_peek_axis_sample(folder, name_filter=None, max_files=12):
     return wcols, sample
 
 
-def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_path, log_fn=None, tr=None):
+def _extp_trist_solid_stable_mask(gl_grid, gs_grid, valid=None):
     """
-    Compute T0_lines / TriST_boundaries / TriST_mask / optional _trist_cube.npz
-    from merged Gibbs rows (same schema as Pandat TriST extract).
+    Complete-solute-trapping (TriST) side of T0: solid more stable at the same C0.
+
+    Thermodynamic condition: Gs(C0) ≤ Gl(C0), i.e. dG = Gs − Gl ≤ 0.
+    (The opposite Gl ≤ Gs is the liquid-stable side and must not be used.)
+
+    Note on the geometric tangent-plane field
+    f(C0)=min_C[Gs(C)−T_Gl@C0(C)] (see _extp_trist_geometric_tangent_margin):
+    on this solid-stable side, evaluating at C=C0 gives
+        Gs(C0) − T_Gl(C0) = Gs(C0) − Gl(C0) ≤ 0,
+    hence f(C0) ≤ Gs−Gl ≤ 0 for every candidate. Thus f≤0 does not cut a
+    smaller dome inside T0; the TriST region is exactly {dG ≤ 0}, and the
+    TriST boundary coincides with the T0 line (dG = 0).
+    """
+    gl = np.asarray(gl_grid, dtype=np.float64)
+    gs = np.asarray(gs_grid, dtype=np.float64)
+    if valid is None:
+        valid = np.isfinite(gl) & np.isfinite(gs)
+    else:
+        valid = np.asarray(valid, dtype=bool) & np.isfinite(gl) & np.isfinite(gs)
+    dg = gs - gl
+    inside = valid & (dg <= 0.0)
+    return inside, dg, valid
+
+
+def _extp_trist_parse_comp_col(col):
+    """Parse 'x(Cu)' / 'w(AL)' → ('x'|'w', 'Cu') or (None, None)."""
+    if not isinstance(col, str):
+        return None, None
+    m = re.match(r'^\s*([xw])\(\s*([A-Za-z]{1,3})\s*\)\s*$', col.strip(), re.IGNORECASE)
+    if not m:
+        return None, None
+    return m.group(1).lower(), canonical_element_symbol(m.group(2))
+
+
+def _extp_trist_comp_columns(df, kind='w'):
+    """
+    List (original_col, canonical 'x(El)'/'w(El)') for composition columns.
+    kind: 'x', 'w', or 'any'.
+    """
+    out = []
+    if df is None or not hasattr(df, 'columns'):
+        return out
+    kind = (kind or 'w').lower()
+    for c in df.columns:
+        k, el = _extp_trist_parse_comp_col(c)
+        if k is None:
+            continue
+        if kind != 'any' and k != kind:
+            continue
+        out.append((c, f'{k}({el})'))
+    return out
+
+
+def _extp_trist_infer_comp_total(values, fallback=1.0):
+    """Infer composition scale 1.0 (fraction) vs 100.0 (percent) from sample values."""
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return float(fallback)
+    vmax = float(np.nanmax(arr))
+    # Pandat All-table often uses mole/weight %; TC .exp usually mass fraction.
+    if vmax > 1.5:
+        return 100.0
+    return 1.0
+
+
+def _extp_trist_simplex_mask(gx, gy, total=1.0, atol=None):
+    """
+    Physical ternary simplex on a rectangular (cX, cY) grid:
+    cX ≥ 0, cY ≥ 0, cX + cY ≤ total  (third component ≥ 0).
+    """
+    gx = np.asarray(gx, dtype=np.float64)
+    gy = np.asarray(gy, dtype=np.float64)
+    tot = float(total)
+    if atol is None:
+        atol = max(1e-9, 1e-6 * abs(tot))
+    return (gx >= -atol) & (gy >= -atol) & ((gx + gy) <= (tot + atol))
+
+
+def _extp_trist_wt_to_mole_fractions(w_by_el, scale=None):
+    """
+    Convert weight fractions/percents → mole fractions (sum = 1).
+    w_by_el: dict element → scalar or ndarray. Requires PERIODIC_TABLE masses.
+    """
+    if not w_by_el:
+        return None
+    els = list(w_by_el.keys())
+    for el in els:
+        if el not in PERIODIC_TABLE:
+            return None
+    arrays = {el: np.asarray(w_by_el[el], dtype=np.float64) for el in els}
+    if scale is None:
+        scale = _extp_trist_infer_comp_total(np.concatenate([a.ravel() for a in arrays.values()]))
+    moles = []
+    for el in els:
+        moles.append(arrays[el] / float(scale) / float(PERIODIC_TABLE[el]['mass']))
+    moles = np.stack(moles, axis=0)
+    s = np.sum(moles, axis=0)
+    bad = ~np.isfinite(s) | (s <= 0)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        xf = moles / s
+    xf[:, bad] = np.nan
+    return {el: xf[i] for i, el in enumerate(els)}
+
+
+def _extp_trist_grad_xy_valid(z, dx, dy, valid):
+    """
+    NaN-safe finite differences for ∂z/∂x, ∂z/∂y.
+
+    Uses central differences when both neighbors are valid; otherwise one-sided
+    differences. Hull-exterior / illegal points (valid=False or non-finite z)
+    never contribute to the slope. Remaining interior gaps get a local 3×3
+    least-squares plane fit (index space → physical slope via dx, dy).
+    """
+    z = np.asarray(z, dtype=np.float64)
+    valid = np.asarray(valid, dtype=bool) & np.isfinite(z)
+    gy = np.full(z.shape, np.nan, dtype=np.float64)
+    gx = np.full(z.shape, np.nan, dtype=np.float64)
+    dx = float(dx) if abs(float(dx)) > 0 else 1.0
+    dy = float(dy) if abs(float(dy)) > 0 else 1.0
+
+    # --- x (axis 1) ---
+    if z.shape[1] >= 3:
+        left, right = valid[:, :-2], valid[:, 2:]
+        mid = valid[:, 1:-1]
+        ok_c = mid & left & right
+        gx[:, 1:-1] = np.where(ok_c, (z[:, 2:] - z[:, :-2]) / (2.0 * dx), gx[:, 1:-1])
+        ok_l = mid & left & ~right
+        gx[:, 1:-1] = np.where(ok_l, (z[:, 1:-1] - z[:, :-2]) / dx, gx[:, 1:-1])
+        ok_r = mid & right & ~left
+        gx[:, 1:-1] = np.where(ok_r, (z[:, 2:] - z[:, 1:-1]) / dx, gx[:, 1:-1])
+    if z.shape[1] >= 2:
+        ok0 = valid[:, 0] & valid[:, 1]
+        gx[:, 0] = np.where(ok0, (z[:, 1] - z[:, 0]) / dx, gx[:, 0])
+        ok1 = valid[:, -1] & valid[:, -2]
+        gx[:, -1] = np.where(ok1, (z[:, -1] - z[:, -2]) / dx, gx[:, -1])
+
+    # --- y (axis 0) ---
+    if z.shape[0] >= 3:
+        up, down = valid[:-2, :], valid[2:, :]
+        mid = valid[1:-1, :]
+        ok_c = mid & up & down
+        gy[1:-1, :] = np.where(ok_c, (z[2:, :] - z[:-2, :]) / (2.0 * dy), gy[1:-1, :])
+        ok_u = mid & up & ~down
+        gy[1:-1, :] = np.where(ok_u, (z[1:-1, :] - z[:-2, :]) / dy, gy[1:-1, :])
+        ok_d = mid & down & ~up
+        gy[1:-1, :] = np.where(ok_d, (z[2:, :] - z[1:-1, :]) / dy, gy[1:-1, :])
+    if z.shape[0] >= 2:
+        ok0 = valid[0, :] & valid[1, :]
+        gy[0, :] = np.where(ok0, (z[1, :] - z[0, :]) / dy, gy[0, :])
+        ok1 = valid[-1, :] & valid[-2, :]
+        gy[-1, :] = np.where(ok1, (z[-1, :] - z[-2, :]) / dy, gy[-1, :])
+
+    # Local plane fit where FD still missing (valid cell, incomplete stencil).
+    need = valid & (~np.isfinite(gx) | ~np.isfinite(gy))
+    if need.any():
+        ii, jj = np.where(need)
+        ny, nx = z.shape
+        for i, j in zip(ii.tolist(), jj.tolist()):
+            i0, i1 = max(0, i - 1), min(ny, i + 2)
+            j0, j1 = max(0, j - 1), min(nx, j + 2)
+            blk_v = valid[i0:i1, j0:j1]
+            if int(blk_v.sum()) < 3:
+                continue
+            yy, xx = np.where(blk_v)
+            # Physical offsets relative to (i, j)
+            px = (xx + j0 - j).astype(np.float64) * dx
+            py = (yy + i0 - i).astype(np.float64) * dy
+            zz = z[i0:i1, j0:j1][blk_v]
+            # z ≈ a + b*px + c*py
+            A = np.column_stack([np.ones(px.size), px, py])
+            try:
+                coef, _, _, _ = np.linalg.lstsq(A, zz, rcond=None)
+            except Exception:
+                continue
+            if not np.isfinite(gx[i, j]):
+                gx[i, j] = float(coef[1])
+            if not np.isfinite(gy[i, j]):
+                gy[i, j] = float(coef[2])
+
+    gx = np.where(valid, gx, np.nan)
+    gy = np.where(valid, gy, np.nan)
+    return gx, gy
+
+
+def _extp_trist_geometric_tangent_margin(
+    gl_grid,
+    gs_grid,
+    gx,
+    gy,
+    search_mask,
+    cand_mask=None,
+    max_candidates=8000,
+    progress_fn=None,
+):
+    """
+    Geometric tangent-plane margin in (cX, cY, G) space — NOT chemical potentials.
+
+    At each candidate C0=(cX0,cY0) the liquid surface is replaced by the plane
+        T(C) = Gl(C0) + g_x (cX−cX0) + g_y (cY−cY0),
+    where (g_x, g_y) are NaN-safe finite-difference slopes of Gl on the grid
+    (valid neighbors only). Then
+        f(C0) = min_{C ∈ search_mask} [ Gs(C) − T(C) ].
+
+    search_mask must already be restricted to valid ∩ physical simplex
+    (and must not include nearest-filled exterior fake Gs).
+
+    Candidates may be stride-downsampled when denser than max_candidates; min_C
+    is evaluated in memory-aware vectorized chunks.
+    """
+    gl = np.asarray(gl_grid, dtype=np.float64)
+    gs = np.asarray(gs_grid, dtype=np.float64)
+    Xg = np.asarray(gx, dtype=np.float64)
+    Yg = np.asarray(gy, dtype=np.float64)
+    search = np.asarray(search_mask, dtype=bool) & np.isfinite(gs) & np.isfinite(gl)
+    if cand_mask is None:
+        cand = search.copy()
+    else:
+        cand = np.asarray(cand_mask, dtype=bool) & search
+    f_grid = np.full(gl.shape, np.nan, dtype=np.float64)
+    n_search = int(search.sum())
+    if n_search < 4 or cand.sum() < 1:
+        return f_grid
+    dx = float(Xg[0, 1] - Xg[0, 0]) if Xg.shape[1] > 1 else 1.0
+    dy = float(Yg[1, 0] - Yg[0, 0]) if Yg.shape[0] > 1 else 1.0
+    g_x, g_y = _extp_trist_grad_xy_valid(gl, dx, dy, search)
+    cand = cand & np.isfinite(g_x) & np.isfinite(g_y)
+    n_cand = int(cand.sum())
+    if n_cand < 1:
+        return f_grid
+
+    # Stride-downsample dense candidate sets (diagnostic f_geom only).
+    max_cand = max(200, int(max_candidates))
+    if n_cand > max_cand:
+        flat = np.flatnonzero(cand.ravel())
+        step = int(np.ceil(n_cand / max_cand))
+        keep = np.zeros(cand.size, dtype=bool)
+        keep[flat[::step]] = True
+        cand = keep.reshape(cand.shape)
+        n_cand = int(cand.sum())
+        if progress_fn:
+            progress_fn(f'min_C candidates downsampled to {n_cand} (cap {max_cand})')
+
+    GSf = gs[search].ravel()
+    Xf = Xg[search].ravel()
+    Yf = Yg[search].ravel()
+    x0 = Xg[cand].ravel()
+    y0 = Yg[cand].ravel()
+    gl0 = gl[cand].ravel()
+    gx0 = g_x[cand].ravel()
+    gy0 = g_y[cand].ravel()
+    # Target ~32 MB temporaries: chunk * n_search * 8 bytes
+    chunk = int(max(32, min(512, (4_000_000 // max(n_search, 1)))))
+    mvals = np.empty(n_cand, dtype=np.float64)
+    n_chunks = int(np.ceil(n_cand / chunk)) if chunk else 1
+    for ci, s in enumerate(range(0, n_cand, chunk)):
+        e = min(s + chunk, n_cand)
+        vals = GSf[None, :] - gx0[s:e, None] * Xf[None, :] - gy0[s:e, None] * Yf[None, :]
+        mvals[s:e] = np.nanmin(vals, axis=1)
+        if progress_fn and (ci == 0 or ci + 1 == n_chunks or (ci + 1) % max(1, n_chunks // 5) == 0):
+            progress_fn(f'min_C chunk {ci + 1}/{n_chunks} (candidates {e}/{n_cand})')
+    fvals = mvals - (gl0 - gx0 * x0 - gy0 * y0)
+    f_grid[cand] = fvals
+    return f_grid
+
+
+def _extp_trist_self_test_criterion():
+    """
+    Synthetic convex Gl/Gs: analytic T0 disk Gs≤Gl; assert program inside matches.
+    Also checks simplex masking and that hull-exterior nearest fill is not used
+    by the default grid path. Raises AssertionError on failure.
+    """
+    # Gl = x^2 + y^2 + 2,  Gs = 2*(x^2 + y^2)  →  Gs ≤ Gl  iff  r^2 ≤ 2
+    n = 41
+    x_lin = np.linspace(-2.0, 2.0, n)
+    y_lin = np.linspace(-2.0, 2.0, n)
+    gx, gy = np.meshgrid(x_lin, y_lin)
+    r2 = gx ** 2 + gy ** 2
+    gl_grid = r2 + 2.0
+    gs_grid = 2.0 * r2
+    inside, dg, valid = _extp_trist_solid_stable_mask(gl_grid, gs_grid)
+    expect = valid & (dg <= 0.0)
+    wrong_liquid_side = valid & (gl_grid < gs_grid)
+
+    assert inside.shape == expect.shape
+    assert np.array_equal(inside, expect), (
+        'TriST inside must match Gs≤Gl (solid-stable / T0-interior).'
+    )
+    assert not np.any(inside & wrong_liquid_side), (
+        'TriST region must not lie on the liquid-stable side Gl<Gs.'
+    )
+    deep = valid & (r2 < 1.5)
+    assert deep.any() and np.all(inside[deep])
+    far = valid & (r2 > 2.5)
+    assert far.any() and not np.any(inside[far])
+
+    # Simplex: points with x+y > 1 must be masked out.
+    xs = np.linspace(0.0, 1.0, 11)
+    ys = np.linspace(0.0, 1.0, 11)
+    gxx, gyy = np.meshgrid(xs, ys)
+    sm = _extp_trist_simplex_mask(gxx, gyy, total=1.0)
+    assert bool(sm[0, 0]) and bool(sm[5, 0]) and (not bool(sm[-1, -1]))
+
+    # Default grid must leave exterior NaN (no nearest fill).
+    if SCIPY_AVAILABLE:
+        pts = np.array([[0.2, 0.2], [0.3, 0.2], [0.2, 0.3], [0.25, 0.25]], dtype=np.float64)
+        vals = np.array([1.0, 1.1, 0.9, 1.05], dtype=np.float64)
+        zi = _extp_trist_grid_surface(pts, vals, gxx, gyy, fill_outside_hull=False)
+        assert zi is not None
+        assert np.isnan(zi[-1, -1]), 'Exterior of convex hull must stay NaN (no nearest fill).'
+
+    # w→x conversion sanity (Al–Cu equal wt% → more Al moles).
+    xf = _extp_trist_wt_to_mole_fractions({'Al': 50.0, 'Cu': 50.0}, scale=100.0)
+    assert xf is not None and xf['Al'] > xf['Cu']
+
+    # Geometric f ≤ 0 on solid-stable side when C0 ∈ search (diagnostic identity).
+    sim = _extp_trist_simplex_mask(gx, gy, total=2.0)  # loose box for synthetic disk
+    search = valid & sim & np.isfinite(gl_grid) & np.isfinite(gs_grid)
+    f_geom = _extp_trist_geometric_tangent_margin(
+        gl_grid, gs_grid, gx, gy, search_mask=search, cand_mask=inside & search,
+        max_candidates=2000,
+    )
+    okf = np.isfinite(f_geom) & inside & search
+    if okf.any():
+        assert np.all(f_geom[okf] <= 1e-6), 'Geometric f must be ≤ 0 on solid-stable side.'
+
+    # RGI prep must not use 1e9 sentinels (would invent false ΔG=0 crossings).
+    dg_nan = np.where(valid, dg, np.nan)
+    cube3 = np.stack([dg_nan, dg_nan, dg_nan], axis=0)
+    f_fill, v01 = _extp_trist_filled_f_for_rgi(cube3)
+    assert v01.shape == cube3.shape
+    assert np.nanmax(np.abs(f_fill)) < 1.0e6, 'RGI fill must not inject huge sentinels like 1e9.'
+    return True
+
+
+def _extp_trist_load_pandat_merged_sample(folder, max_files=24, temp_filter=None):
+    """Load a small Pandat All-table_Gibbs sample into a merged DataFrame."""
+    files = sorted(
+        f for f in os.listdir(folder)
+        if f.lower().endswith(('.csv', '.dat')) and (temp_filter is None or temp_filter(f))
+    )
+    blocks = []
+    for fn in files[:max_files]:
+        path = os.path.join(folder, fn)
+        try:
+            df = pd.read_csv(path, sep='\t', header=0, skiprows=[1])
+        except Exception:
+            continue
+        phase_col = _extp_trist_find_col_df(df, ['phase_name', 'PHASE', 'PHASE_NAME', 'Phase', 'phasename'])
+        t_col = _extp_trist_find_col_df(df, ['T', 't', 'Temperature', 'Temp'])
+        if not phase_col or not t_col:
+            continue
+        g_liq, g_sol = _extp_trist_pandat_g_columns(df)
+        if g_liq is None or g_sol is None:
+            continue
+        x_map = _extp_trist_x_columns(df)
+        w_map = _extp_trist_w_columns(df)
+        join_map = x_map if len(x_map) >= 2 else w_map
+        extra_map = w_map if join_map is x_map else x_map
+        if not join_map or len(join_map) < 2:
+            continue
+        m, err = _extp_trist_merge_solid_liquid(
+            df, phase_col, t_col, g_liq, g_sol, join_map, path, fn, extra_comp_map=extra_map,
+        )
+        if m is not None and not err:
+            blocks.append(m)
+    if not blocks:
+        return None
+    return pd.concat(blocks, ignore_index=True)
+
+
+def _extp_trist_assert_mask_inside_t0(mask_df, dg_col='dG = G_solid - G_liquid (J/mol)'):
+    """Assert TriST_mask samples lie on the solid-stable side (dG ≤ 0)."""
+    if mask_df is None or mask_df.empty:
+        return {'n': 0, 'n_pos': 0, 'ok': True}
+    dg = pd.to_numeric(mask_df[dg_col], errors='coerce').to_numpy(dtype=np.float64)
+    dg = dg[np.isfinite(dg)]
+    n_pos = int(np.sum(dg > 1e-6))
+    return {'n': int(dg.size), 'n_pos': n_pos, 'ok': n_pos == 0}
+
+
+def _extp_trist_compare_alculi_sample(folder=None, ngrid=40, max_files=16, out_dir=None):
+    """
+    Before/after comparison on Al-Cu-Li Pandat Gibbs sample:
+      before = weight axes + nearest hull fill + no simplex (legacy)
+      after  = mole-fraction axes + no nearest fill + simplex mask (default)
+    Assert both TriST_mask sets remain on T0 interior (dG ≤ 0).
+    Returns a summary dict.
+    """
+    if folder is None:
+        folder = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'test', 'Extract Pandat Results-Gibbs', 'Al-Cu-Li_COST', 'All table_Gibbs',
+        )
+    if not os.path.isdir(folder):
+        raise FileNotFoundError(folder)
+    if out_dir is None:
+        out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test', '_trist_compare_tmp')
+    os.makedirs(out_dir, exist_ok=True)
+
+    def _tf(fn):
+        u = fn.upper()
+        return ('800K' in u) or ('700K' in u)
+
+    merged = _extp_trist_load_pandat_merged_sample(folder, max_files=max_files, temp_filter=_tf)
+    if merged is None or merged.empty:
+        raise RuntimeError('No Al-Cu-Li merged rows for TriST comparison.')
+
+    # Forced w(*) axes for a fair before path.
+    wcols = [c for c, _ in _extp_trist_comp_columns(merged, 'w')]
+    xcols = [c for c, _ in _extp_trist_comp_columns(merged, 'x')]
+    if len(wcols) < 2:
+        raise RuntimeError('Sample lacks w(*) columns.')
+    x_w, y_w = wcols[0], wcols[1]
+    x_pref, y_pref = _extp_trist_pick_axes_2d(merged)
+
+    path_before = os.path.join(out_dir, 'TriST_alculi_before.xlsx')
+    path_after = os.path.join(out_dir, 'TriST_alculi_after.xlsx')
+    t0_b, _bnd_b, mask_b = _extp_trist_build_and_save_workbook(
+        merged, x_w, y_w, ngrid, path_before,
+        fill_outside_hull=True, apply_simplex=False, compute_geom_tangent=False,
+        force_coord_kind='w',
+    )
+    t0_a, _bnd_a, mask_a = _extp_trist_build_and_save_workbook(
+        merged, x_pref or x_w, y_pref or y_w, ngrid, path_after,
+        fill_outside_hull=False, apply_simplex=True, compute_geom_tangent=True,
+        force_coord_kind=None,
+    )
+    sb = _extp_trist_assert_mask_inside_t0(mask_b)
+    sa = _extp_trist_assert_mask_inside_t0(mask_a)
+    assert sb['ok'], f'BEFORE TriST_mask has {sb["n_pos"]} points with dG>0 (liquid-stable).'
+    assert sa['ok'], f'AFTER TriST_mask has {sa["n_pos"]} points with dG>0 (liquid-stable).'
+    # T0 polyline samples should also sit near dG≈0; mask is the strict interior check.
+    summary = {
+        'folder': folder,
+        'n_merged': int(len(merged)),
+        'axes_before': (x_w, y_w),
+        'axes_after': (x_pref or x_w, y_pref or y_w),
+        'x_cols_available': xcols,
+        't0_before_pts': int(len(t0_b)),
+        't0_after_pts': int(len(t0_a)),
+        'mask_before': sb,
+        'mask_after': sa,
+        'path_before': path_before,
+        'path_after': path_after,
+    }
+    return summary
+
+
+def _extp_trist_resolve_mole_coords(merged_all, x_col, y_col, log_fn=None, tr=None, force_kind=None):
+    """
+    Prefer mole-fraction axes for TriST grids / geometric tangent.
+
+    Order: existing x(*) columns matching the chosen elements → convert from w(*)
+    using molar masses when all needed weight columns (or ternary complement) exist
+    → otherwise keep w(*) (fraction or %).
+
+    Returns (df, x_col, y_col, coord_kind, total_scale, note).
     """
     if tr is None:
         tr = lambda k, d='': d
     if log_fn is None:
         log_fn = lambda _m: None
-    if not SCIPY_AVAILABLE or not MATPLOTLIB_AVAILABLE:
-        raise RuntimeError('scipy and matplotlib are required for TriST workbook generation.')
+    df = merged_all.copy()
+    kx, ex = _extp_trist_parse_comp_col(x_col)
+    ky, ey = _extp_trist_parse_comp_col(y_col)
+    if not ex or not ey or ex == ey:
+        tot = _extp_trist_infer_comp_total(
+            np.concatenate([
+                pd.to_numeric(df[x_col], errors='coerce').to_numpy(dtype=np.float64),
+                pd.to_numeric(df[y_col], errors='coerce').to_numpy(dtype=np.float64),
+            ])
+        ) if x_col in df.columns and y_col in df.columns else 1.0
+        return df, x_col, y_col, (kx or 'w'), tot, 'axes_unchanged'
+
+    if force_kind == 'w' and kx == 'w' and ky == 'w':
+        tot = _extp_trist_infer_comp_total(
+            np.concatenate([
+                pd.to_numeric(df[x_col], errors='coerce').to_numpy(dtype=np.float64),
+                pd.to_numeric(df[y_col], errors='coerce').to_numpy(dtype=np.float64),
+            ])
+        )
+        return df, x_col, y_col, 'w', tot, 'forced_weight'
+
+    # Prefer native mole-fraction columns if present.
+    x_map = {}
+    for orig, canon in _extp_trist_comp_columns(df, 'x'):
+        _k, el = _extp_trist_parse_comp_col(canon)
+        x_map[el] = orig
+    if force_kind != 'w' and ex in x_map and ey in x_map:
+        xc, yc = x_map[ex], x_map[ey]
+        tot = _extp_trist_infer_comp_total(
+            np.concatenate([
+                pd.to_numeric(df[xc], errors='coerce').to_numpy(dtype=np.float64),
+                pd.to_numeric(df[yc], errors='coerce').to_numpy(dtype=np.float64),
+            ])
+        )
+        note = f'native_mole_fraction:{xc},{yc}'
+        log_fn(tr('extp_trist_coord_log', 'TriST coordinates: {note} (scale={scale:g})').format(note=note, scale=tot))
+        return df, xc, yc, 'x', tot, note
+
+    # Convert from weight fractions when molar masses are known.
+    w_map = {}
+    for orig, canon in _extp_trist_comp_columns(df, 'w'):
+        _k, el = _extp_trist_parse_comp_col(canon)
+        w_map[el] = orig
+    if force_kind != 'w' and ex in w_map and ey in w_map:
+        wcols = {el: pd.to_numeric(df[col], errors='coerce').to_numpy(dtype=np.float64) for el, col in w_map.items()}
+        scale = _extp_trist_infer_comp_total(np.concatenate([a.ravel() for a in wcols.values()]))
+        # Ternary complement if only two w columns (solvent = remainder).
+        if len(wcols) == 2:
+            # Infer solvent from filename Path/File if possible; else skip conversion.
+            solvent = None
+            for coln in ('File', 'Path'):
+                if coln not in df.columns:
+                    continue
+                sample = str(df[coln].iloc[0]) if len(df) else ''
+                # e.g. AlCu-0.050Li or ALCU2.5LI
+                pref = re.match(r'^([A-Z][a-z]?)', sample)
+                if pref:
+                    cand = canonical_element_symbol(pref.group(1))
+                    if cand not in wcols and cand in PERIODIC_TABLE:
+                        solvent = cand
+                        break
+                m2 = re.match(r'^([A-Za-z]{2,6})', sample)
+                if m2 and solvent is None:
+                    toks = _parse_element_symbol_concat(m2.group(1))
+                    for cand in toks:
+                        if cand not in wcols and cand in PERIODIC_TABLE:
+                            solvent = cand
+                            break
+                if solvent:
+                    break
+            if solvent is not None:
+                rem = scale - wcols[ex] - wcols[ey]
+                rem = np.where(np.isfinite(rem), rem, np.nan)
+                wcols[solvent] = rem
+        if len(wcols) >= 2 and all(el in PERIODIC_TABLE for el in wcols):
+            xf = _extp_trist_wt_to_mole_fractions(wcols, scale=scale)
+            if xf is not None and ex in xf and ey in xf:
+                xc, yc = f'x({ex})', f'x({ey})'
+                df[xc] = xf[ex]
+                df[yc] = xf[ey]
+                for el, arr in xf.items():
+                    col = f'x({el})'
+                    if col not in df.columns:
+                        df[col] = arr
+                note = f'converted_w_to_x:{ex},{ey}'
+                log_fn(tr('extp_trist_coord_log', 'TriST coordinates: {note} (scale={scale:g})').format(note=note, scale=1.0))
+                return df, xc, yc, 'x', 1.0, note
+
+    tot = _extp_trist_infer_comp_total(
+        np.concatenate([
+            pd.to_numeric(df[x_col], errors='coerce').to_numpy(dtype=np.float64),
+            pd.to_numeric(df[y_col], errors='coerce').to_numpy(dtype=np.float64),
+        ])
+    )
+    note = f'weight_axes:{x_col},{y_col}'
+    log_fn(tr('extp_trist_coord_log', 'TriST coordinates: {note} (scale={scale:g})').format(note=note, scale=tot))
+    return df, x_col, y_col, (kx or 'w'), tot, note
+
+
+def _extp_trist_build_and_save_workbook(
+    merged_all,
+    x_col,
+    y_col,
+    ngrid,
+    out_path,
+    log_fn=None,
+    tr=None,
+    t0_1d_df=None,
+    fill_outside_hull=False,
+    apply_simplex=True,
+    compute_geom_tangent=True,
+    force_coord_kind=None,
+):
+    """
+    Compute T0_lines / TriST_boundaries / TriST_mask / optional _trist_cube.npz
+    from merged Gibbs rows (same schema as Pandat TriST extract).
+
+    TriST region = {dG = Gs − Gl ≤ 0} (solid-stable / T0-interior).
+    TriST_boundaries = T0 contours (dG = 0). Cube stores dG as f_cube for viz.
+
+    Coordinates: prefer mole fractions x(*) when available (or convert from w(*)
+    with molar masses). Rectangular grids are masked to the physical simplex
+    cX≥0, cY≥0, cX+cY≤total. Interpolation does not nearest-fill outside the
+    data convex hull (unless fill_outside_hull=True for legacy comparison).
+
+    Optional geometric tangent margin f_geom is a plane fit in (cX,cY,G) space
+    — not chemical potentials; see _extp_trist_geometric_tangent_margin.
+    """
+    if tr is None:
+        tr = lambda k, d='': d
+    if log_fn is None:
+        log_fn = lambda _m: None
+    if not SCIPY_AVAILABLE:
+        raise RuntimeError('scipy is required for TriST workbook generation.')
+
+    df_work, x_col, y_col, coord_kind, total_scale, coord_note = _extp_trist_resolve_mole_coords(
+        merged_all, x_col, y_col, log_fn=log_fn, tr=tr, force_kind=force_coord_kind,
+    )
 
     tcol = 'T (K)'
     gl_col = 'G_liquid (J/mol)'
     gs_col = 'G_solid (J/mol)'
-    df_pts = merged_all[[tcol, x_col, y_col, gl_col, gs_col]].copy()
-    for c in (tcol, x_col, y_col, gl_col, gs_col):
+    need = [tcol, x_col, y_col, gl_col, gs_col]
+    for c in need:
+        if c not in df_work.columns:
+            raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
+    df_pts = df_work[need].copy()
+    for c in need:
         df_pts[c] = pd.to_numeric(df_pts[c], errors='coerce')
-    df_pts = df_pts.dropna(subset=[tcol, x_col, y_col, gl_col, gs_col])
+    df_pts = df_pts.dropna(subset=need)
     if df_pts.empty:
         raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
 
     ngrid = max(25, min(160, int(ngrid)))
     t0_rows, bnd_rows, mask_rows = [], [], []
-    f_cube_list, T_cube_list = [], []
+    dg_cube_list, T_cube_list = [], []
     temps = sorted(df_pts[tcol].unique().tolist())
     g_xmin = float(np.nanmin(df_pts[x_col].to_numpy(dtype=np.float64)))
     g_xmax = float(np.nanmax(df_pts[x_col].to_numpy(dtype=np.float64)))
@@ -1223,9 +1892,18 @@ def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_pat
     g_ymax = float(np.nanmax(df_pts[y_col].to_numpy(dtype=np.float64)))
     if g_xmax - g_xmin < 1e-9 or g_ymax - g_ymin < 1e-9:
         raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
+    # Keep grid inside the physical simplex bbox when possible.
+    if apply_simplex:
+        g_xmin = max(g_xmin, 0.0)
+        g_ymin = max(g_ymin, 0.0)
+        g_xmax = min(g_xmax, float(total_scale))
+        g_ymax = min(g_ymax, float(total_scale))
+        if g_xmax - g_xmin < 1e-9 or g_ymax - g_ymin < 1e-9:
+            raise ValueError(tr('extp_trist_no_data', 'No merged rows.'))
     x_lin = np.linspace(g_xmin, g_xmax, ngrid)
     y_lin = np.linspace(g_ymin, g_ymax, ngrid)
     gx, gy = np.meshgrid(x_lin, y_lin)
+    simplex = _extp_trist_simplex_mask(gx, gy, total=total_scale) if apply_simplex else np.ones_like(gx, dtype=bool)
 
     for ti, Tval in enumerate(temps, start=1):
         if ti % 10 == 1:
@@ -1237,62 +1915,53 @@ def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_pat
         ys = sub[y_col].to_numpy(dtype=np.float64)
         gls = sub[gl_col].to_numpy(dtype=np.float64)
         gss = sub[gs_col].to_numpy(dtype=np.float64)
-        gl_grid = _extp_trist_grid_surface(np.column_stack([xs, ys]), gls, gx, gy)
-        gs_grid = _extp_trist_grid_surface(np.column_stack([xs, ys]), gss, gx, gy)
+        pts_xy = np.column_stack([xs, ys])
+        gl_grid = _extp_trist_grid_surface(pts_xy, gls, gx, gy, fill_outside_hull=fill_outside_hull)
+        gs_grid = _extp_trist_grid_surface(pts_xy, gss, gx, gy, fill_outside_hull=fill_outside_hull)
         if gl_grid is None or gs_grid is None:
             continue
         gl_grid = np.asarray(gl_grid, dtype=np.float64)
         gs_grid = np.asarray(gs_grid, dtype=np.float64)
-        valid = np.isfinite(gl_grid) & np.isfinite(gs_grid)
+        # Forbid gradients / ΔG on illegal compositions and hull exterior.
+        gl_grid = np.where(simplex, gl_grid, np.nan)
+        gs_grid = np.where(simplex, gs_grid, np.nan)
+        inside, dg_grid, valid = _extp_trist_solid_stable_mask(gl_grid, gs_grid)
+        valid = valid & simplex
+        inside = inside & valid
         if valid.sum() < 25:
             continue
-        dg_grid = gs_grid - gl_grid
-        dg_masked = np.ma.array(dg_grid, mask=~valid)
-        for ci, v in enumerate(_extp_trist_contours_xy(x_lin, y_lin, dg_masked, level=0.0)):
-            for pi, (xv, yv) in enumerate(v):
-                t0_rows.append({'T (K)': float(Tval), 'curve_id': int(ci), 'point_i': int(pi), x_col: float(xv), y_col: float(yv)})
 
-        dx = float(x_lin[1] - x_lin[0])
-        dy = float(y_lin[1] - y_lin[0])
-        dGL_dy, dGL_dx = np.gradient(gl_grid, dy, dx)
-        mu_x = np.asarray(dGL_dx, dtype=np.float64)
-        mu_y = np.asarray(dGL_dy, dtype=np.float64)
-        Xg = gx.astype(np.float64)
-        Yg = gy.astype(np.float64)
-        t0_side = valid & (gl_grid <= gs_grid)
-        cand_mask = t0_side & np.isfinite(mu_x) & np.isfinite(mu_y)
-        if cand_mask.sum() < 25:
-            continue
-        GSf = gs_grid.reshape(-1)
-        Xf = Xg.reshape(-1)
-        Yf = Yg.reshape(-1)
-        dom = valid.reshape(-1) & np.isfinite(GSf) & np.isfinite(Xf) & np.isfinite(Yf)
-        GSf, Xf, Yf = GSf[dom], Xf[dom], Yf[dom]
-        if len(GSf) < 50:
-            continue
-        mux0 = mu_x[cand_mask]
-        muy0 = mu_y[cand_mask]
-        x0 = Xg[cand_mask]
-        y0 = Yg[cand_mask]
-        gl0 = gl_grid[cand_mask]
-        mvals = np.empty(len(mux0), dtype=np.float64)
-        chunk = 256
-        for s in range(0, len(mux0), chunk):
-            e = min(s + chunk, len(mux0))
-            mu_xc = mux0[s:e][:, None]
-            mu_yc = muy0[s:e][:, None]
-            vals = GSf[None, :] - mu_xc * Xf[None, :] - mu_yc * Yf[None, :]
-            mvals[s:e] = np.nanmin(vals, axis=1)
-        fvals = mvals - (gl0 - mux0 * x0 - muy0 * y0)
-        f_grid = np.full_like(gl_grid, np.nan, dtype=np.float64)
-        f_grid[cand_mask] = fvals
-        f_cube_list.append(np.ascontiguousarray(f_grid, dtype=np.float32))
-        T_cube_list.append(float(Tval))
-        f_masked = np.ma.array(f_grid, mask=~cand_mask | ~np.isfinite(f_grid))
-        for ci, v in enumerate(_extp_trist_contours_xy(x_lin, y_lin, f_masked, level=0.0)):
+        # Optional geometric tangent diagnostic (search ⊂ valid ∩ simplex).
+        f_geom = None
+        if compute_geom_tangent:
+            # Cap candidates ~ O(N²); vectorized chunks + progress via log_fn.
+            max_c = max(800, min(8000, int(ngrid * ngrid // 2)))
+            f_geom = _extp_trist_geometric_tangent_margin(
+                gl_grid, gs_grid, gx, gy, search_mask=valid, cand_mask=inside,
+                max_candidates=max_c,
+                progress_fn=log_fn,
+            )
+
+        # T0 line and TriST boundary: both are dG = 0 (solid-stable side is dG ≤ 0).
+        # Keep exterior NaN / masked — never nearest-fill for contouring.
+        dg_masked = np.ma.array(dg_grid, mask=~valid | ~np.isfinite(dg_grid))
+        t0_curves = _extp_trist_contours_xy(x_lin, y_lin, dg_masked, level=0.0)
+        for ci, v in enumerate(t0_curves):
             for pi, (xv, yv) in enumerate(v):
-                bnd_rows.append({'T (K)': float(Tval), 'curve_id': int(ci), 'point_i': int(pi), x_col: float(xv), y_col: float(yv)})
-        inside = cand_mask & np.isfinite(f_grid) & (f_grid <= 0.0)
+                row = {
+                    'T (K)': float(Tval),
+                    'curve_id': int(ci),
+                    'point_i': int(pi),
+                    x_col: float(xv),
+                    y_col: float(yv),
+                }
+                t0_rows.append(row)
+                bnd_rows.append(dict(row))
+
+        dg_store = np.where(valid, dg_grid, np.nan).astype(np.float32)
+        dg_cube_list.append(np.ascontiguousarray(dg_store))
+        T_cube_list.append(float(Tval))
+
         if inside.any():
             ii, jj = np.where(inside)
             cap = 12000
@@ -1301,9 +1970,21 @@ def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_pat
                 ii, jj = ii[::step], jj[::step]
             for k2 in range(len(ii)):
                 i2, j2 = int(ii[k2]), int(jj[k2])
-                mask_rows.append({'T (K)': float(Tval), x_col: float(gx[i2, j2]), y_col: float(gy[i2, j2]), 'inside_TriST': 1, 'f(C0) (J/mol)': float(f_grid[i2, j2])})
+                dgv = float(dg_grid[i2, j2])
+                row = {
+                    'T (K)': float(Tval),
+                    x_col: float(gx[i2, j2]),
+                    y_col: float(gy[i2, j2]),
+                    'inside_TriST': 1,
+                    'dG = G_solid - G_liquid (J/mol)': dgv,
+                    # Legacy viz column: primary field is ΔG (not geometric f).
+                    'f(C0) (J/mol)': dgv,
+                }
+                if f_geom is not None and np.isfinite(f_geom[i2, j2]):
+                    row['f_geom_tangent (J/mol)'] = float(f_geom[i2, j2])
+                mask_rows.append(row)
 
-    if len(f_cube_list) >= 2:
+    if len(dg_cube_list) >= 2:
         try:
             cube_path = os.path.splitext(out_path)[0] + '_trist_cube.npz'
             np.savez_compressed(
@@ -1311,23 +1992,70 @@ def _extp_trist_build_and_save_workbook(merged_all, x_col, y_col, ngrid, out_pat
                 T_vals=np.asarray(T_cube_list, dtype=np.float64),
                 x_lin=np.asarray(x_lin, dtype=np.float64),
                 y_lin=np.asarray(y_lin, dtype=np.float64),
-                f_cube=np.stack(f_cube_list, axis=0),
+                f_cube=np.stack(dg_cube_list, axis=0),
+                field='dG',
                 x_col=str(x_col),
                 y_col=str(y_col),
+                coord_kind=str(coord_kind),
+                coord_note=str(coord_note),
+                comp_total=float(total_scale),
             )
-            log_fn(tr('extp_trist_cube_log', 'Saved 3D f(C0) field (for smooth f=0 surface, cubic in T): {path}').format(path=cube_path))
+            log_fn(
+                tr(
+                    'extp_trist_cube_log',
+                    'Saved 3D ΔG=Gs−Gl field (isosurface ΔG=0 = T0 / TriST boundary): {path}',
+                ).format(path=cube_path)
+            )
         except Exception as e:
-            log_fn(tr('extp_trist_cube_err', 'Could not save 3D f-field: {e}').format(e=str(e)))
+            log_fn(tr('extp_trist_cube_err', 'Could not save 3D ΔG field: {e}').format(e=str(e)))
 
     t0_df = pd.DataFrame(t0_rows)
     bnd_df = pd.DataFrame(bnd_rows)
     mask_df = pd.DataFrame(mask_rows)
+
+    # Primary T0 = 2D ΔG=0 contours (T0_lines). T0_tie_1D is only an auxiliary
+    # per-T summary derived from those lines (ternary-safe). Optional caller
+    # t0_1d_df is ignored for geometry; kept only if non-empty as extra rows tagged.
+    t0_aux = _extp_trist_t0_tie_1d_from_lines(t0_df, x_col, y_col)
+    if t0_1d_df is not None and not getattr(t0_1d_df, 'empty', True):
+        extra = t0_1d_df.copy()
+        if 'source' not in extra.columns:
+            extra['source'] = 'caller_aux'
+        t0_aux = pd.concat([t0_aux, extra], ignore_index=True, sort=False) if not t0_aux.empty else extra
+    if t0_aux is None:
+        t0_aux = pd.DataFrame()
+
+    check = _extp_trist_t0_check_report(
+        t0_df, bnd_df, mask_df, x_col, y_col, log_fn=log_fn, tr=tr,
+    )
+
     with pd.ExcelWriter(out_path, engine='openpyxl') as xw:
-        pd.DataFrame().to_excel(xw, sheet_name='T0_tie_1D', index=False)
+        t0_aux.to_excel(xw, sheet_name='T0_tie_1D', index=False)
         t0_df.to_excel(xw, sheet_name='T0_lines', index=False)
         bnd_df.to_excel(xw, sheet_name='TriST_boundaries', index=False)
         mask_df.to_excel(xw, sheet_name='TriST_mask', index=False)
+        meta = pd.DataFrame([{
+            'coord_kind': coord_kind,
+            'coord_note': coord_note,
+            'comp_total': total_scale,
+            'x_col': x_col,
+            'y_col': y_col,
+            'fill_outside_hull': bool(fill_outside_hull),
+            'apply_simplex': bool(apply_simplex),
+            'T0_primary': 'T0_lines (2D ΔG=0 contours)',
+            'T0_tie_1D': 'auxiliary per-T summary of T0_lines',
+            'hausdorff_T0_vs_TriST_bnd': check.get('hausdorff_T0_vs_TriST_bnd'),
+            'ok_boundaries_match_T0': check.get('ok_boundaries_match_T0'),
+            'ok_mask_inside_T0': check.get('ok_mask_inside_T0'),
+            'mask_dG_gt_0': check.get('mask_dG_gt_0'),
+            'tangent_note': (
+                'f_geom_tangent is a geometric plane in (cX,cY,G); not chemical potential. '
+                'Main TriST region is dG=Gs-Gl<=0. T0_lines is the check standard.'
+            ),
+        }])
+        meta.to_excel(xw, sheet_name='TriST_meta', index=False)
     return t0_df, bnd_df, mask_df
+
 
 
 def _extp_trist_find_col_df(df, names):
@@ -1367,15 +2095,13 @@ def _extp_trist_pandat_g_columns(df):
 
 
 def _extp_trist_w_columns(df):
-    out = []
-    for c in df.columns:
-        if not isinstance(c, str):
-            continue
-        m = re.match(r'^\s*w\(\s*([A-Za-z]+)\s*\)\s*$', c, re.IGNORECASE)
-        if m:
-            el = m.group(1).title()
-            out.append((c, f"w({el})"))
-    return out
+    """Backward-compatible: weight-fraction columns only."""
+    return _extp_trist_comp_columns(df, kind='w')
+
+
+def _extp_trist_x_columns(df):
+    """Mole-fraction columns x(*)."""
+    return _extp_trist_comp_columns(df, kind='x')
 
 
 def _extp_trist_merge_solid_liquid(
@@ -1387,14 +2113,22 @@ def _extp_trist_merge_solid_liquid(
     w_map,
     path_label,
     file_name,
+    extra_comp_map=None,
+    preferred_solid=None,
 ):
     """
-    Pair LIQUID and solid (FCC/BCC) rows at the same (T, w*) and return rows with
-    G_solid, G_liquid, dG = G_solid - G_liquid.
-    w_map: list of (orig_col, canonical_name) for w(*) columns.
+    Pair LIQUID and solid rows at the same (T, composition*) and return
+    rows with G_solid, G_liquid, dG = G_solid - G_liquid.
+
+    When several solids exist at the same (T, composition*), keep the one with
+    lowest G_solid. If preferred_solid is FCC/BCC/HCP, prefer that family first
+    (then fall back to lowest Gs among all solids if none match).
     """
-    wcols = [a for a, _ in w_map]
+    key_orig = [a for a, _ in w_map]
     ren = {a: b for a, b in w_map}
+    extra_comp_map = list(extra_comp_map or [])
+    extra_orig = [a for a, _ in extra_comp_map if a not in key_orig]
+    extra_ren = {a: b for a, b in extra_comp_map if a in extra_orig}
     p = df[phase_col].astype(str)
     p_up = p.str.upper()
     m_sol = p_up.str.contains('FCC', na=False) | p_up.str.contains('BCC', na=False) | p_up.str.contains('HCP', na=False)
@@ -1403,9 +2137,15 @@ def _extp_trist_merge_solid_liquid(
         m_liq = p_up.str.contains('LIQUID', na=False)
         m_sol = ~m_liq
     tname = 'T (K)'
-    ds = df.loc[m_sol, [t_col, phase_col, g_sol] + wcols].copy()
-    dl = df.loc[m_liq, [t_col, g_liq] + wcols].copy()
+    sol_cols = [t_col, phase_col, g_sol] + key_orig + extra_orig
+    liq_cols = [t_col, g_liq] + key_orig
+    sol_cols = list(dict.fromkeys(sol_cols))
+    liq_cols = list(dict.fromkeys(liq_cols))
+    ds = df.loc[m_sol, sol_cols].copy()
+    dl = df.loc[m_liq, liq_cols].copy()
     ds = ds.rename(columns=ren)
+    if extra_ren:
+        ds = ds.rename(columns=extra_ren)
     ds = ds.rename(columns={t_col: tname, g_sol: 'G_solid (J/mol)'})
     ds['phase (solid)'] = ds[phase_col].astype(str)
     ds = ds.drop(columns=[phase_col], errors='ignore')
@@ -1418,8 +2158,31 @@ def _extp_trist_merge_solid_liquid(
     for c in key[1:]:
         ds[c] = ds[c].round(10)
         dl[c] = dl[c].round(10)
+    for c in [b for _, b in extra_comp_map]:
+        if c in ds.columns:
+            ds[c] = pd.to_numeric(ds[c], errors='coerce')
     ds['G_solid (J/mol)'] = pd.to_numeric(ds['G_solid (J/mol)'], errors='coerce')
     dl['G_liquid (J/mol)'] = pd.to_numeric(dl['G_liquid (J/mol)'], errors='coerce')
+    ds = ds.dropna(subset=['G_solid (J/mol)'] + key)
+    dl = dl.dropna(subset=['G_liquid (J/mol)'] + key)
+    if ds.empty or dl.empty:
+        return None, 'no_inner_join'
+
+    pref = (preferred_solid or '').strip().upper() or None
+    # Per (T, C*): prefer user solid family if present, else lowest Gs among all solids.
+    ds = ds.copy()
+    if pref:
+        ds['_pref_rank'] = ds['phase (solid)'].astype(str).str.upper().str.contains(pref, na=False).astype(int)
+        ds = ds.sort_values(['_pref_rank', 'G_solid (J/mol)'], ascending=[False, True], kind='mergesort')
+    else:
+        ds = ds.sort_values('G_solid (J/mol)', kind='mergesort')
+    ds = ds.groupby(key, as_index=False, sort=False).first()
+    ds = ds.drop(columns=['_pref_rank'], errors='ignore')
+
+    # Liquid: if duplicates, keep lowest Gl (most stable liquid).
+    dl = dl.sort_values('G_liquid (J/mol)', kind='mergesort')
+    dl = dl.groupby(key, as_index=False, sort=False).first()
+
     m = pd.merge(ds, dl, on=key, how='inner')
     if m.empty:
         return None, 'no_inner_join'
@@ -1427,65 +2190,236 @@ def _extp_trist_merge_solid_liquid(
     m.insert(0, 'File', file_name)
     m.insert(1, 'Path', path_label)
     m['phase (liquid)'] = 'LIQUID'
-    m['in_TriST dG le 0'] = (m['dG = G_solid - G_liquid (J/mol)'] <= 0).astype(int)
+    m['below_T0_dG_le_0'] = (m['dG = G_solid - G_liquid (J/mol)'] <= 0).astype(int)
     return m, None
+
+
+def _extp_trist_t0_tie_1d_from_lines(t0_df, x_col, y_col):
+    """
+    Auxiliary per-T summary of 2D T0 (ΔG=0) contours.
+
+    This replaces the old single-axis zero-crossing scan, which is unsuitable
+    for ternary sections. Primary T0 geometry is always T0_lines.
+    """
+    if t0_df is None or getattr(t0_df, 'empty', True):
+        return pd.DataFrame()
+    need = ['T (K)', x_col, y_col]
+    if any(c not in t0_df.columns for c in need):
+        return pd.DataFrame()
+    sub = t0_df[need + ([c for c in ('curve_id',) if c in t0_df.columns])].copy()
+    for c in need:
+        sub[c] = pd.to_numeric(sub[c], errors='coerce')
+    sub = sub.dropna(subset=need)
+    if sub.empty:
+        return pd.DataFrame()
+    rows = []
+    for Tval, g in sub.groupby('T (K)', sort=True):
+        n_curves = int(g['curve_id'].nunique()) if 'curve_id' in g.columns else 1
+        rows.append({
+            'T (K)': float(Tval),
+            'source': 'T0_lines_2D_dG0',
+            'n_curves': n_curves,
+            'n_points': int(len(g)),
+            f'{x_col} mean': float(g[x_col].mean()),
+            f'{y_col} mean': float(g[y_col].mean()),
+            f'{x_col} min': float(g[x_col].min()),
+            f'{x_col} max': float(g[x_col].max()),
+            f'{y_col} min': float(g[y_col].min()),
+            f'{y_col} max': float(g[y_col].max()),
+            'note': 'Auxiliary summary of 2D ΔG=0 contours; use T0_lines as the check standard.',
+        })
+    return pd.DataFrame(rows)
+
+
+def _extp_trist_polyline_points(df, x_col, y_col, t_col='T (K)'):
+    """Collect finite (x,y) points, optionally filtered later by T."""
+    if df is None or getattr(df, 'empty', True):
+        return np.zeros((0, 2), dtype=np.float64)
+    if x_col not in df.columns or y_col not in df.columns:
+        return np.zeros((0, 2), dtype=np.float64)
+    x = pd.to_numeric(df[x_col], errors='coerce').to_numpy(dtype=np.float64)
+    y = pd.to_numeric(df[y_col], errors='coerce').to_numpy(dtype=np.float64)
+    m = np.isfinite(x) & np.isfinite(y)
+    return np.column_stack([x[m], y[m]])
+
+
+def _extp_trist_hausdorff_xy(pts_a, pts_b):
+    """Symmetric Hausdorff distance between two (n,2)/(m,2) point sets."""
+    a = np.asarray(pts_a, dtype=np.float64)
+    b = np.asarray(pts_b, dtype=np.float64)
+    if a.ndim != 2 or b.ndim != 2 or a.shape[0] == 0 or b.shape[0] == 0:
+        return float('nan')
+    try:
+        from scipy.spatial.distance import directed_hausdorff
+        d_ab = float(directed_hausdorff(a, b)[0])
+        d_ba = float(directed_hausdorff(b, a)[0])
+        return max(d_ab, d_ba)
+    except Exception:
+        # Brute-force fallback
+        d1 = np.max(np.min(np.linalg.norm(a[:, None, :] - b[None, :, :], axis=2), axis=1))
+        d2 = np.max(np.min(np.linalg.norm(b[:, None, :] - a[None, :, :], axis=2), axis=1))
+        return float(max(d1, d2))
+
+
+def _extp_trist_t0_check_report(t0_df, bnd_df, mask_df, x_col, y_col, log_fn=None, tr=None):
+    """
+    T0 as check standard: TriST_boundaries should match T0_lines (ΔG=0), and
+    TriST_mask samples should lie on the solid-stable side (dG ≤ 0).
+
+    Returns a metrics dict and logs a short human-readable summary.
+    """
+    if tr is None:
+        tr = lambda k, d='': d
+    if log_fn is None:
+        log_fn = lambda _m: None
+    metrics = {
+        'hausdorff_T0_vs_TriST_bnd': float('nan'),
+        'n_T0_pts': 0,
+        'n_bnd_pts': 0,
+        'mask_n': 0,
+        'mask_dG_gt_0': 0,
+        'mask_area_proxy': float('nan'),
+        'bnd_area_proxy_ratio': float('nan'),
+        'ok_boundaries_match_T0': False,
+        'ok_mask_inside_T0': False,
+    }
+    pt0 = _extp_trist_polyline_points(t0_df, x_col, y_col)
+    pb = _extp_trist_polyline_points(bnd_df, x_col, y_col)
+    metrics['n_T0_pts'] = int(pt0.shape[0])
+    metrics['n_bnd_pts'] = int(pb.shape[0])
+    hd = _extp_trist_hausdorff_xy(pt0, pb)
+    metrics['hausdorff_T0_vs_TriST_bnd'] = hd
+    # Numerical match tolerance relative to composition span.
+    span = 1.0
+    if pt0.shape[0] and pb.shape[0]:
+        span = float(max(
+            np.nanmax(pt0[:, 0]) - np.nanmin(pt0[:, 0]),
+            np.nanmax(pt0[:, 1]) - np.nanmin(pt0[:, 1]),
+            np.nanmax(pb[:, 0]) - np.nanmin(pb[:, 0]),
+            np.nanmax(pb[:, 1]) - np.nanmin(pb[:, 1]),
+            1e-12,
+        ))
+    tol = max(1e-9, 1e-4 * span)
+    metrics['ok_boundaries_match_T0'] = bool(np.isfinite(hd) and hd <= tol)
+
+    dg_col = 'dG = G_solid - G_liquid (J/mol)'
+    if mask_df is not None and not getattr(mask_df, 'empty', True) and dg_col in mask_df.columns:
+        dg = pd.to_numeric(mask_df[dg_col], errors='coerce').to_numpy(dtype=np.float64)
+        dg = dg[np.isfinite(dg)]
+        metrics['mask_n'] = int(dg.size)
+        metrics['mask_dG_gt_0'] = int(np.sum(dg > 1e-9))
+        metrics['ok_mask_inside_T0'] = metrics['mask_dG_gt_0'] == 0
+        # Area proxy: count of mask samples (already on T0-interior grid).
+        metrics['mask_area_proxy'] = float(metrics['mask_n'])
+    else:
+        metrics['ok_mask_inside_T0'] = True
+
+    # Point-count ratio as a crude “area” difference between T0 and boundary polylines.
+    if metrics['n_T0_pts'] > 0:
+        metrics['bnd_area_proxy_ratio'] = float(metrics['n_bnd_pts']) / float(metrics['n_T0_pts'])
+
+    msg = tr(
+        'extp_trist_t0_check_log',
+        'T0 check standard: Hausdorff(T0_lines, TriST_boundaries)={hd:.6g} '
+        '(tol={tol:.6g}, match={match}); TriST_mask n={n}, dG>0={npos} (inside_T0={inside}).',
+    ).format(
+        hd=hd if np.isfinite(hd) else float('nan'),
+        tol=tol,
+        match=bool(metrics['ok_boundaries_match_T0']),
+        n=metrics['mask_n'],
+        npos=metrics['mask_dG_gt_0'],
+        inside=bool(metrics['ok_mask_inside_T0']),
+    )
+    log_fn(msg)
+    return metrics
 
 
 def _extp_trist_interp_t0_1d(merged, wcols_canon):
     """
-    Along the composition coordinate with the largest w-range, find (w*) where dG crosses zero
-    by linear interpolation; all w components are interpolated along the same segment.
+    Deprecated for ternary TriST.
+
+    Kept as a thin compatibility stub: returns None so callers fall through to
+    2D T0_lines summaries (_extp_trist_t0_tie_1d_from_lines). A single-axis
+    zero crossing is not a valid ternary T0 representation.
     """
-    if merged is None or len(merged) < 2:
-        return None
-    dgcol = 'dG = G_solid - G_liquid (J/mol)'
-    if dgcol not in merged.columns:
-        return None
-    sub = merged.copy()
-    sub[dgcol] = pd.to_numeric(sub[dgcol], errors='coerce')
-    sub = sub.dropna(subset=[dgcol])
-    if len(sub) < 2:
-        return None
-    ranges = {}
-    for c in wcols_canon:
-        if c in sub.columns:
-            x = pd.to_numeric(sub[c], errors='coerce')
-            if x.notna().any():
-                ranges[c] = float(x.max() - x.min())
-    if not ranges:
-        return None
-    scan = max(ranges, key=ranges.get)
-    sub = sub.sort_values(scan)
-    dg = sub[dgcol].to_numpy(dtype=np.float64)
-    out = {'T (K)': float(pd.to_numeric(sub['T (K)'], errors='coerce').iloc[0])}
-    out['T0 scan axis (max w range)'] = scan
-    for i in range(len(dg) - 1):
-        if abs(dg[i]) < 1e-9:
-            for c in wcols_canon:
-                if c in sub.columns:
-                    out[c] = float(sub[c].to_numpy()[i])
-            out['dG (J/mol)'] = 0.0
-            out['interp'] = 'on_grid'
-            return out
-        if dg[i] * dg[i + 1] < 0:
-            tfrac = -dg[i] / (dg[i + 1] - dg[i])
-            for c in wcols_canon:
-                if c not in sub.columns:
-                    continue
-                wc = sub[c].to_numpy(dtype=np.float64)
-                out[c] = float(wc[i] + tfrac * (wc[i + 1] - wc[i]))
-            out['dG (J/mol)'] = 0.0
-            out['interp'] = 'linear'
-            return out
-    if np.isfinite(dg).all() and len(dg) > 0 and np.nanmin(np.abs(dg)) < 0.1:
-        j = int(np.nanargmin(np.abs(dg)))
-        for c in wcols_canon:
-            if c in sub.columns:
-                out[c] = float(sub[c].to_numpy()[j])
-        out['dG (J/mol)'] = float(dg[j])
-        out['interp'] = 'near_zero'
-        return out
     return None
+
+
+def _extp_trist_read_line_sheet(xlsx_path, sheet_name, a_col, b_col):
+    """Load T0_lines / TriST_boundaries sheet; return DataFrame or None."""
+    try:
+        df = pd.read_excel(xlsx_path, sheet_name=sheet_name, engine='openpyxl')
+    except Exception:
+        return None
+    if df is None or df.empty or a_col not in df.columns or b_col not in df.columns:
+        return None
+    return df
+
+
+def _extp_trist_boundary_groups_df(dfb, a_col, b_col):
+    """Yield ((T, curve_id?), group_df) for polyline sheets."""
+    if dfb is None or dfb.empty:
+        return
+    dfb = dfb.copy()
+    dfb['T (K)'] = pd.to_numeric(dfb['T (K)'], errors='coerce')
+    dfb[a_col] = pd.to_numeric(dfb[a_col], errors='coerce')
+    dfb[b_col] = pd.to_numeric(dfb[b_col], errors='coerce')
+    dfb = dfb.dropna(subset=['T (K)', a_col, b_col])
+    if dfb.empty:
+        return
+    if 'curve_id' in dfb.columns and 'point_i' in dfb.columns:
+        dfb['curve_id'] = pd.to_numeric(dfb['curve_id'], errors='coerce')
+        dfb['point_i'] = pd.to_numeric(dfb['point_i'], errors='coerce')
+        for gk, gdf in dfb.groupby(['T (K)', 'curve_id'], sort=True):
+            yield gk, gdf.sort_values('point_i') if gdf['point_i'].notna().any() else gdf
+    else:
+        for gk, gdf in dfb.groupby(['T (K)'], sort=True):
+            yield gk, gdf
+
+
+def _extp_trist_add_t0_overlay_plotly(fig, t0_df, a_col, b_col, tr=None):
+    """Overlay T0_lines on a Plotly figure (check-standard reference)."""
+    if tr is None:
+        tr = lambda k, d='': d
+    if t0_df is None or t0_df.empty or fig is None:
+        return 0
+    if not PLOTLY_AVAILABLE:
+        return 0
+    n = 0
+    name0 = tr('extp_trist_legend_t0', 'T0 line (dG=0)')
+    for gi, (_gk, gdf) in enumerate(_extp_trist_boundary_groups_df(t0_df, a_col, b_col)):
+        tt = float(gdf['T (K)'].iloc[0])
+        fig.add_trace(
+            go.Scatter3d(
+                x=gdf[a_col], y=gdf[b_col], z=np.full(len(gdf), tt, dtype=float),
+                mode='lines',
+                line=dict(width=4, color='#1a252f', dash='dash'),
+                name=name0 if gi == 0 else f'{name0} @ {tt:.0f}K',
+                showlegend=(gi == 0),
+                hovertemplate=f'T0 T={tt:.0f}K<br>{a_col}=%{{x:.4g}}<br>{b_col}=%{{y:.4g}}<extra></extra>',
+            )
+        )
+        n += 1
+    return n
+
+
+def _extp_trist_add_t0_overlay_mpl(ax, t0_df, a_col, b_col, tr=None):
+    """Overlay T0_lines on a Matplotlib 3D axes."""
+    if tr is None:
+        tr = lambda k, d='': d
+    if t0_df is None or t0_df.empty or ax is None:
+        return 0
+    n = 0
+    name0 = tr('extp_trist_legend_t0', 'T0 line (dG=0)')
+    for gi, (_gk, gdf) in enumerate(_extp_trist_boundary_groups_df(t0_df, a_col, b_col)):
+        tt = float(gdf['T (K)'].iloc[0])
+        xs = gdf[a_col].to_numpy(dtype=np.float64)
+        ys = gdf[b_col].to_numpy(dtype=np.float64)
+        zs = np.full(len(gdf), tt, dtype=float)
+        ax.plot(xs, ys, zs, color='#1a252f', linewidth=1.8, linestyle='--',
+                label=name0 if gi == 0 else None)
+        n += 1
+    return n
 
 
 def _ternary_to_xy(a, b, c):
@@ -1499,14 +2433,16 @@ def _ternary_to_xy(a, b, c):
 
 
 def _extp_trist_pick_ternary_wcols(df):
-    """Pick up to 3 w(*) columns (prefer those with largest variance)."""
+    """Pick up to 3 composition columns; prefer x(*) then w(*), by variance."""
     if df is None or not hasattr(df, 'columns'):
         return []
-    wcols = [c for c in df.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
-    if len(wcols) <= 3:
-        return wcols
+    xcols = [c for c, _ in _extp_trist_comp_columns(df, 'x')]
+    wcols = [c for c, _ in _extp_trist_comp_columns(df, 'w')]
+    cols = xcols if len(xcols) >= 2 else wcols
+    if len(cols) <= 3:
+        return cols
     vars_ = []
-    for c in wcols:
+    for c in cols:
         x = pd.to_numeric(df[c], errors='coerce')
         vars_.append((float(x.var(skipna=True)) if x.notna().any() else 0.0, c))
     vars_.sort(reverse=True)
@@ -1514,23 +2450,31 @@ def _extp_trist_pick_ternary_wcols(df):
 
 
 def _extp_trist_pick_axes_2d(df):
-    """Pick two w(*) columns for 2D composition plane (highest variance)."""
-    wcols = [c for c in _extp_trist_pick_ternary_wcols(df) if isinstance(c, str) and c.strip().lower().startswith('w(')]
-    if len(wcols) >= 2:
-        return wcols[0], wcols[1]
-    # fallback: any w columns
+    """
+    Pick two composition columns for the 2D plane.
+    Prefer mole fractions x(*) when ≥2 are present; else w(*). Highest variance first.
+    """
     if df is None or not hasattr(df, 'columns'):
         return None, None
-    wcols2 = [c for c in df.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
-    if len(wcols2) >= 2:
-        return wcols2[0], wcols2[1]
+    for kind in ('x', 'w'):
+        cols = [c for c, _ in _extp_trist_comp_columns(df, kind)]
+        if len(cols) < 2:
+            continue
+        vars_ = []
+        for c in cols:
+            x = pd.to_numeric(df[c], errors='coerce')
+            vars_.append((float(x.var(skipna=True)) if x.notna().any() else 0.0, c))
+        vars_.sort(reverse=True)
+        return vars_[0][1], vars_[1][1]
     return None, None
 
 
-def _extp_trist_grid_surface(points_xy, values, gx, gy):
+def _extp_trist_grid_surface(points_xy, values, gx, gy, fill_outside_hull=False):
     """
     Interpolate scattered points onto (gx, gy) grid.
-    Prefer cubic; fallback to linear then nearest for NaN fill.
+    Prefer cubic, then linear. Exterior of the data convex hull stays NaN
+    (gradient / contour / min_C must mask those cells). Do NOT nearest-fill
+    outside the hull unless fill_outside_hull=True (legacy comparison only).
     """
     if points_xy is None or len(points_xy) < 4:
         return None
@@ -1538,25 +2482,30 @@ def _extp_trist_grid_surface(points_xy, values, gx, gy):
         return None
     pts = np.asarray(points_xy, dtype=np.float64)
     vals = np.asarray(values, dtype=np.float64)
+    ok = np.isfinite(pts).all(axis=1) & np.isfinite(vals)
+    pts, vals = pts[ok], vals[ok]
+    if len(pts) < 4:
+        return None
     try:
-        zi = griddata(pts, vals, (gx, gy), method='cubic')
+        zi = griddata(pts, vals, (gx, gy), method='cubic', fill_value=np.nan)
     except Exception:
         zi = None
     if zi is None:
         try:
-            zi = griddata(pts, vals, (gx, gy), method='linear')
+            zi = griddata(pts, vals, (gx, gy), method='linear', fill_value=np.nan)
         except Exception:
             zi = None
     if zi is None:
         return None
-    # fill NaNs progressively
+    # Fill interior cubic holes with linear only (still inside hull → finite).
     if np.isnan(zi).any():
         try:
-            zlin = griddata(pts, vals, (gx, gy), method='linear')
+            zlin = griddata(pts, vals, (gx, gy), method='linear', fill_value=np.nan)
             zi = np.where(np.isnan(zi), zlin, zi)
         except Exception:
             pass
-    if np.isnan(zi).any():
+    # Legacy only: nearest invents values outside the hull — off by default.
+    if fill_outside_hull and np.isnan(zi).any():
         try:
             znn = griddata(pts, vals, (gx, gy), method='nearest')
             zi = np.where(np.isnan(zi), znn, zi)
@@ -1565,43 +2514,111 @@ def _extp_trist_grid_surface(points_xy, values, gx, gy):
     return zi
 
 
+# Reused matplotlib axes for contour fallback (avoid per-temperature Figure alloc).
+_TRIST_CONTOUR_AX = None
+
+
 def _extp_trist_contours_xy(x_lin, y_lin, z2d, level=0.0):
-    """Return list of (n,2) vertices for contour z=level."""
-    if not MATPLOTLIB_AVAILABLE:
-        return []
+    """
+    Contour z=level → list of (n,2) polylines.
+    Prefers contourpy (no Figure). Falls back to a reused matplotlib Axes.
+    Masked / NaN cells are skipped (no blind nearest fill).
+    """
     if z2d is None:
         return []
+    x_lin = np.asarray(x_lin, dtype=np.float64).ravel()
+    y_lin = np.asarray(y_lin, dtype=np.float64).ravel()
+    if np.ma.isMaskedArray(z2d):
+        z = np.ma.filled(z2d.astype(np.float64), np.nan)
+    else:
+        z = np.asarray(z2d, dtype=np.float64)
+    if z.ndim != 2 or z.shape[0] < 2 or z.shape[1] < 2:
+        return []
+    if not np.isfinite(z).any():
+        return []
+    # Ensure level is bracketed somewhere; otherwise empty.
+    zfin = z[np.isfinite(z)]
+    lvl = float(level)
+    if zfin.size and (zfin.min() > lvl or zfin.max() < lvl):
+        # allow equality on grid
+        if not np.any(np.isclose(zfin, lvl, rtol=0.0, atol=1e-12)):
+            pass  # still try — saddle / touching contours
+
+    # 1) contourpy (dependency of modern matplotlib)
     try:
-        fig = plt.figure(figsize=(4, 3), dpi=72)
-        ax = fig.add_subplot(111)
-        cs = ax.contour(x_lin, y_lin, z2d, levels=[level])
+        from contourpy import contour_generator
+        cg = contour_generator(x=x_lin, y=y_lin, z=z)
+        segs = cg.lines(lvl)
         out = []
-        # Use allsegs to avoid deprecated collections access in Matplotlib >=3.8.
-        segs = cs.allsegs[0] if getattr(cs, "allsegs", None) else []
+        for v in segs or []:
+            arr = np.asarray(v, dtype=np.float64)
+            if arr.ndim == 2 and arr.shape[0] >= 2:
+                out.append(arr)
+        return out
+    except Exception:
+        pass
+
+    # 2) Reuse one matplotlib Axes (no new Figure per temperature).
+    if not MATPLOTLIB_AVAILABLE:
+        return []
+    global _TRIST_CONTOUR_AX
+    try:
+        if _TRIST_CONTOUR_AX is None or getattr(_TRIST_CONTOUR_AX, 'figure', None) is None:
+            fig = plt.figure(figsize=(3, 2), dpi=72)
+            _TRIST_CONTOUR_AX = fig.add_subplot(111)
+        ax = _TRIST_CONTOUR_AX
+        ax.clear()
+        cs = ax.contour(x_lin, y_lin, np.ma.masked_invalid(z), levels=[lvl])
+        out = []
+        segs = cs.allsegs[0] if getattr(cs, 'allsegs', None) else []
         for v in segs:
             if v is not None and len(v) >= 2:
                 out.append(np.asarray(v, dtype=np.float64))
-        plt.close(fig)
         return out
     except Exception:
-        try:
-            plt.close('all')
-        except Exception:
-            pass
         return []
 
 
-def _extp_trist_filled_f_for_rgi(f_arr):
-    """Replace non-finite values so RegularGridInterpolator can use cubic method."""
-    a = np.asarray(f_arr, dtype=np.float64)
-    a = np.where(np.isfinite(a), a, 1.0e9)
+def _extp_trist_nn_fill_finite(a):
+    """
+    Nearest-finite fill for RegularGridInterpolator input only.
+    Does NOT invent a large sentinel (old 1e9 distorted ΔG=0 isosurfaces).
+    """
+    a = np.asarray(a, dtype=np.float64).copy()
+    nan_mask = ~np.isfinite(a)
+    if not nan_mask.any() or nan_mask.all():
+        return a
+    try:
+        from scipy.ndimage import distance_transform_edt
+        idx = distance_transform_edt(nan_mask, return_distances=False, return_indices=True)
+        a = a[tuple(idx)]
+    except Exception:
+        # Fallback: fill with nanmean of finite (still remasked after RGI).
+        fill = float(np.nanmean(a)) if np.isfinite(a).any() else 0.0
+        a[nan_mask] = fill
     return a
+
+
+def _extp_trist_filled_f_for_rgi(f_arr):
+    """
+    Prepare cube for RGI without 1e9 sentinels.
+
+    Returns (f_fill, valid01) where valid01 is float 1/0 mask of originally
+    finite samples. Caller must remask interpolated results with valid01.
+    """
+    a = np.asarray(f_arr, dtype=np.float64)
+    valid01 = np.where(np.isfinite(a), 1.0, 0.0)
+    return _extp_trist_nn_fill_finite(a), valid01
 
 
 def _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube):
     """
-    Interpolate saved f(C0) cube onto a dense (T, y, x) grid.
+    Interpolate saved ΔG cube (key f_cube) onto a dense (T, y, x) grid.
     Returns (Tq, y_lin, x_lin, Vt, V_plot) where Vt is (nt, ny, nx) and V_plot is (nx, ny, nt) for Plotly.
+
+    NaNs are not replaced by 1e9. After RGI, samples outside the original
+    finite support (validity < 0.5) are set back to NaN so ΔG=0 isosurfaces
+    are not pulled by exterior fillers.
     """
     if not SCIPY_AVAILABLE:
         return None
@@ -1617,24 +2634,39 @@ def _extp_trist_dense_f_volume(T_vals, y_lin, x_lin, f_cube):
         f3 = f3[order]
     if f3.ndim != 3 or f3.shape[0] != T1.size:
         return None
-    f_fill = _extp_trist_filled_f_for_rgi(f3)
+    f_fill, valid01 = _extp_trist_filled_f_for_rgi(f3)
+    if not np.isfinite(f_fill).any():
+        return None
     method = "cubic" if T1.size >= 4 and f_fill.shape[1] >= 4 and f_fill.shape[2] >= 4 else "linear"
     try:
-        rgi = RegularGridInterpolator((T1, y_lin, x_lin), f_fill, method=method, bounds_error=False, fill_value=np.nan)
+        rgi = RegularGridInterpolator(
+            (T1, y_lin, x_lin), f_fill, method=method, bounds_error=False, fill_value=np.nan,
+        )
     except Exception:
-        rgi = RegularGridInterpolator((T1, y_lin, x_lin), f_fill, method="linear", bounds_error=False, fill_value=np.nan)
+        rgi = RegularGridInterpolator(
+            (T1, y_lin, x_lin), f_fill, method="linear", bounds_error=False, fill_value=np.nan,
+        )
+    try:
+        rgi_v = RegularGridInterpolator(
+            (T1, y_lin, x_lin), valid01, method="linear", bounds_error=False, fill_value=0.0,
+        )
+    except Exception:
+        rgi_v = None
     t_lo, t_hi = float(T1[0]), float(T1[-1])
     n_t = int(max(32, min(200, 4 * T1.size)))
     Tq = np.linspace(t_lo, t_hi, n_t)
     T3, Y3, X3 = np.meshgrid(Tq, y_lin, x_lin, indexing="ij")
     pts = np.stack((T3, Y3, X3), -1)
-    Vt = rgi(pts)
+    Vt = np.asarray(rgi(pts), dtype=np.float64)
+    if rgi_v is not None:
+        w = np.asarray(rgi_v(pts), dtype=np.float64)
+        Vt = np.where(np.isfinite(Vt) & (w >= 0.5), Vt, np.nan)
     V_plot = np.transpose(Vt, (2, 1, 0)).astype(np.float64)
     return Tq, y_lin, x_lin, Vt, V_plot
 
 
 def _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
-    """Slice the saved f(C0) cube to user XY/T bounds."""
+    """Slice the saved ΔG cube (key f_cube) to user XY/T bounds."""
     T_vals = np.asarray(T_vals, dtype=np.float64).ravel()
     y_lin = np.asarray(y_lin, dtype=np.float64).ravel()
     x_lin = np.asarray(x_lin, dtype=np.float64).ravel()
@@ -1663,7 +2695,7 @@ def _extp_trist_clip_cube(T_vals, y_lin, x_lin, f_cube, px0=None, px1=None, py0=
 
 
 def _extp_trist_f_for_viz_volume(V_plot):
-    """Mask f grid for Plotly Volume: only finite f <= 0 kept."""
+    """Mask ΔG grid for Plotly Volume: only finite ΔG <= 0 (TriST inside) kept."""
     V = np.asarray(V_plot, dtype=np.float64).copy()
     V[~np.isfinite(V)] = np.nan
     V[V > 0.0] = np.nan
@@ -1905,14 +2937,14 @@ def _extp_trist_loft_surface_plotly(tr, rings, color="rgba(192,57,43,0.55)",
         color=color,
         opacity=0.55,
         flatshading=False,
-        name=tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)"),
+        name=tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, ΔG=0 surface)"),
         showscale=False,
     )
 
 
 def _extp_trist_mpl_isosurface_f_zero(ax, T_vals, y_lin, x_lin, f_cube, color="#c0392b", alpha=0.48,
                                       label=None, px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
-    """Matplotlib 3D f=0 isosurface (requires scikit-image marching_cubes)."""
+    """Matplotlib 3D ΔG=0 isosurface (requires scikit-image marching_cubes)."""
     if not MATPLOTLIB_AVAILABLE:
         return False
     if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
@@ -1958,7 +2990,7 @@ def _extp_trist_mpl_isosurface_f_zero(ax, T_vals, y_lin, x_lin, f_cube, color="#
 def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32,
                                   px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
     """
-    Plotly go.Isosurface for f=0, with cubic/linear regular-grid interpolation in (T, y, x).
+    Plotly go.Isosurface for ΔG=0, with cubic/linear regular-grid interpolation in (T, y, x).
     Scene axes: x = composition X, y = composition Y, z = T (K).
     """
     if not PLOTLY_AVAILABLE:
@@ -1983,7 +3015,7 @@ def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32
     iso_max = 0.0
     name = tr(
         "extp_trist_trace_smooth",
-        "TriST boundary f=0 (cubic in T, x, y; from saved 3D field)",
+        "TriST / T0 boundary ΔG=0 (cubic in T, x, y; from saved 3D ΔG field)",
     )
     return go.Isosurface(
         x=x_lin,
@@ -2003,7 +3035,7 @@ def _extp_trist_isosurface_f_zero(tr, T_vals, y_lin, x_lin, f_cube, opacity=0.32
 
 def _extp_trist_plotly_mask_dome(tr, T_vals, y_lin, x_lin, f_cube, show_volume=True,
                                  px0=None, px1=None, py0=None, py1=None, tmin=None, tmax=None):
-    """Plotly traces: semi-transparent interior volume + f=0 dome surface."""
+    """Plotly traces: semi-transparent interior volume + ΔG=0 dome surface."""
     if not PLOTLY_AVAILABLE:
         return []
     if px0 is not None and px1 is not None and py0 is not None and py1 is not None:
@@ -2040,7 +3072,7 @@ def _extp_trist_plotly_mask_dome(tr, T_vals, y_lin, x_lin, f_cube, show_volume=T
         tr, T_vals, y_lin, x_lin, f_cube, opacity=0.58,
     )
     if iso is not None:
-        iso.name = tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+        iso.name = tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, ΔG=0 surface)")
         traces.append(iso)
     return traces
 
@@ -2063,16 +3095,20 @@ except ImportError:
     PLOTLY_AVAILABLE = False
 
 try:
-    from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern
     from scipy.interpolate import griddata, RegularGridInterpolator
     from scipy.spatial import Delaunay
     from scipy.ndimage import gaussian_filter
-    SKLEARN_AVAILABLE = True
     SCIPY_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
+except Exception:
+    # ImportError, or binary incompatibility with NumPy (ValueError/OSError).
     SCIPY_AVAILABLE = False
+
+try:
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern
+    SKLEARN_AVAILABLE = True
+except Exception:
+    SKLEARN_AVAILABLE = False
 
 class ElementSelector:
     def __init__(self, parent, gui=None):
@@ -2861,11 +3897,16 @@ class ThermoQGUI:
                 'extp_trist_intro': (
                     'Ternary complete solute trapping (TriST): from Pandat Gibbs All table files, pair LIQUID and '
                     'solid (FCC/BCC) molar Gibbs energies at the same overall composition and temperature. '
-                    'T0 (same composition): G_solid = G_liquid (dG = 0 along the scan). TriST uses a shared w(X)–w(Y) grid '
-                    'at each T; a companion _trist_cube.npz stores the 3D f(C0) field for a smooth f=0 surface (cubic in T). '
-                    'The TriST_mask sheet samples f≤0 in-region points. '
-                    'Outputs: T0_tie_1D, T0_lines, TriST_boundaries, TriST_mask, and optionally the .npz next to the workbook.'
+                    'T0 (same composition): Gs = Gl (dG = Gs − Gl = 0). Complete trapping requires Cl=Cs=C0 with '
+                    'thermodynamic condition Gs(C0) ≤ Gl(C0) — the solid-stable / T0-interior side '
+                    '(binary trapping dome lies under the T0 line). '
+                    'TriST region = {dG ≤ 0}. Primary T0 = T0_lines (2D ΔG=0 contours); T0_tie_1D is only an '
+                    'auxiliary per-T summary. TriST_boundaries should match T0_lines (Hausdorff check in Status). '
+                    'Coordinates prefer mole fractions x(*); multi-solid cells use lowest Gs (or preferred FCC/BCC/HCP). '
+                    'Optional f_geom_tangent is geometric in (cX,cY,G), not chemical potential. '
+                    'Outputs: T0_tie_1D, T0_lines, TriST_boundaries, TriST_mask, TriST_meta, and optionally the .npz.'
                 ),
+                'extp_trist_coord_log': 'TriST coordinates: {note} (scale={scale:g})',
                 'extp_trist_folder': 'Gibbs folder (All table_Gibbs)',
                 'extp_fd_trist_folder': 'Select All table_Gibbs folder',
                 'extp_trist_out': 'Output Excel (TriST)',
@@ -2883,9 +3924,9 @@ class ThermoQGUI:
                 'extp_trist_viz_cols': 'Axes (w columns)',
                 'extp_trist_viz_x': 'X:',
                 'extp_trist_viz_y': 'Y:',
-                'extp_trist_viz_mask_mesh': 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)',
+                'extp_trist_viz_mask_mesh': 'Continuous TriST dome (ΔG=0 isosurface; needs _trist_cube.npz)',
                 'extp_trist_viz_filter': 'Filter',
-                'extp_trist_viz_only_trist': 'Only dG ≤ 0',
+                'extp_trist_viz_only_trist': 'Only dG ≤ 0 (Gs ≤ Gl)',
                 'extp_trist_viz_tmin': 'T min:',
                 'extp_trist_viz_tmax': 'T max:',
                 'extp_trist_viz_html': 'Output HTML',
@@ -2904,24 +3945,36 @@ class ThermoQGUI:
                 'extp_trist_axis_y': 'Y:',
                 'extp_trist_grid': 'Grid (cubic interpolation)',
                 'extp_trist_grid_n': 'N:',
-                'extp_trist_grid_hint': 'Higher N = slower; typical 40–80.',
-                'extp_trist_cube_log': 'Saved 3D f(C0) field (for smooth f=0 surface, cubic in T): {path}',
-                'extp_trist_cube_err': 'Could not save 3D f-field: {e}',
-                'extp_trist_colorbar_f': 'f (C0) (J/mol) — tangent-plane margin (Viridis: lower = deeper inside TriST)',
-                'extp_trist_trace_smooth': 'TriST boundary f=0 (cubic in T, x, y; from saved 3D field)',
+                'extp_trist_solid_pref': 'Solid:',
+                'extp_trist_solid_pref_hint': 'Blank = lowest Gs at each (T,C*); or prefer FCC/BCC/HCP.',
+                'extp_trist_viz_overlay_t0': 'Overlay T0_lines (check standard)',
+                'extp_trist_t0_check_log': (
+                    'T0 check standard: Hausdorff(T0_lines, TriST_boundaries)={hd:.6g} '
+                    '(tol={tol:.6g}, match={match}); TriST_mask n={n}, dG>0={npos} (inside_T0={inside}).'
+                ),
+                'extp_trist_grid_hint': (
+                    'Default N≈60. Cost ~O(N²) per T (grid + optional min_C); '
+                    'cube RAM ≈ nT·N²·4 bytes (e.g. N=80, 50 T → ~1.3 MB). '
+                    'Prefer 40–80; N>100 is much slower and uses more memory. '
+                    'Solid blank = lowest Gs.'
+                ),
+                'extp_trist_cube_log': 'Saved 3D ΔG=Gs−Gl field (isosurface ΔG=0 = T0 / TriST boundary): {path}',
+                'extp_trist_cube_err': 'Could not save 3D ΔG field: {e}',
+                'extp_trist_colorbar_f': 'ΔG = Gs − Gl (J/mol) — Viridis: lower (more negative) = deeper inside TriST (Gs ≤ Gl)',
+                'extp_trist_trace_smooth': 'TriST / T0 boundary ΔG=0 (cubic in T, x, y; from saved 3D ΔG field)',
                 'extp_trist_viz_bnd_interval': 'Boundary lines every (K):',
                 'extp_trist_viz_bnd_interval_hint': '0 = all temperatures (2D mode)',
                 'extp_trist_viz_smooth_surf': 'Gaussian smooth surface (3D: stack boundaries / T0 lines into one surface)',
                 'extp_trist_viz_iso_interval': 'Isotherm interval (K):',
                 'extp_trist_viz_iso_interval_hint': 'Contour spacing for temperature isotherms on the smooth surface',
-                'extp_trist_legend_smooth_surf': 'TriST boundary (Gaussian smooth surface)',
+                'extp_trist_legend_smooth_surf': 'TriST boundary (Gaussian smooth surface, ΔG=0)',
                 'extp_trist_legend_t0_smooth_surf': 'T0 line (Gaussian smooth surface, dG=0)',
                 'extp_trist_legend_isotherms': 'Temperature isotherms',
-                'extp_trist_legend_mask_mesh': 'TriST inside (mesh)',
-                'extp_trist_legend_mask_pts': 'TriST inside (points)',
-                'extp_trist_legend_mask_dome': 'TriST region (continuous dome, f=0 surface)',
-                'extp_trist_legend_mask_vol': 'TriST inside (volume)',
-                'extp_trist_legend_boundary': 'TriST boundary (f=0)',
+                'extp_trist_legend_mask_mesh': 'TriST inside (mesh, Gs ≤ Gl)',
+                'extp_trist_legend_mask_pts': 'TriST inside (points, Gs ≤ Gl)',
+                'extp_trist_legend_mask_dome': 'TriST region (continuous dome, ΔG=0 surface)',
+                'extp_trist_legend_mask_vol': 'TriST inside (volume, dG ≤ 0)',
+                'extp_trist_legend_boundary': 'TriST boundary (ΔG=0 / T0)',
                 'extp_trist_legend_t0': 'T0 line (dG=0)',
                 'extp_trist_saved': 'TriST workbook saved.\n\n{path}\n\nSheets: {sheets}\nMerged rows: {n}',
                 'extp_trist_skip': 'Skipped {file}: {reason}',
@@ -3274,7 +4327,11 @@ class ThermoQGUI:
                 'exptc_trist_intro': (
                     'Extract Gibbs energies GMR(PHASE) vs composition from Thermo-Calc *_Gibbs.exp files '
                     '(sections marked by "$ PLOTTED COLUMNS ARE : W(*) and GMR(PHASE)"), build a TriST workbook, '
-                    'and visualize TriST boundaries like Extract Pandat Results → TriST Zone.'
+                    'and visualize TriST boundaries like Extract Pandat Results → TriST Zone. '
+                    'TriST = solid-stable side of T0: Gs(C0) ≤ Gl(C0) (dG ≤ 0); boundaries = T0 lines. '
+                    'When a ternary solvent can be inferred, w(*) are converted to x(*); grids use the physical '
+                    'simplex and do not nearest-fill outside the data hull. Optional f_geom_tangent is geometric '
+                    'in (cX,cY,G), not chemical potential.'
                 ),
                 'exptc_trist_folder': 'Folder with Gibbs .exp files (recursive)',
                 'exptc_fd_trist_folder': 'Select folder with Thermo-Calc Gibbs .exp files',
@@ -3857,24 +4914,30 @@ class ThermoQGUI:
                 'extp_tab_trist': 'TriST 区域',
                 'extp_trist_intro': (
                     '三元完全溶质截留（TriST）：从 Pandat Gibbs 全表 CSV/DAT 中，在相同整体成分与温度下配对 LIQUID 与 '
-                    '固相（FCC/BCC 等）的摩尔 Gibbs 能。T0（同成分）：G_固 = G_液（dG=0）。'
-                    '各温度在共享的 w(X)–w(Y) 网格上求切线–平面 f；可生成与 xlsx 同名的 _trist_cube.npz 保存三维 f(C0) 场，供交互图中 f=0 光滑曲面（对 T 三次插值）。'
-                    'TriST_mask 为区域内 f≤0 的采样点。输出：T0_tie_1D、T0_lines、TriST_boundaries、TriST_mask 及可选 .npz。'
+                    '固相（FCC/BCC 等）的摩尔 Gibbs 能。T0（同成分）：Gs=Gl（dG=Gs−Gl=0）。'
+                    '完全截留要求 Cl=Cs=C0，热力学条件为 Gs(C0)≤Gl(C0)，即固稳侧 / T0 内侧'
+                    '（二元示意图中截留穹隆在 T0 线之下）。'
+                    'TriST 区域 = {dG≤0}。主 T0 = T0_lines（二维 ΔG=0 轮廓）；T0_tie_1D 仅为按温度的辅助摘要。'
+                    'TriST_boundaries 应与 T0_lines 一致（Status 中输出 Hausdorff 检查）。'
+                    '坐标优先 x(*)；多固相时取最低 Gs（或优先 FCC/BCC/HCP）。'
+                    '可选 f_geom_tangent 为几何切平面，不是严格化学势。'
+                    '输出：T0_tie_1D、T0_lines、TriST_boundaries、TriST_mask、TriST_meta 及可选 .npz。'
                 ),
-                'extp_trist_cube_log': '已保存三维 f(C0) 场（供 f=0 光滑曲面、对 T 三次插值）：{path}',
-                'extp_trist_cube_err': '无法保存三维 f 场：{e}',
-                'extp_trist_colorbar_f': 'f (C0)（J/mol），切线–平面富余；Viridis 色标越低越深入 TriST 区',
-                'extp_trist_trace_smooth': 'TriST 边界 f=0（对 T、x、y 三次插值；来自 .npz 场）',
+                'extp_trist_coord_log': 'TriST 坐标：{note}（标度={scale:g}）',
+                'extp_trist_cube_log': '已保存三维 ΔG=Gs−Gl 场（等值面 ΔG=0 = T0 / TriST 边界）：{path}',
+                'extp_trist_cube_err': '无法保存三维 ΔG 场：{e}',
+                'extp_trist_colorbar_f': 'ΔG = Gs − Gl（J/mol）；Viridis 越低（越负）越深入 TriST（Gs ≤ Gl）',
+                'extp_trist_trace_smooth': 'TriST / T0 边界 ΔG=0（对 T、x、y 三次插值；来自 .npz 的 ΔG 场）',
                 'extp_trist_viz_bnd_interval': '边界线温度间隔（K）：',
                 'extp_trist_viz_bnd_interval_hint': '0 = 所有温度都画线（2D 模式）',
                 'extp_trist_viz_smooth_surf': '高斯光滑曲面（3D：将边界线 / T0 线叠合为连续曲面）',
                 'extp_trist_viz_iso_interval': '等温线间隔（K）：',
                 'extp_trist_viz_iso_interval_hint': '光滑曲面上的温度等温线间距',
-                'extp_trist_legend_smooth_surf': 'TriST 边界（高斯光滑曲面）',
+                'extp_trist_legend_smooth_surf': 'TriST 边界（高斯光滑曲面，ΔG=0）',
                 'extp_trist_legend_t0_smooth_surf': 'T0 线（高斯光滑曲面，dG=0）',
                 'extp_trist_legend_isotherms': '温度等温线',
-                'extp_trist_legend_mask_mesh': 'TriST 区内（网格）',
-                'extp_trist_legend_mask_pts': 'TriST 区内（点）',
+                'extp_trist_legend_mask_mesh': 'TriST 区内（网格，Gs ≤ Gl）',
+                'extp_trist_legend_mask_pts': 'TriST 区内（点，Gs ≤ Gl）',
                 'extp_trist_folder': 'Gibbs 文件夹（All table_Gibbs）',
                 'extp_fd_trist_folder': '选择 All table_Gibbs 文件夹',
                 'extp_trist_out': '输出 Excel（TriST）',
@@ -3889,13 +4952,13 @@ class ThermoQGUI:
                 'extp_trist_viz_cols': '坐标轴（w 列）',
                 'extp_trist_viz_x': 'X：',
                 'extp_trist_viz_y': 'Y：',
-                'extp_trist_viz_mask_mesh': '连续 TriST 穹隆（f=0 等值面；需同目录 _trist_cube.npz）',
-                'extp_trist_legend_mask_dome': 'TriST 区域（连续穹隆，f=0 曲面）',
-                'extp_trist_legend_mask_vol': 'TriST 内部（体积）',
-                'extp_trist_legend_boundary': 'TriST 边界（f=0）',
+                'extp_trist_viz_mask_mesh': '连续 TriST 穹隆（ΔG=0 等值面；需同目录 _trist_cube.npz）',
+                'extp_trist_legend_mask_dome': 'TriST 区域（连续穹隆，ΔG=0 曲面）',
+                'extp_trist_legend_mask_vol': 'TriST 内部（体积，dG ≤ 0）',
+                'extp_trist_legend_boundary': 'TriST 边界（ΔG=0 / T0）',
                 'extp_trist_legend_t0': 'T0 线（dG=0）',
                 'extp_trist_viz_filter': '筛选',
-                'extp_trist_viz_only_trist': '仅 dG ≤ 0',
+                'extp_trist_viz_only_trist': '仅 dG ≤ 0（Gs ≤ Gl）',
                 'extp_trist_viz_tmin': 'T 最小：',
                 'extp_trist_viz_tmax': 'T 最大：',
                 'extp_trist_viz_html': '输出 HTML',
@@ -3914,7 +4977,18 @@ class ThermoQGUI:
                 'extp_trist_axis_y': 'Y：',
                 'extp_trist_grid': '网格（三次插值）',
                 'extp_trist_grid_n': 'N：',
-                'extp_trist_grid_hint': 'N 越大越慢；通常 40–80。',
+                'extp_trist_solid_pref': '固相：',
+                'extp_trist_solid_pref_hint': '空=各 (T,C*) 取最低 Gs；或优先 FCC/BCC/HCP。',
+                'extp_trist_viz_overlay_t0': '叠加 T0_lines（检查标准）',
+                'extp_trist_t0_check_log': (
+                    'T0 检查标准：Hausdorff(T0_lines, TriST_boundaries)={hd:.6g} '
+                    '（容差={tol:.6g}，匹配={match}）；TriST_mask n={n}，dG>0={npos}（T0 内侧={inside}）。'
+                ),
+                'extp_trist_grid_hint': (
+                    '默认 N≈60。每温度约 O(N²)（插值 + 可选 min_C）；'
+                    '立方体内存约 nT·N²·4 字节（如 N=80、50 个温度 ≈ 1.3 MB）。'
+                    '建议 40–80；N>100 明显更慢、更占内存。固相空=取最低 Gs。'
+                ),
                 'extp_trist_saved': '已保存 TriST 工作簿。\n\n{path}\n\n工作表：{sheets}\n合并行数：{n}',
                 'extp_trist_skip': '跳过 {file}：{reason}',
                 'extp_trist_done_log': '完成。已处理文件：{ok}，跳过：{skip}。',
@@ -4250,6 +5324,9 @@ class ThermoQGUI:
                     '从 Thermo-Calc 的 *_Gibbs.exp 文件提取 Gibbs 能 GMR(相) 随成分变化的数据'
                     '（由 "$ PLOTTED COLUMNS ARE : W(*) and GMR(相名)" 标记的数据段），'
                     '生成 TriST 工作簿并可视化 TriST 边界（与 Extract Pandat Results → TriST Zone 类似）。'
+                    'TriST = T0 固稳侧：Gs(C0)≤Gl(C0)（dG≤0）；边界即 T0 线。'
+                    '若可推断三元溶剂，则将 w(*) 换算为 x(*)；网格限制在物理单纯形内，凸包外不做 nearest 填充。'
+                    '可选 f_geom_tangent 为 (cX,cY,G) 几何切平面，不是严格化学势。'
                 ),
                 'exptc_trist_folder': 'Gibbs .exp 文件夹（递归搜索）',
                 'exptc_fd_trist_folder': '选择 Thermo-Calc Gibbs .exp 文件夹',
@@ -15417,7 +16494,7 @@ class ThermoQGUI:
         viz_sheet_combo.pack(side=tk.LEFT, padx=(0, 10))
 
         only_trist_var = tk.BooleanVar(value=True)
-        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var)
+        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0 (Gs ≤ Gl)'), variable=only_trist_var)
         trist_cb_only_trist.pack(side=tk.LEFT)
 
         viz_t_row = ttk.Frame(viz_frame)
@@ -15575,10 +16652,17 @@ class ThermoQGUI:
         viz_mask_mesh_var = tk.BooleanVar(value=True)
         trist_cb_mask_dome = ttk.Checkbutton(
             viz_mesh_row,
-            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)'),
+            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (ΔG=0 isosurface; needs _trist_cube.npz)'),
             variable=viz_mask_mesh_var,
         )
         trist_cb_mask_dome.pack(side=tk.LEFT)
+        viz_overlay_t0_var = tk.BooleanVar(value=True)
+        trist_cb_overlay_t0 = ttk.Checkbutton(
+            viz_mesh_row,
+            text=self.tr('extp_trist_viz_overlay_t0', 'Overlay T0_lines (check standard)'),
+            variable=viz_overlay_t0_var,
+        )
+        trist_cb_overlay_t0.pack(side=tk.LEFT, padx=(12, 0))
 
         trist_viz_mode_row = ttk.Frame(viz_frame)
         trist_viz_mode_row.pack(fill=tk.X, pady=4)
@@ -15833,7 +16917,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                 return
 
-            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, ΔG=0 surface)")
             pts_lbl = self.tr("extp_trist_legend_mask_pts", "TriST inside (points)")
 
             def _trist_load_bnd_df():
@@ -15860,7 +16944,7 @@ class ThermoQGUI:
 
             f_cb_title = self.tr(
                 "extp_trist_colorbar_f",
-                "f (C0) (J/mol) — margin to tangent common tangent (Viridis: lower = deeper inside TriST)",
+                "ΔG = Gs − Gl (J/mol) — Viridis: lower (more negative) = deeper inside TriST (Gs ≤ Gl)",
             )
             try:
                 d_bnd = float((viz_bnd_t_interval.get() or "").strip() or "0")
@@ -16052,6 +17136,28 @@ class ThermoQGUI:
                     self._overlay_experimental_points_plotly(
                         fig, _trist_exp_points(a_col, b_col), mx.group(1), my.group(1),
                     )
+                # T0 check-standard overlay + Status metrics
+                try:
+                    t0df = _extp_trist_read_line_sheet(xlsx, 'T0_lines', a_col, b_col)
+                    bnddf = _extp_trist_read_line_sheet(xlsx, 'TriST_boundaries', a_col, b_col)
+                    maskdf = _extp_trist_read_line_sheet(xlsx, 'TriST_mask', a_col, b_col)
+                    if viz_overlay_t0_var.get() and sheet != 'T0_lines' and t0df is not None:
+                        _extp_trist_add_t0_overlay_plotly(fig, t0df, a_col, b_col, self.tr)
+                    try:
+                        _log = trist_log
+                    except NameError:
+                        try:
+                            _log = exptc_trist_log
+                        except NameError:
+                            _log = (lambda _m: None)
+                    _extp_trist_t0_check_report(
+                        t0df if t0df is not None else pd.DataFrame(),
+                        bnddf if bnddf is not None else pd.DataFrame(),
+                        maskdf if maskdf is not None else pd.DataFrame(),
+                        a_col, b_col, log_fn=_log, tr=self.tr,
+                    )
+                except Exception:
+                    pass
                 if not fig.data:
                     messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                     return None
@@ -16126,7 +17232,7 @@ class ThermoQGUI:
                     if len(xs) >= 3:
                         tc = ax.tricontourf(xs, ys, fs, levels=30, cmap='viridis')
                         fig.colorbar(tc, ax=ax, label=f_cb_title)
-                    _tpl2 = _trist_lbl(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
+                    _tpl2 = _trist_lbl(f"TriST mask ΔG @ T≈{t_pick:.0f} K")
                 else:
                     sc = ax.scatter(x, y, c=t2, cmap='coolwarm', s=24, alpha=0.85)
                     fig.colorbar(sc, ax=ax, label='T (K)')
@@ -16160,7 +17266,7 @@ class ThermoQGUI:
                     from matplotlib.lines import Line2D
                     bnd_lbl = self.tr(
                         "extp_trist_legend_boundary" if sheet == "TriST_boundaries" else "extp_trist_legend_t0",
-                        "TriST boundary (f=0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
+                        "TriST boundary (ΔG=0 / T0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
                     )
                     seg_t = []
                     for _gk, gdf in _trist_boundary_groups(dfp2):
@@ -16251,6 +17357,27 @@ class ThermoQGUI:
                     pass
                 try:
                     ax.view_init(elev=float(trist_elev_var.get()), azim=float(trist_azim_var.get()))
+                except Exception:
+                    pass
+                try:
+                    t0df = _extp_trist_read_line_sheet(xlsx, 'T0_lines', a_col, b_col)
+                    bnddf = _extp_trist_read_line_sheet(xlsx, 'TriST_boundaries', a_col, b_col)
+                    maskdf = _extp_trist_read_line_sheet(xlsx, 'TriST_mask', a_col, b_col)
+                    if viz_overlay_t0_var.get() and sheet != 'T0_lines' and t0df is not None:
+                        _extp_trist_add_t0_overlay_mpl(ax, t0df, a_col, b_col, self.tr)
+                    try:
+                        _log = trist_log
+                    except NameError:
+                        try:
+                            _log = exptc_trist_log
+                        except NameError:
+                            _log = (lambda _m: None)
+                    _extp_trist_t0_check_report(
+                        t0df if t0df is not None else pd.DataFrame(),
+                        bnddf if bnddf is not None else pd.DataFrame(),
+                        maskdf if maskdf is not None else pd.DataFrame(),
+                        a_col, b_col, log_fn=_log, tr=self.tr,
+                    )
                 except Exception:
                     pass
                 self._overlay_experimental_points_mpl_3d(ax, _trist_exp_points(a_col, b_col))
@@ -16368,6 +17495,7 @@ class ThermoQGUI:
             'lbl_viz_x': trist_lbl_viz_x,
             'lbl_viz_y': trist_lbl_viz_y,
             'cb_mask_dome': trist_cb_mask_dome,
+            'cb_overlay_t0': trist_cb_overlay_t0,
             'lbl_viz_mode': trist_lbl_viz_mode,
             'rb_v2': trist_rb_v2,
             'rb_v3': trist_rb_v3,
@@ -16395,7 +17523,7 @@ class ThermoQGUI:
                 viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
                 widgets['lbl_viz_src'].config(text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
                 widgets['lbl_viz_sheet'].config(text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
-                widgets['cb_only_trist'].config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'))
+                widgets['cb_only_trist'].config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0 (Gs ≤ Gl)'))
                 widgets['lbl_viz_tmin'].config(text=self.tr('extp_trist_viz_tmin', 'T min:'))
                 widgets['lbl_viz_tmax'].config(text=self.tr('extp_trist_viz_tmax', 'T max:'))
                 widgets['lbl_bnd_int'].config(text=self.tr("extp_trist_viz_bnd_interval", "Boundary lines every (K):"))
@@ -16407,7 +17535,8 @@ class ThermoQGUI:
                 widgets['lbl_viz_cols'].config(text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
                 widgets['lbl_viz_x'].config(text=self.tr('extp_trist_viz_x', 'X:'))
                 widgets['lbl_viz_y'].config(text=self.tr('extp_trist_viz_y', 'Y:'))
-                widgets['cb_mask_dome'].config(text=self.tr("extp_trist_viz_mask_mesh", "Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)"))
+                widgets['cb_mask_dome'].config(text=self.tr("extp_trist_viz_mask_mesh", "Continuous TriST dome (ΔG=0 isosurface; needs _trist_cube.npz)"))
+                widgets['cb_overlay_t0'].config(text=self.tr('extp_trist_viz_overlay_t0', 'Overlay T0_lines (check standard)'))
                 widgets['lbl_viz_mode'].config(text=self.tr('plot_vis_label', 'Visualization:'))
                 widgets['rb_v2'].config(text=self.tr('batch_viz_2d', '2D Heatmap'))
                 widgets['rb_v3'].config(text=self.tr('batch_viz_3d', '3D Static'))
@@ -17620,6 +18749,19 @@ class ThermoQGUI:
         exptc_lbl_trist_grid_n.pack(side=tk.LEFT, padx=(0, 3))
         exptc_trist_grid_n = tk.StringVar(value='60')
         ttk.Entry(exptc_trist_grid_row, textvariable=exptc_trist_grid_n, width=6).pack(side=tk.LEFT, padx=(0, 10))
+        exptc_lbl_trist_solid = ttk.Label(
+            exptc_trist_grid_row, text=self.tr('extp_trist_solid_pref', 'Solid:'),
+        )
+        exptc_lbl_trist_solid.pack(side=tk.LEFT, padx=(8, 3))
+        exptc_trist_solid_pref = tk.StringVar(value='')
+        exptc_trist_solid_pref_combo = ttk.Combobox(
+            exptc_trist_grid_row,
+            textvariable=exptc_trist_solid_pref,
+            values=['', 'FCC', 'BCC', 'HCP'],
+            width=6,
+            state='readonly',
+        )
+        exptc_trist_solid_pref_combo.pack(side=tk.LEFT, padx=(0, 8))
         exptc_lbl_trist_grid_hint = ttk.Label(
             exptc_trist_grid_row,
             text=self.tr('extp_trist_grid_hint', 'Higher N = slower; typical 40–80.'),
@@ -17671,10 +18813,10 @@ class ThermoQGUI:
                         parent=processor_window,
                     )
                     return
-                if not SCIPY_AVAILABLE or not MATPLOTLIB_AVAILABLE:
+                if not SCIPY_AVAILABLE:
                     messagebox.showerror(
                         self.tr('plot_dep_title', 'Dependency Missing'),
-                        'scipy and matplotlib are required for TriST extraction.',
+                        'scipy is required for TriST extraction (griddata / contours).',
                         parent=processor_window,
                     )
                     return
@@ -17710,7 +18852,9 @@ class ThermoQGUI:
                         exptc_trist_log(
                             self.tr('extp_trist_progress', 'Processing {i} / {n}…').format(i=k, n=len(files)),
                         )
-                    m, err = _exptc_gibbs_file_to_merged_df(path, fn)
+                    m, err = _exptc_gibbs_file_to_merged_df(
+                        path, fn, preferred_solid=exptc_trist_solid_pref.get(),
+                    )
                     if m is None:
                         exptc_trist_log(
                             self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(file=fn, reason=err or 'parse'),
@@ -17729,12 +18873,17 @@ class ThermoQGUI:
                     merged_blocks.append(m)
                     n_ok += 1
                     if n_ok == 1:
-                        wcols = [c for c in m.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
-                        exptc_trist_axis_x_combo.config(values=wcols)
-                        exptc_trist_axis_y_combo.config(values=wcols)
-                        if wcols:
-                            exptc_trist_axis_x.set(wcols[0])
-                            exptc_trist_axis_y.set(wcols[1] if len(wcols) > 1 else wcols[0])
+                        ax = (
+                            [c for c, _ in _extp_trist_comp_columns(m, 'x')]
+                            + [c for c, _ in _extp_trist_comp_columns(m, 'w')]
+                        )
+                        ax = list(dict.fromkeys(ax))
+                        exptc_trist_axis_x_combo.config(values=ax)
+                        exptc_trist_axis_y_combo.config(values=ax)
+                        px, py = _extp_trist_pick_axes_2d(m)
+                        if ax:
+                            exptc_trist_axis_x.set(px or ax[0])
+                            exptc_trist_axis_y.set(py or (ax[1] if len(ax) > 1 else ax[0]))
                 if not merged_blocks:
                     messagebox.showwarning(
                         self.tr('dlg_warning', 'Warning'),
@@ -17743,17 +18892,21 @@ class ThermoQGUI:
                     )
                     return
                 merged_all = pd.concat(merged_blocks, ignore_index=True)
-                wcols_all = [c for c in merged_all.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
-                exptc_trist_axis_x_combo.config(values=wcols_all)
-                exptc_trist_axis_y_combo.config(values=wcols_all)
+                ax_all = (
+                    [c for c, _ in _extp_trist_comp_columns(merged_all, 'x')]
+                    + [c for c, _ in _extp_trist_comp_columns(merged_all, 'w')]
+                )
+                ax_all = list(dict.fromkeys(ax_all))
+                exptc_trist_axis_x_combo.config(values=ax_all)
+                exptc_trist_axis_y_combo.config(values=ax_all)
                 x_col = exptc_trist_axis_x.get().strip()
                 y_col = exptc_trist_axis_y.get().strip()
-                if (not x_col) or x_col not in wcols_all or (not y_col) or y_col not in wcols_all or x_col == y_col:
+                if (not x_col) or x_col not in ax_all or (not y_col) or y_col not in ax_all or x_col == y_col:
                     x_col, y_col = _extp_trist_pick_axes_2d(merged_all)
                     exptc_trist_axis_x.set(x_col or '')
                     exptc_trist_axis_y.set(y_col or '')
                 if not x_col or not y_col:
-                    messagebox.showerror(self.tr('dlg_error', 'Error'), 'Need at least two w(*) columns for TriST.', parent=processor_window)
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), 'Need at least two x(*)/w(*) columns for TriST.', parent=processor_window)
                     return
                 try:
                     ngrid = int(exptc_trist_grid_n.get())
@@ -18710,22 +19863,23 @@ class ThermoQGUI:
                         df0 = pd.read_csv(p0, sep='\t', header=0, skiprows=[1], nrows=5)
                     else:
                         return
+                x_map0 = _extp_trist_x_columns(df0)
                 w_map0 = _extp_trist_w_columns(df0)
-                wcols_now = [b for _, b in w_map0]
-                # Deduplicate while preserving order
-                wcols_now = list(dict.fromkeys([c for c in wcols_now if isinstance(c, str) and c.strip().lower().startswith('w(')]))
-                if len(wcols_now) < 2:
+                # Prefer mole-fraction axis labels when the folder has x(*).
+                cols_now = [b for _, b in (x_map0 if len(x_map0) >= 2 else w_map0)]
+                cols_now = list(dict.fromkeys([c for c in cols_now if isinstance(c, str)]))
+                if len(cols_now) < 2:
                     return
-                trist_axis_x_combo.config(values=wcols_now)
-                trist_axis_y_combo.config(values=wcols_now)
+                trist_axis_x_combo.config(values=cols_now)
+                trist_axis_y_combo.config(values=cols_now)
                 # Keep current choices if valid; otherwise pick first two.
                 cx = trist_axis_x.get().strip()
                 cy = trist_axis_y.get().strip()
-                if cx not in wcols_now:
-                    trist_axis_x.set(wcols_now[0])
-                    cx = wcols_now[0]
-                if cy not in wcols_now or cy == cx:
-                    trist_axis_y.set(wcols_now[1] if len(wcols_now) >= 2 else wcols_now[0])
+                if cx not in cols_now:
+                    trist_axis_x.set(cols_now[0])
+                    cx = cols_now[0]
+                if cy not in cols_now or cy == cx:
+                    trist_axis_y.set(cols_now[1] if len(cols_now) >= 2 else cols_now[0])
             except Exception:
                 return
 
@@ -18790,6 +19944,19 @@ class ThermoQGUI:
         ttk.Label(trist_grid_row, text=self.tr('extp_trist_grid_n', 'N:')).pack(side=tk.LEFT, padx=(0, 3))
         trist_grid_n = tk.StringVar(value="60")
         ttk.Entry(trist_grid_row, textvariable=trist_grid_n, width=6).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(
+            trist_grid_row,
+            text=self.tr('extp_trist_solid_pref', 'Solid:'),
+        ).pack(side=tk.LEFT, padx=(8, 3))
+        trist_solid_pref = tk.StringVar(value='')
+        trist_solid_pref_combo = ttk.Combobox(
+            trist_grid_row,
+            textvariable=trist_solid_pref,
+            values=['', 'FCC', 'BCC', 'HCP'],
+            width=6,
+            state='readonly',
+        )
+        trist_solid_pref_combo.pack(side=tk.LEFT, padx=(0, 8))
         ttk.Label(trist_grid_row, text=self.tr('extp_trist_grid_hint', 'Higher N = slower; typical 40–80.')).pack(side=tk.LEFT)
 
         trist_status_frame = ttk.LabelFrame(tab_trist, text=self.tr('extp_status', 'Status'), padding="8")
@@ -18839,21 +20006,16 @@ class ThermoQGUI:
                 if not SCIPY_AVAILABLE:
                     messagebox.showerror(
                         self.tr('plot_dep_title', 'Dependency Missing'),
-                        "scipy is required for TriST cubic interpolation (scipy.interpolate.griddata).",
+                        "scipy is required for TriST (griddata / RegularGridInterpolator).",
                     )
                     return
-                if not MATPLOTLIB_AVAILABLE:
-                    messagebox.showerror(
-                        self.tr('plot_dep_title', 'Dependency Missing'),
-                        "matplotlib is required for extracting T0 / TriST boundary contours.",
-                    )
-                    return
+                # Contours use contourpy (preferred) or a reused matplotlib Axes — algorithm
+                # lives only in _extp_trist_build_and_save_workbook (no Pandat inline duplicate).
                 trist_status_text.config(state=tk.NORMAL)
                 trist_status_text.delete("1.0", tk.END)
                 trist_status_text.config(state=tk.DISABLED)
 
                 merged_blocks = []
-                t0_list = []
                 n_ok, n_skip = 0, 0
                 for k, fn in enumerate(files, start=1):
                     if k % 50 == 0 or k == 1:
@@ -18890,17 +20052,23 @@ class ThermoQGUI:
                         )
                         n_skip += 1
                         continue
+                    x_map = _extp_trist_x_columns(df)
                     w_map = _extp_trist_w_columns(df)
-                    if not w_map or len(w_map) < 2:
+                    # Prefer mole-fraction join keys when available.
+                    join_map = x_map if len(x_map) >= 2 else w_map
+                    extra_map = w_map if join_map is x_map else x_map
+                    if not join_map or len(join_map) < 2:
                         trist_log(
                             self.tr('extp_trist_skip', 'Skipped {file}: {reason}').format(
-                                file=fn, reason='w(*) columns < 2'
+                                file=fn, reason='x(*)/w(*) columns < 2'
                             )
                         )
                         n_skip += 1
                         continue
                     m, err = _extp_trist_merge_solid_liquid(
-                        df, phase_col, t_col, g_liq, g_sol, w_map, path, fn
+                        df, phase_col, t_col, g_liq, g_sol, join_map, path, fn,
+                        extra_comp_map=extra_map,
+                        preferred_solid=trist_solid_pref.get(),
                     )
                     if m is None or err:
                         trist_log(
@@ -18916,21 +20084,19 @@ class ThermoQGUI:
                     # so the user can rerun with a different axis pair if desired.
                     if n_ok == 1:
                         try:
-                            wcols_now = [c for c in m.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
-                            trist_axis_x_combo.config(values=wcols_now)
-                            trist_axis_y_combo.config(values=wcols_now)
-                            if (not trist_axis_x.get().strip()) or (trist_axis_x.get().strip() not in wcols_now):
-                                trist_axis_x.set(wcols_now[0] if len(wcols_now) >= 1 else "")
-                            if (not trist_axis_y.get().strip()) or (trist_axis_y.get().strip() not in wcols_now) or (trist_axis_y.get().strip() == trist_axis_x.get().strip()):
-                                trist_axis_y.set(wcols_now[1] if len(wcols_now) >= 2 else "")
+                            ax_now = list(dict.fromkeys(
+                                [c for c, _ in _extp_trist_comp_columns(m, 'x')]
+                                + [c for c, _ in _extp_trist_comp_columns(m, 'w')]
+                            ))
+                            trist_axis_x_combo.config(values=ax_now)
+                            trist_axis_y_combo.config(values=ax_now)
+                            px, py = _extp_trist_pick_axes_2d(m)
+                            if (not trist_axis_x.get().strip()) or (trist_axis_x.get().strip() not in ax_now):
+                                trist_axis_x.set(px or (ax_now[0] if ax_now else ""))
+                            if (not trist_axis_y.get().strip()) or (trist_axis_y.get().strip() not in ax_now) or (trist_axis_y.get().strip() == trist_axis_x.get().strip()):
+                                trist_axis_y.set(py or (ax_now[1] if len(ax_now) >= 2 else ""))
                         except Exception:
                             pass
-                    wcanon = [b for _, b in w_map]
-                    t0p = _extp_trist_interp_t0_1d(m, wcanon)
-                    if t0p is not None:
-                        row = dict(t0p)
-                        row['File'] = fn
-                        t0_list.append(row)
 
                 if not merged_blocks:
                     messagebox.showwarning(
@@ -18942,16 +20108,20 @@ class ThermoQGUI:
                     )
                     return
                 merged_all = pd.concat(merged_blocks, ignore_index=True)
-                # 2D plane selection
-                wcols_all = [c for c in merged_all.columns if isinstance(c, str) and re.match(r'^\s*w\([A-Za-z]{1,3}\)\s*$', c)]
+                # 2D plane selection (prefer x(*)).
+                ax_all = (
+                    [c for c, _ in _extp_trist_comp_columns(merged_all, 'x')]
+                    + [c for c, _ in _extp_trist_comp_columns(merged_all, 'w')]
+                )
+                ax_all = list(dict.fromkeys(ax_all))
                 try:
-                    trist_axis_x_combo.config(values=wcols_all)
-                    trist_axis_y_combo.config(values=wcols_all)
+                    trist_axis_x_combo.config(values=ax_all)
+                    trist_axis_y_combo.config(values=ax_all)
                 except Exception:
                     pass
                 x_col = trist_axis_x.get().strip()
                 y_col = trist_axis_y.get().strip()
-                if (not x_col) or (x_col not in wcols_all) or (not y_col) or (y_col not in wcols_all) or (x_col == y_col):
+                if (not x_col) or (x_col not in ax_all) or (not y_col) or (y_col not in ax_all) or (x_col == y_col):
                     x_col, y_col = _extp_trist_pick_axes_2d(merged_all)
                     try:
                         trist_axis_x.set(x_col or "")
@@ -18959,209 +20129,26 @@ class ThermoQGUI:
                     except Exception:
                         pass
                 if not x_col or not y_col:
-                    messagebox.showerror(self.tr('dlg_error', 'Error'), "Need at least two w(*) columns for TriST.")
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), "Need at least two x(*)/w(*) columns for TriST.")
                     return
 
-                tcol = 'T (K)'
-                gl_col = 'G_liquid (J/mol)'
-                gs_col = 'G_solid (J/mol)'
-                df_pts = merged_all[[tcol, x_col, y_col, gl_col, gs_col]].copy()
-                for c in (tcol, x_col, y_col, gl_col, gs_col):
-                    df_pts[c] = pd.to_numeric(df_pts[c], errors='coerce')
-                df_pts = df_pts.dropna(subset=[tcol, x_col, y_col, gl_col, gs_col])
-                if df_pts.empty:
-                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_no_data', ''))
-                    return
-
-                # Grid size
                 try:
                     ngrid = int(trist_grid_n.get())
                 except Exception:
                     ngrid = 60
-                ngrid = max(25, min(160, ngrid))
-
-                # Contours per temperature; also collect f on the shared (x,y) grid for 3D cubic T interpolation.
-                t0_rows = []
-                bnd_rows = []
-                mask_rows = []
-                f_cube_list = []
-                T_cube_list = []
-
-                temps = sorted(df_pts[tcol].unique().tolist())
-                # Use a global grid across temperatures to avoid seams when stacking curves in 3D.
-                g_xmin = float(np.nanmin(df_pts[x_col].to_numpy(dtype=np.float64)))
-                g_xmax = float(np.nanmax(df_pts[x_col].to_numpy(dtype=np.float64)))
-                g_ymin = float(np.nanmin(df_pts[y_col].to_numpy(dtype=np.float64)))
-                g_ymax = float(np.nanmax(df_pts[y_col].to_numpy(dtype=np.float64)))
-                if (not np.isfinite(g_xmin)) or (not np.isfinite(g_xmax)) or (not np.isfinite(g_ymin)) or (not np.isfinite(g_ymax)):
-                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_no_data', ''))
-                    return
-                if g_xmax - g_xmin < 1e-9 or g_ymax - g_ymin < 1e-9:
-                    messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_no_data', ''))
-                    return
-                x_lin = np.linspace(g_xmin, g_xmax, ngrid)
-                y_lin = np.linspace(g_ymin, g_ymax, ngrid)
-                gx, gy = np.meshgrid(x_lin, y_lin)
-                for ti, Tval in enumerate(temps, start=1):
-                    if ti % 10 == 1:
-                        trist_log(self.tr('extp_trist_progress', 'Processing {i} / {n}…').format(i=ti, n=len(temps)))
-                    sub = df_pts[df_pts[tcol] == Tval]
-                    if len(sub) < 8:
-                        continue
-                    xs = sub[x_col].to_numpy(dtype=np.float64)
-                    ys = sub[y_col].to_numpy(dtype=np.float64)
-                    gls = sub[gl_col].to_numpy(dtype=np.float64)
-                    gss = sub[gs_col].to_numpy(dtype=np.float64)
-
-                    pts_xy = np.column_stack([xs, ys])
-                    gl_grid = _extp_trist_grid_surface(pts_xy, gls, gx, gy)
-                    gs_grid = _extp_trist_grid_surface(pts_xy, gss, gx, gy)
-                    if gl_grid is None or gs_grid is None:
-                        continue
-
-                    gl_grid = np.asarray(gl_grid, dtype=np.float64)
-                    gs_grid = np.asarray(gs_grid, dtype=np.float64)
-                    valid = np.isfinite(gl_grid) & np.isfinite(gs_grid)
-                    if valid.sum() < 25:
-                        continue
-
-                    # (2) T0 line: ΔG = 0
-                    dg_grid = gs_grid - gl_grid
-                    dg_masked = np.ma.array(dg_grid, mask=~valid)
-                    t0_curves = _extp_trist_contours_xy(x_lin, y_lin, dg_masked, level=0.0)
-                    for ci, v in enumerate(t0_curves):
-                        for pi, (xv, yv) in enumerate(v):
-                            t0_rows.append(
-                                {
-                                    'T (K)': float(Tval),
-                                    'curve_id': int(ci),
-                                    'point_i': int(pi),
-                                    x_col: float(xv),
-                                    y_col: float(yv),
-                                }
-                            )
-
-                    # (3)-(4) TriST boundary via liquid tangent-plane criterion
-                    dx = float(x_lin[1] - x_lin[0])
-                    dy = float(y_lin[1] - y_lin[0])
-                    dGL_dy, dGL_dx = np.gradient(gl_grid, dy, dx)  # axis0=y, axis1=x
-                    mu_x = np.asarray(dGL_dx, dtype=np.float64)
-                    mu_y = np.asarray(dGL_dy, dtype=np.float64)
-                    Xg = gx.astype(np.float64)
-                    Yg = gy.astype(np.float64)
-
-                    t0_side = valid & (gl_grid <= gs_grid)
-                    cand_mask = t0_side & np.isfinite(mu_x) & np.isfinite(mu_y)
-                    if cand_mask.sum() < 25:
-                        continue
-
-                    GSf = gs_grid.reshape(-1)
-                    Xf = Xg.reshape(-1)
-                    Yf = Yg.reshape(-1)
-                    # Pre-mask the minimization domain to valid solid values
-                    dom = valid.reshape(-1) & np.isfinite(GSf) & np.isfinite(Xf) & np.isfinite(Yf)
-                    GSf = GSf[dom]
-                    Xf = Xf[dom]
-                    Yf = Yf[dom]
-                    if len(GSf) < 50:
-                        continue
-
-                    mux0 = mu_x[cand_mask]
-                    muy0 = mu_y[cand_mask]
-                    x0 = Xg[cand_mask]
-                    y0 = Yg[cand_mask]
-                    gl0 = gl_grid[cand_mask]
-
-                    # Compute m(C0) in chunks: min_C [ Gs(C) - mux*u - muy*v ]
-                    mvals = np.empty(len(mux0), dtype=np.float64)
-                    chunk = 256
-                    for s in range(0, len(mux0), chunk):
-                        e = min(s + chunk, len(mux0))
-                        mu_xc = mux0[s:e][:, None]
-                        mu_yc = muy0[s:e][:, None]
-                        vals = GSf[None, :] - mu_xc * Xf[None, :] - mu_yc * Yf[None, :]
-                        mvals[s:e] = np.nanmin(vals, axis=1)
-
-                    const = gl0 - mux0 * x0 - muy0 * y0
-                    fvals = mvals - const
-
-                    f_grid = np.full_like(gl_grid, np.nan, dtype=np.float64)
-                    f_grid[cand_mask] = fvals
-                    f_cube_list.append(np.ascontiguousarray(f_grid, dtype=np.float32))
-                    T_cube_list.append(float(Tval))
-                    f_masked = np.ma.array(f_grid, mask=~cand_mask | ~np.isfinite(f_grid))
-                    bnd_curves = _extp_trist_contours_xy(x_lin, y_lin, f_masked, level=0.0)
-                    for ci, v in enumerate(bnd_curves):
-                        for pi, (xv, yv) in enumerate(v):
-                            bnd_rows.append(
-                                {
-                                    'T (K)': float(Tval),
-                                    'curve_id': int(ci),
-                                    'point_i': int(pi),
-                                    x_col: float(xv),
-                                    y_col: float(yv),
-                                }
-                            )
-
-                    # Region mask (inside TriST dome on the chosen side):
-                    # intersection condition is f(C0) <= 0 within the candidate mask.
-                    inside = cand_mask & np.isfinite(f_grid) & (f_grid <= 0.0)
-                    if inside.any():
-                        # Store as long table (T, x, y, inside, f). Keep it sparse by sampling if too dense.
-                        ii, jj = np.where(inside)
-                        # cap per temperature to avoid huge Excel
-                        cap = 12000
-                        if len(ii) > cap:
-                            step = int(np.ceil(len(ii) / cap))
-                            ii = ii[::step]
-                            jj = jj[::step]
-                        for k2 in range(len(ii)):
-                            i2 = int(ii[k2]); j2 = int(jj[k2])
-                            mask_rows.append(
-                                {
-                                    'T (K)': float(Tval),
-                                    x_col: float(gx[i2, j2]),
-                                    y_col: float(gy[i2, j2]),
-                                    'inside_TriST': 1,
-                                    'f(C0) (J/mol)': float(f_grid[i2, j2]),
-                                }
-                            )
-
-                if len(f_cube_list) >= 2:
-                    try:
-                        f_stack = np.stack(f_cube_list, axis=0)
-                        cube_path = os.path.splitext(out_path)[0] + "_trist_cube.npz"
-                        np.savez_compressed(
-                            cube_path,
-                            T_vals=np.asarray(T_cube_list, dtype=np.float64),
-                            x_lin=np.asarray(x_lin, dtype=np.float64),
-                            y_lin=np.asarray(y_lin, dtype=np.float64),
-                            f_cube=f_stack,
-                            x_col=str(x_col),
-                            y_col=str(y_col),
-                        )
-                        trist_log(
-                            self.tr(
-                                "extp_trist_cube_log",
-                                "Saved 3D f(C0) field (for smooth f=0 surface, cubic in T): {path}",
-                            ).format(path=cube_path)
-                        )
-                    except Exception as e:
-                        trist_log(
-                            self.tr("extp_trist_cube_err", "Could not save 3D f-field: {e}").format(e=str(e))
-                        )
-
-                t0_df = pd.DataFrame(t0_rows)
-                bnd_df = pd.DataFrame(bnd_rows)
-                mask_df = pd.DataFrame(mask_rows)
-                t0_1d_df = pd.DataFrame(t0_list) if t0_list else pd.DataFrame()
 
                 try:
-                    with pd.ExcelWriter(out_path, engine='openpyxl') as xw:
-                        t0_1d_df.to_excel(xw, sheet_name='T0_tie_1D', index=False)
-                        t0_df.to_excel(xw, sheet_name='T0_lines', index=False)
-                        bnd_df.to_excel(xw, sheet_name='TriST_boundaries', index=False)
-                        mask_df.to_excel(xw, sheet_name='TriST_mask', index=False)
+                    # T0_tie_1D is built inside from 2D T0_lines (ternary-safe).
+                    _extp_trist_build_and_save_workbook(
+                        merged_all,
+                        x_col,
+                        y_col,
+                        ngrid,
+                        out_path,
+                        log_fn=trist_log,
+                        tr=self.tr,
+                        t0_1d_df=None,
+                    )
                 except PermissionError:
                     messagebox.showerror(
                         self.tr('dlg_permission', 'Permission Denied'),
@@ -19170,6 +20157,9 @@ class ThermoQGUI:
                             'Cannot write {path}\n\nClose the file if it is open in Excel or another program, or choose a different output folder.',
                         ).format(path=out_path),
                     )
+                    return
+                except ValueError as e:
+                    messagebox.showerror(self.tr('dlg_error', 'Error'), str(e) or self.tr('extp_trist_no_data', ''))
                     return
 
                 sheets = 'T0_tie_1D, T0_lines, TriST_boundaries, TriST_mask'
@@ -19247,7 +20237,7 @@ class ThermoQGUI:
         viz_sheet_combo.pack(side=tk.LEFT, padx=(0, 10))
 
         only_trist_var = tk.BooleanVar(value=True)
-        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'), variable=only_trist_var)
+        trist_cb_only_trist = ttk.Checkbutton(viz_opts_row, text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0 (Gs ≤ Gl)'), variable=only_trist_var)
         trist_cb_only_trist.pack(side=tk.LEFT)
 
         viz_t_row = ttk.Frame(viz_frame)
@@ -19405,10 +20395,17 @@ class ThermoQGUI:
         viz_mask_mesh_var = tk.BooleanVar(value=True)
         trist_cb_mask_dome = ttk.Checkbutton(
             viz_mesh_row,
-            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)'),
+            text=self.tr('extp_trist_viz_mask_mesh', 'Continuous TriST dome (ΔG=0 isosurface; needs _trist_cube.npz)'),
             variable=viz_mask_mesh_var,
         )
         trist_cb_mask_dome.pack(side=tk.LEFT)
+        viz_overlay_t0_var = tk.BooleanVar(value=True)
+        trist_cb_overlay_t0 = ttk.Checkbutton(
+            viz_mesh_row,
+            text=self.tr('extp_trist_viz_overlay_t0', 'Overlay T0_lines (check standard)'),
+            variable=viz_overlay_t0_var,
+        )
+        trist_cb_overlay_t0.pack(side=tk.LEFT, padx=(12, 0))
 
         trist_viz_mode_row = ttk.Frame(viz_frame)
         trist_viz_mode_row.pack(fill=tk.X, pady=4)
@@ -19663,7 +20660,7 @@ class ThermoQGUI:
                 messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                 return
 
-            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, f=0 surface)")
+            dome_lbl = self.tr("extp_trist_legend_mask_dome", "TriST region (continuous dome, ΔG=0 surface)")
             pts_lbl = self.tr("extp_trist_legend_mask_pts", "TriST inside (points)")
 
             def _trist_load_bnd_df():
@@ -19690,7 +20687,7 @@ class ThermoQGUI:
 
             f_cb_title = self.tr(
                 "extp_trist_colorbar_f",
-                "f (C0) (J/mol) — margin to tangent common tangent (Viridis: lower = deeper inside TriST)",
+                "ΔG = Gs − Gl (J/mol) — Viridis: lower (more negative) = deeper inside TriST (Gs ≤ Gl)",
             )
             try:
                 d_bnd = float((viz_bnd_t_interval.get() or "").strip() or "0")
@@ -19882,6 +20879,28 @@ class ThermoQGUI:
                     self._overlay_experimental_points_plotly(
                         fig, _trist_exp_points(a_col, b_col), mx.group(1), my.group(1),
                     )
+                # T0 check-standard overlay + Status metrics
+                try:
+                    t0df = _extp_trist_read_line_sheet(xlsx, 'T0_lines', a_col, b_col)
+                    bnddf = _extp_trist_read_line_sheet(xlsx, 'TriST_boundaries', a_col, b_col)
+                    maskdf = _extp_trist_read_line_sheet(xlsx, 'TriST_mask', a_col, b_col)
+                    if viz_overlay_t0_var.get() and sheet != 'T0_lines' and t0df is not None:
+                        _extp_trist_add_t0_overlay_plotly(fig, t0df, a_col, b_col, self.tr)
+                    try:
+                        _log = trist_log
+                    except NameError:
+                        try:
+                            _log = exptc_trist_log
+                        except NameError:
+                            _log = (lambda _m: None)
+                    _extp_trist_t0_check_report(
+                        t0df if t0df is not None else pd.DataFrame(),
+                        bnddf if bnddf is not None else pd.DataFrame(),
+                        maskdf if maskdf is not None else pd.DataFrame(),
+                        a_col, b_col, log_fn=_log, tr=self.tr,
+                    )
+                except Exception:
+                    pass
                 if not fig.data:
                     messagebox.showerror(self.tr('dlg_error', 'Error'), self.tr('extp_trist_viz_no_data', ''))
                     return None
@@ -19956,7 +20975,7 @@ class ThermoQGUI:
                     if len(xs) >= 3:
                         tc = ax.tricontourf(xs, ys, fs, levels=30, cmap='viridis')
                         fig.colorbar(tc, ax=ax, label=f_cb_title)
-                    _tpl2 = _trist_lbl(f"TriST mask f(C0) @ T≈{t_pick:.0f} K")
+                    _tpl2 = _trist_lbl(f"TriST mask ΔG @ T≈{t_pick:.0f} K")
                 else:
                     sc = ax.scatter(x, y, c=t2, cmap='coolwarm', s=24, alpha=0.85)
                     fig.colorbar(sc, ax=ax, label='T (K)')
@@ -19990,7 +21009,7 @@ class ThermoQGUI:
                     from matplotlib.lines import Line2D
                     bnd_lbl = self.tr(
                         "extp_trist_legend_boundary" if sheet == "TriST_boundaries" else "extp_trist_legend_t0",
-                        "TriST boundary (f=0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
+                        "TriST boundary (ΔG=0 / T0)" if sheet == "TriST_boundaries" else "T0 line (dG=0)",
                     )
                     seg_t = []
                     for _gk, gdf in _trist_boundary_groups(dfp2):
@@ -20081,6 +21100,27 @@ class ThermoQGUI:
                     pass
                 try:
                     ax.view_init(elev=float(trist_elev_var.get()), azim=float(trist_azim_var.get()))
+                except Exception:
+                    pass
+                try:
+                    t0df = _extp_trist_read_line_sheet(xlsx, 'T0_lines', a_col, b_col)
+                    bnddf = _extp_trist_read_line_sheet(xlsx, 'TriST_boundaries', a_col, b_col)
+                    maskdf = _extp_trist_read_line_sheet(xlsx, 'TriST_mask', a_col, b_col)
+                    if viz_overlay_t0_var.get() and sheet != 'T0_lines' and t0df is not None:
+                        _extp_trist_add_t0_overlay_mpl(ax, t0df, a_col, b_col, self.tr)
+                    try:
+                        _log = trist_log
+                    except NameError:
+                        try:
+                            _log = exptc_trist_log
+                        except NameError:
+                            _log = (lambda _m: None)
+                    _extp_trist_t0_check_report(
+                        t0df if t0df is not None else pd.DataFrame(),
+                        bnddf if bnddf is not None else pd.DataFrame(),
+                        maskdf if maskdf is not None else pd.DataFrame(),
+                        a_col, b_col, log_fn=_log, tr=self.tr,
+                    )
                 except Exception:
                     pass
                 self._overlay_experimental_points_mpl_3d(ax, _trist_exp_points(a_col, b_col))
@@ -20274,7 +21314,7 @@ class ThermoQGUI:
                 viz_frame.config(text=self.tr('extp_trist_viz', 'Visualize TriST'))
                 trist_lbl_viz_src.config(text=self.tr('extp_trist_viz_src', 'TriST workbook (.xlsx)'))
                 trist_lbl_viz_sheet.config(text=self.tr('extp_trist_viz_sheet', 'Data sheet'))
-                trist_cb_only_trist.config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0'))
+                trist_cb_only_trist.config(text=self.tr('extp_trist_viz_only_trist', 'Only dG ≤ 0 (Gs ≤ Gl)'))
                 trist_lbl_viz_tmin.config(text=self.tr('extp_trist_viz_tmin', 'T min:'))
                 trist_lbl_viz_tmax.config(text=self.tr('extp_trist_viz_tmax', 'T max:'))
                 trist_lbl_viz_cols.config(text=self.tr('extp_trist_viz_cols', 'Axes (w columns)'))
@@ -20300,8 +21340,11 @@ class ThermoQGUI:
                 trist_cb_mask_dome.config(
                     text=self.tr(
                         "extp_trist_viz_mask_mesh",
-                        "Continuous TriST dome (f=0 isosurface; needs _trist_cube.npz)",
+                        "Continuous TriST dome (ΔG=0 isosurface; needs _trist_cube.npz)",
                     )
+                )
+                trist_cb_overlay_t0.config(
+                    text=self.tr('extp_trist_viz_overlay_t0', 'Overlay T0_lines (check standard)'),
                 )
                 trist_lbl_viz_mode.config(text=self.tr('plot_vis_label', 'Visualization:'))
                 trist_rb_v2.config(text=self.tr('batch_viz_2d', '2D Heatmap'))

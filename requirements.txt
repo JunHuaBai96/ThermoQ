@@ -1,10 +1,10 @@
 # ThermoQ — Python dependencies (for running / developing from source)
 # GUI uses stdlib tkinter (no pip package). On Linux: sudo apt install python3-tk
 #
-# App version: 1.0.1
-# Windows end users: download ThermoQ-1.0.1-Windows-Setup.exe from
+# App version: 1.0.2
+# Windows end users: download ThermoQ-1.0.2-Windows-Setup.exe from
 #   https://github.com/JunHuaBai96/ThermoQ/releases/latest
-#   (Release title: "ThermoQ 1.0.1 Windows Setup") — no pip install needed.
+#   (Release title: "ThermoQ 1.0.2 Windows Setup") — no pip install needed.
 #
 # Recommended Python: 3.10–3.12 (3.8+ usually works)
 
@@ -17,16 +17,17 @@ Pillow>=9.0.0         # Splash/icons; in-GUI plot preview; BMP/GIF save when Mat
 
 # --- Plotting (recommended; required for Plot menu, batch plots, in-window preview) ---
 matplotlib>=3.5.0     # 2D/3D static, GIFs, vectors, TriST workbook build, embedded preview rasterization
+# contourpy is pulled in by matplotlib (used for TriST / T0 ΔG=0 contours)
 plotly>=5.0.0         # Interactive 3D HTML (TriST visualize, phase surfaces, isocomposition, …)
 
 # --- TriST extraction & smooth surfaces (strongly recommended) ---
 # scipy + matplotlib are REQUIRED for Extract * Results → TriST Zone (Pandat & Thermo-Calc)
-scipy>=1.8.0          # CubicSpline, griddata, TriST interpolation; isocomposition & liquidus vectors
-scikit-learn>=1.0.0   # Gaussian-process smooth surfaces (phase / miscibility gap temperature surfaces)
+scipy>=1.8.0          # CubicSpline, griddata, RGI, TriST interpolation; isocomposition & liquidus vectors
+scikit-learn>=1.0.0   # Gaussian-process smooth surfaces (phase / miscibility gap / TriST temperature surfaces)
 
 # --- Plot export & optional 3D (recommended) ---
 kaleido               # Plotly static image export (write_image)
-scikit-image>=0.19.0  # Optional: smooth TriST f=0 dome in Matplotlib 3D (marching cubes)
+scikit-image>=0.19.0  # Optional: smooth TriST ΔG=0 dome in Matplotlib 3D (marching cubes)
 
 # --- Docs (optional; only to regenerate Help manuals) ---
 # reportlab>=4.0.0    # python scripts/generate_user_manual_pdfs.py → docs/*.pdf

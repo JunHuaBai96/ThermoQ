@@ -300,13 +300,13 @@ def content_en(s, preview):
         P("ThermoQ", s["cover_kicker"]),
         P("User Manual", s["cover"]),
         HRule(PAGE_W, stroke=1.0, space_before=4, space_after=12),
-        P("Version 1.0.1", s["cover_sub"]),
+        P("Version 1.0.2", s["cover_sub"]),
         P("A worked example on Al–Cu–Li (COST)", s["cover_sub"]),
         P("Using the calculation files shipped in test/", s["cover_sub"]),
         Spacer(1, 1.6 * cm),
         P(
             "Switch the interface with Help → Language. Help → User Manual opens this PDF "
-            "in the language currently selected. Windows users may install ThermoQ-1.0.1-Windows-Setup.exe "
+            "in the language currently selected. Windows users may install ThermoQ-1.0.2-Windows-Setup.exe "
             "from GitHub Releases (no Python required).",
             s["cover_sub"],
         ),
@@ -332,8 +332,8 @@ def content_en(s, preview):
                 ["Tools → Composition Converter", "Convert wt% ↔ at% compositions."],
                 ["Tools → Generate Thermo-calc Batch File", "Build a .tcm from Template0 + loop body (%Element%, %T%)."],
                 ["Tools → Generate Thermo-Calc Batch Data File", "Excel/CSV Data File for Property Model Calculator batch (General Models + Custom/Diffusion)."],
-                ["Tools → Extract Thermo-calc Results", "Melting Range, Miscibility Gap, T-zero, TriST Zone."],
-                ["Tools → Generate / Extract Pandat", ".pbfx batch (T-zero, Gibbs) and P/Ts, T0.xlsx, TriST."],
+                ["Tools → Extract Thermo-calc Results", "Melting Range, Miscibility Gap, T-zero, TriST Zone (Gibbs; T0 check)."],
+                ["Tools → Generate / Extract Pandat", ".pbfx batch (T-zero, Gibbs) and P/Ts, T0.xlsx, TriST Zone."],
                 ["Plot", "Phase surfaces, Qtrue, liquidus vectors, k, T-zero, miscibility gap; in-window preview."],
                 ["Help → Language", "Switch UI English / 中文 (menus and open tool windows refresh)."],
                 ["Help → User Manual / Example", "Open this PDF (by language) or the bundled Example/ folder."],
@@ -353,12 +353,27 @@ def content_en(s, preview):
             "Sample: Example/Generate Thermo-Calc Batch Data File/.",
             b,
         ),
+        Spacer(1, 6),
+        P("1.2  Tools → Extract … → TriST Zone (menu settings)", s["h2"]),
+        P(
+            "Available under Extract Thermo-calc Results and Extract Pandat Results (Gibbs). "
+            "TriST region = {ΔG ≤ 0} with ΔG = Gs − Gl (solid-stable / T0-interior). "
+            "Primary T0 check standard is sheet T0_lines (2D ΔG = 0); T0_tie_1D is only an auxiliary "
+            "per-temperature summary derived from those lines. TriST_boundaries should match T0_lines "
+            "(Hausdorff distance and mask⊂T0 flags appear in Status and TriST_meta). "
+            "Solid: leave blank for lowest Gs at each (T, C*), or prefer FCC / BCC / HCP. "
+            "Axes prefer x(*) mole fractions when present; grid N is typically 40–80. "
+            "Visualize TriST defaults to Overlay T0_lines (check standard). "
+            "Mask column: below_T0_dG_le_0.",
+            b,
+        ),
         Spacer(1, 8),
         P("2.  Installation", s["h1"]),
         HRule(PAGE_W, stroke=0.5, color=RULE_LT, space_before=0, space_after=8),
         *bullets(
             [
-                "Python 3.8+ with tkinter.  <font face='CourierNR'>pip install -r requirements.txt</font> then <font face='CourierNR'>python main.py</font>.",
+                "Windows end users: install ThermoQ-1.0.2-Windows-Setup.exe from GitHub Releases (no Python).",
+                "Developers: Python 3.10–3.12 with tkinter.  <font face='CourierNR'>pip install -r requirements.txt</font> then <font face='CourierNR'>python main.py</font>.",
                 "TriST workbooks require matplotlib and scipy. Interactive HTML requires plotly.",
             ],
             s,
@@ -453,8 +468,12 @@ def content_en(s, preview):
         *steps(
             [
                 "Extract Thermo-calc Results → TriST Zone. Folder search is recursive; default filter .*_Gibbs\\.exp$. Axes X/Y fill after Browse.",
-                "Build TriST workbook (T0_tie_1D, T0_lines, TriST_boundaries, TriST_mask, optional _trist_cube.npz). Grid N is typically 40–80.",
-                "Failed files go to Status; Template1 can emit one .tcm per error. Visualize with Plotly / 2D / 3D / GIF.",
+                "Optional Solid preference: blank = lowest Gs; or FCC / BCC / HCP. Build TriST workbook "
+                "(T0_lines primary; T0_tie_1D aux; TriST_boundaries; TriST_mask with below_T0_dG_le_0; "
+                "TriST_meta; optional _trist_cube.npz). Grid N is typically 40–80.",
+                "Check Status / TriST_meta for Hausdorff (T0_lines vs TriST_boundaries) and mask⊂T0. "
+                "Failed files go to Status; Template1 can emit one .tcm per error.",
+                "Visualize TriST (Plotly / 2D / 3D / GIF) with Overlay T0_lines enabled by default.",
             ],
             s,
         ),
@@ -465,7 +484,8 @@ def content_en(s, preview):
         ),
         *fig(
             "09_trist_schematic.png",
-            "Fig. 7.  ΔG = G(FCC) − G(L) at 900 K assembled from all *_900T_Gibbs.exp in the same folder. The black contour is ΔG = 0, i.e. the T0 / TriST boundary at that temperature.",
+            "Fig. 7.  ΔG = G(FCC) − G(L) at 900 K assembled from all *_900T_Gibbs.exp in the same folder. "
+            "The black contour is ΔG = 0 (T0_lines). The TriST region is the solid-stable side ΔG ≤ 0.",
             s,
         ),
         P("7.  Case: Pandat Lever table (same alloy)", s["h1"]),
@@ -523,7 +543,7 @@ def content_en(s, preview):
             [
                 "Close an extract workbook in Excel before overwriting it.",
                 "Abnormal-point TCM files require a Template1 with %Element% and %T%, after Status has recorded failures.",
-                "TriST needs scipy and matplotlib.",
+                "TriST needs scipy and matplotlib. T0_lines is the check standard; re-extract after upgrading if you need TriST_meta.",
             ],
             s,
         ),
@@ -544,13 +564,13 @@ def content_zh(s, preview):
         P("ThermoQ", s["cover_kicker"]),
         P("软件说明书", s["cover"]),
         HRule(PAGE_W, stroke=1.0, space_before=4, space_after=12),
-        P("版本 1.0.1", s["cover_sub"]),
+        P("版本 1.0.2", s["cover_sub"]),
         P("Al–Cu–Li（COST）完整算例", s["cover_sub"]),
         P("插图均由 test/ 中的计算文件直接绘制", s["cover_sub"]),
         Spacer(1, 1.6 * cm),
         P(
             "界面语言：Help → 界面语言。Help → 软件说明书 打开与当前语言对应的 PDF。"
-            "Windows 用户可从 GitHub Releases 安装 ThermoQ-1.0.1-Windows-Setup.exe（无需 Python）。",
+            "Windows 用户可从 GitHub Releases 安装 ThermoQ-1.0.2-Windows-Setup.exe（无需 Python）。",
             s["cover_sub"],
         ),
         PageBreak(),
@@ -572,8 +592,8 @@ def content_zh(s, preview):
                 ["Tools → 成分换算", "wt% ↔ at% 成分换算。"],
                 ["Tools → 生成 Thermo-calc 批处理", "Template0 + 循环体（%元素%、%T%）生成 .tcm。"],
                 ["Tools → 生成 Thermo-Calc 批处理 Data File", "Property Model 批处理 Excel/CSV（General Models + 自定义/扩散）。"],
-                ["Tools → 提取 Thermo-calc 结果", "熔程、混溶隙、T-zero、TriST 区域。"],
-                ["Tools → 生成 / 提取 Pandat", ".pbfx（T-zero、Gibbs）及 P/Ts、T0.xlsx、TriST。"],
+                ["Tools → 提取 Thermo-calc 结果", "熔程、混溶隙、T-zero、TriST 区域（Gibbs；T0 检查）。"],
+                ["Tools → 生成 / 提取 Pandat", ".pbfx（T-zero、Gibbs）及 P/Ts、T0.xlsx、TriST 区域。"],
                 ["Plot", "相面、Qtrue、液相面向量、分配系数、T-zero、混溶隙；界面内预览。"],
                 ["Help → Language", "切换英文 / 中文（菜单与已打开工具窗口刷新）。"],
                 ["Help → 软件说明书 / 示例", "打开本 PDF（随语言）或随附 Example/ 文件夹。"],
@@ -590,12 +610,25 @@ def content_zh(s, preview):
             "一个 Balance（Bal）组元加成分网格；温度网格写入对应 Param（如 Evaluation / Annealing / Start temperature）。"
             "相名下拉仍在 Thermo-Calc 界面设置。示例见 Example/Generate Thermo-Calc Batch Data File/。"
         ),
+        Spacer(1, 6),
+        P("1.2  Tools → 提取… → TriST 区域（菜单设置）", s["h2"]),
+        para(
+            "入口：提取 Thermo-calc 结果 与 提取 Pandat 结果（Gibbs）。"
+            "TriST 区域 = {ΔG≤0}，ΔG=Gs−Gl（固稳侧 / T0 内侧）。"
+            "主检查标准为工作表 T0_lines（二维 ΔG=0）；T0_tie_1D 仅为其按温度的辅助摘要。"
+            "TriST_boundaries 应与 T0_lines 一致（Status 与 TriST_meta 输出 Hausdorff 距离及 mask⊂T0）。"
+            "固相：留空取各 (T,C*) 最低 Gs，或优先 FCC/BCC/HCP。"
+            "坐标优先 x(*)；网格 N 常用 40–80。"
+            "Visualize TriST 默认勾选「叠加 T0_lines（检查标准）」。"
+            "掩码列名：below_T0_dG_le_0。"
+        ),
         Spacer(1, 8),
         P("2.  安装", s["h1"]),
         HRule(PAGE_W, stroke=0.5, color=RULE_LT, space_before=0, space_after=8),
         *bullets(
             [
-                "Python 3.8+（需 tkinter）。<font face='CourierNR'>pip install -r requirements.txt</font>，然后 <font face='CourierNR'>python main.py</font>。",
+                "Windows 普通用户：从 GitHub Releases 安装 ThermoQ-1.0.2-Windows-Setup.exe（无需 Python）。",
+                "开发者：Python 3.10–3.12（需 tkinter）。<font face='CourierNR'>pip install -r requirements.txt</font>，然后 <font face='CourierNR'>python main.py</font>。",
                 "TriST 工作簿需要 matplotlib 与 scipy；交互 HTML 需要 plotly。",
             ],
             s,
@@ -685,8 +718,11 @@ def content_zh(s, preview):
         *steps(
             [
                 "提取 → TriST 区域。递归搜索，默认过滤 .*_Gibbs\\.exp$。浏览文件夹后自动填充 X/Y。",
-                "生成 TriST 工作簿（T0_tie_1D、T0_lines、TriST_boundaries、TriST_mask，可选 _trist_cube.npz）。网格 N 常用 40–80。",
-                "失败文件记入 Status，可用 Template1 生成异常点 .tcm。可视化支持 Plotly / 2D / 3D / GIF。",
+                "可选固相偏好：空=最低 Gs，或 FCC/BCC/HCP。生成工作簿（T0_lines 为主；T0_tie_1D 为辅助；"
+                "TriST_boundaries；TriST_mask 含 below_T0_dG_le_0；TriST_meta；可选 _trist_cube.npz）。网格 N 常用 40–80。",
+                "在 Status / TriST_meta 查看 Hausdorff（T0_lines 与 TriST_boundaries）及 mask⊂T0。"
+                "失败文件记入 Status，可用 Template1 生成异常点 .tcm。",
+                "Visualize TriST（Plotly / 2D / 3D / GIF）默认叠加 T0_lines。",
             ],
             s,
         ),
@@ -697,7 +733,8 @@ def content_zh(s, preview):
         ),
         *fig(
             "09_trist_schematic.png",
-            "图 7.  由同目录全部 *_900T_Gibbs.exp 拼出的 900 K 下 ΔG = G(FCC)−G(L)。黑线为 ΔG=0，即该温度的 T0 / TriST 边界。",
+            "图 7.  由同目录全部 *_900T_Gibbs.exp 拼出的 900 K 下 ΔG = G(FCC)−G(L)。"
+            "黑线为 ΔG=0（T0_lines）；TriST 区域为固稳侧 ΔG≤0。",
             s,
         ),
         P("7.  案例：Pandat Lever 表（同一合金）", s["h1"]),
@@ -752,7 +789,7 @@ def content_zh(s, preview):
             [
                 "覆盖写入提取结果前请关闭已打开的 Excel。",
                 "异常点 TCM 需要含 %元素% 与 %T% 的 Template1，且 Status 中已有失败记录。",
-                "TriST 需要 scipy 与 matplotlib。",
+                "TriST 需要 scipy 与 matplotlib。升级后若需 TriST_meta，请重新提取；T0_lines 为检查标准。",
             ],
             s,
         ),
